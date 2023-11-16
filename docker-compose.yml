@@ -1,0 +1,11 @@
+version: '3.9'
+
+services:
+  etcd:
+    image: 'bitnami/etcd:latest'
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    ports:
+      - 127.0.0.1:2379:2379
+      - 127.0.0.1:2380:2380
