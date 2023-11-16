@@ -59,7 +59,7 @@ func (n *Node) startAll(ctx context.Context) error {
 }
 
 func (n *Node) stopAll(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
+	g := &errgroup.Group{}
 
 	for i := range n.servers {
 		s := n.servers[i]
