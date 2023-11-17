@@ -19,7 +19,7 @@ type Entry struct {
 // GRPCEntry gRPC服务发现条目
 type GRPCEntry struct {
 	// 监听地址 host:port
-	Listen string `json:"listen"`
+	Endpoint string `json:"endpoint"`
 
 	// grpc服务列表
 	Services []GRPCService `json:"services"`
