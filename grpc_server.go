@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"nodehub/discovery"
 
 	"github.com/samber/lo"
 	"google.golang.org/grpc"
@@ -73,11 +72,11 @@ func (gs *GRPCServer) Stop() {
 }
 
 // ToEntry 转换为服务发现条目
-func (gs *GRPCServer) ToEntry() discovery.GRPCEntry {
-	return discovery.GRPCEntry{
+func (gs *GRPCServer) ToEntry() GRPCEntry {
+	return GRPCEntry{
 		Endpoint: gs.endpoint,
-		Services: lo.Map(gs.services, func(s grpcService, _ int) discovery.GRPCService {
-			return discovery.GRPCService{
+		Services: lo.Map(gs.services, func(s grpcService, _ int) GRPCService {
+			return GRPCService{
 				Code:           s.Code,
 				Path:           fmt.Sprintf("/%s", s.Desc.ServiceName),
 				Stateful:       s.Stateful,

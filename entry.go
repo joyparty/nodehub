@@ -1,5 +1,4 @@
-// Package discovery 集群服务注册及发现
-package discovery
+package nodehub
 
 // Entry 服务发现条目
 type Entry struct {
