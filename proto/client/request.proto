@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package client;
+
+option go_package = "nodehub/proto/client";
+
+// 客户端向网关请求使用的统一消息格式
+// 请求会被网关转换为grpc请求转发到内部服务
+message Request {
+	// 由客户端生成，网关会在response内原样返回
+	// id是会话级别唯一的
+	uint32 id = 1;
+
+	// 服务ID，对应内部节点的每种grpc服务
+	// 内部节点在注册服务发现时，会将服务ID注册到etcd中
+	// 网关根据Service字段将请求转发到对应的内部节点
+	// 另外，网关在构造grpc请求时，会使用Service和Method字段构造grpc请求的路径名
+	int32 service_code = 2;
+
+	// grpc方法名，大小写敏感，例如: SayHello
+	// 与Service不同，Service变化较少，所以可以采用枚举值的方式减少传输数据量
+	// 方法名变化较多，所以采用字符串的方式传输
+	string method = 3;
+
+	// grpc方法对应的protobuf message序列化之后的数据
+	// 具体对应关系需要自行查看grpc服务的protobuf文件
+	bytes data = 4;
+}
