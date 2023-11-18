@@ -1,7 +1,9 @@
 package nodehub
 
-// Entry 服务发现条目
-type Entry struct {
+import clientv3 "go.etcd.io/etcd/client/v3"
+
+// NodeEntry 节点服务发现条目
+type NodeEntry struct {
 	// 节点ID，集群内唯一，会被用于有状态服务路由
 	ID string `json:"id"`
 
@@ -44,4 +46,15 @@ type GRPCService struct {
 
 	// 是否允许匿名访问
 	AllowAnonymous bool `json:"allow_anonymous"`
+}
+
+// Registry 服务注册表
+type Registry struct {
+	client    *clientv3.Client
+	keyPrefix string
+}
+
+// Register 注册服务
+func (r *Registry) Register(entry NodeEntry) error {
+	return nil
 }
