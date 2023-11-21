@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"nodehub/logger"
 	"path"
-	"time"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -132,25 +132,23 @@ func (r *Registry) Put(entry NodeEntry) error {
 // 向etcd生成一个10秒过期的租约，每5秒续约一次
 // 租约过期后，etcd会自动删除对应的key
 func (r *Registry) runKeeper() error {
-	lease, err := r.client.Grant(r.client.Ctx(), 10)
+	lease, err := r.client.Grant(r.client.Ctx(), 10) // 10 seconds
 	if err != nil {
 		return fmt.Errorf("grant lease, %w", err)
 	}
 	r.leaseID = lease.ID
 
 	go func() {
-		for {
-			ch, err := r.client.KeepAlive(r.client.Ctx(), r.leaseID)
-			if err != nil {
-				// TODO: 打日志
-			} else {
-				for resp := range ch {
-					_ = resp
-				}
+		ch, err := r.client.KeepAlive(r.client.Ctx(), r.leaseID)
+		if err != nil {
+			logger.Error("keep lease alive", "error", err)
+		} else {
+			for resp := range ch {
+				_ = resp
 			}
-
-			time.Sleep(5 * time.Second)
 		}
+
+		panic(errors.New("lease keeper closed"))
 	}()
 
 	return nil
@@ -172,18 +170,20 @@ func (r *Registry) runWatcher() {
 			case mvccpb.DELETE:
 				value = ev.PrevKv.Value
 			default:
-				panic(fmt.Errorf("unknown event type: %v", ev.Type))
+				logger.Error("unknown event type", "type", ev.Type)
+				continue
 			}
 
 			if err := json.Unmarshal(value, &entry); err != nil {
-				panic(fmt.Errorf("unmarshal entry, %w", err))
+				logger.Error("unmarshal entry", "error", err)
+			} else {
+				r.eventHandler(RegistryEvent(ev.Type), entry)
 			}
-			r.eventHandler(RegistryEvent(ev.Type), entry)
 		}
 	}
 
 	// watcher永远不该退出
-	panic(errors.New("watcher closed"))
+	panic(errors.New("registry watcher closed"))
 }
 
 // WithKeyPrefix 设置服务条目key前缀
