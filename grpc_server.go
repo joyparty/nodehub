@@ -75,8 +75,8 @@ func (gs *GRPCServer) Stop() {
 func (gs *GRPCServer) ToEntry() GRPCEntry {
 	return GRPCEntry{
 		Endpoint: gs.endpoint,
-		Services: lo.Map(gs.services, func(s grpcService, _ int) GRPCService {
-			return GRPCService{
+		Services: lo.Map(gs.services, func(s grpcService, _ int) GRPCServiceDesc {
+			return GRPCServiceDesc{
 				Code:           s.Code,
 				Path:           fmt.Sprintf("/%s", s.Desc.ServiceName),
 				Stateful:       s.Stateful,
