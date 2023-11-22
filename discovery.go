@@ -164,8 +164,7 @@ func (r *Registry) Put(entry NodeEntry) error {
 	return err
 }
 
-// 向etcd生成一个10秒过期的租约，每5秒续约一次
-// 租约过期后，etcd会自动删除对应的key
+// 向etcd生成一个10秒过期的租约
 func (r *Registry) runKeeper() error {
 	lease, err := r.client.Grant(r.client.Ctx(), 10) // 10 seconds
 	if err != nil {
@@ -173,6 +172,7 @@ func (r *Registry) runKeeper() error {
 	}
 	r.leaseID = lease.ID
 
+	// 心跳维持
 	go func() {
 		ch, err := r.client.KeepAlive(r.client.Ctx(), r.leaseID)
 		if err != nil {
