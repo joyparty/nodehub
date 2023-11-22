@@ -17,11 +17,10 @@ type GRPCServer struct {
 }
 
 type grpcService struct {
-	Code           int32
-	Desc           *grpc.ServiceDesc
-	Stateful       bool
-	Public         bool
-	AllowAnonymous bool
+	Code     int32
+	Desc     *grpc.ServiceDesc
+	Stateful bool
+	Public   bool
 }
 
 // NewGRPCServer 构造函数
@@ -77,11 +76,10 @@ func (gs *GRPCServer) ToEntry() GRPCEntry {
 		Endpoint: gs.endpoint,
 		Services: lo.Map(gs.services, func(s grpcService, _ int) GRPCServiceDesc {
 			return GRPCServiceDesc{
-				Code:           s.Code,
-				Path:           fmt.Sprintf("/%s", s.Desc.ServiceName),
-				Stateful:       s.Stateful,
-				Public:         s.Public,
-				AllowAnonymous: s.AllowAnonymous,
+				Code:     s.Code,
+				Path:     fmt.Sprintf("/%s", s.Desc.ServiceName),
+				Stateful: s.Stateful,
+				Public:   s.Public,
 			}
 		}),
 	}
@@ -98,12 +96,5 @@ func WithStateful() func(*grpcService) {
 func WithPublic() func(*grpcService) {
 	return func(g *grpcService) {
 		g.Public = true
-	}
-}
-
-// WithAllowAnonymous 设置是否允许匿名访问
-func WithAllowAnonymous() func(*grpcService) {
-	return func(g *grpcService) {
-		g.AllowAnonymous = true
 	}
 }

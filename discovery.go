@@ -4,11 +4,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"nodehub/logger"
 	"path"
+	"runtime"
+	"sync"
 
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+var (
+	// ErrNoNodeOrDown 没有可用节点或节点已下线
+	ErrNoNodeOrDown = errors.New("no node or node is down")
+	// ErrNoNodeAvailable 没有可用节点
+	ErrNoNodeAvailable = errors.New("no node available")
 )
 
 // RegistryEvent 注册表事件
@@ -101,9 +113,6 @@ type GRPCServiceDesc struct {
 
 	// 是否允许客户端访问
 	Public bool `json:"public"`
-
-	// 是否允许匿名访问
-	AllowAnonymous bool `json:"allow_anonymous"`
 }
 
 // Registry 服务注册表
@@ -224,4 +233,137 @@ func WithEventHandler(fn func(event RegistryEvent, entry NodeEntry)) func(*Regis
 	return func(r *Registry) {
 		r.eventHandler = fn
 	}
+}
+
+// GRPCResolver grpc服务发现
+type GRPCResolver struct {
+	// nodeID => NodeEntry
+	allNodes map[string]NodeEntry
+
+	// 所有节点状态为ok的可用节点
+	// serviceCode => []NodeEntry
+	okNodes map[int32][]NodeEntry
+
+	// serviceCode => GRPCServiceDesc
+	services map[int32]GRPCServiceDesc
+
+	// endpoint => *grpc.ClientConn
+	conns *sync.Map
+
+	dialOptions []grpc.DialOption
+
+	l sync.RWMutex
+}
+
+// NewGRPCResolver 创建grpc服务发现
+func NewGRPCResolver(dialOptions ...grpc.DialOption) *GRPCResolver {
+	return &GRPCResolver{
+		allNodes: make(map[string]NodeEntry),
+		okNodes:  make(map[int32][]NodeEntry),
+		services: make(map[int32]GRPCServiceDesc),
+		conns:    new(sync.Map),
+		dialOptions: append([]grpc.DialOption{
+			// 内部服务节点之间不需要加密
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		}, dialOptions...),
+	}
+}
+
+// Update 更新条目
+func (r *GRPCResolver) Update(node NodeEntry) {
+	if len(node.GRPC.Services) == 0 {
+		return
+	}
+
+	r.l.Lock()
+	defer r.l.Unlock()
+
+	r.allNodes[node.ID] = node
+
+	for _, desc := range node.GRPC.Services {
+		r.services[desc.Code] = desc
+	}
+
+	r.updateOKNodes()
+}
+
+// Remove 删除条目
+func (r *GRPCResolver) Remove(node NodeEntry) {
+	if len(node.GRPC.Services) == 0 {
+		return
+	}
+
+	r.l.Lock()
+	defer r.l.Unlock()
+
+	delete(r.allNodes, node.ID)
+	r.updateOKNodes()
+}
+
+func (r *GRPCResolver) updateOKNodes() {
+	nodes := make(map[int32][]NodeEntry)
+
+	for _, node := range r.allNodes {
+		if node.State == NodeOK {
+			for _, desc := range node.GRPC.Services {
+				nodes[desc.Code] = append(nodes[desc.Code], node)
+			}
+		}
+	}
+	r.okNodes = nodes
+}
+
+// GetConn 获取服务连接，随机选择一个可用节点
+func (r *GRPCResolver) GetConn(serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
+	r.l.RLock()
+	nodes, ok := r.okNodes[serviceCode]
+	desc = r.services[serviceCode]
+	r.l.RUnlock()
+
+	if !ok {
+		err = ErrNoNodeAvailable
+		return
+	}
+
+	var node NodeEntry
+	if l := len(nodes); l == 1 {
+		node = nodes[0]
+	} else {
+		node = nodes[rand.Intn(l)]
+	}
+	conn, err = r.getConn(node.GRPC.Endpoint)
+	return
+}
+
+// GetNodeConn 获取指定节点的服务连接
+func (r *GRPCResolver) GetNodeConn(serviceCode int32, nodeID string) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
+	r.l.RLock()
+	node, ok := r.allNodes[nodeID]
+	desc = r.services[serviceCode]
+	r.l.RUnlock()
+
+	if !ok || node.State == NodeDown {
+		err = ErrNoNodeOrDown
+		return
+	}
+
+	conn, err = r.getConn(node.GRPC.Endpoint)
+	return
+}
+
+func (r *GRPCResolver) getConn(endpoint string) (*grpc.ClientConn, error) {
+	if conn, ok := r.conns.Load(endpoint); ok {
+		return conn.(*grpc.ClientConn), nil
+	}
+
+	conn, err := grpc.Dial(endpoint, r.dialOptions...)
+	if err != nil {
+		return nil, fmt.Errorf("dial grpc, %w", err)
+	}
+	runtime.SetFinalizer(conn, func(conn *grpc.ClientConn) {
+		_ = conn.Close()
+	})
+
+	r.conns.Store(endpoint, conn)
+	return conn, nil
 }
