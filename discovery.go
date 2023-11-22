@@ -179,7 +179,12 @@ func (r *Registry) runKeeper() error {
 			logger.Error("keep lease alive", "error", err)
 		} else {
 			for resp := range ch {
-				_ = resp
+				select {
+				case <-r.client.Ctx().Done():
+					return
+				default:
+					_ = resp
+				}
 			}
 		}
 
@@ -193,32 +198,39 @@ func (r *Registry) runKeeper() error {
 func (r *Registry) runWatcher() {
 	wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
 
-	for wResp := range wCh {
-		for _, ev := range wResp.Events {
-			var (
-				entry NodeEntry
-				value []byte
-			)
-			switch ev.Type {
-			case mvccpb.PUT:
-				value = ev.Kv.Value
-			case mvccpb.DELETE:
-				value = ev.PrevKv.Value
-			default:
-				logger.Error("unknown event type", "type", ev.Type)
-				continue
-			}
+	for {
+		select {
+		case <-r.client.Ctx().Done():
+			return
+		case wResp := <-wCh:
+			for _, ev := range wResp.Events {
+				var (
+					entry NodeEntry
+					value []byte
+				)
+				switch ev.Type {
+				case mvccpb.PUT:
+					value = ev.Kv.Value
+				case mvccpb.DELETE:
+					value = ev.PrevKv.Value
+				default:
+					logger.Error("unknown event type", "type", ev.Type)
+					continue
+				}
 
-			if err := json.Unmarshal(value, &entry); err != nil {
-				logger.Error("unmarshal entry", "error", err)
-			} else {
-				r.eventHandler(RegistryEvent(ev.Type), entry)
+				if err := json.Unmarshal(value, &entry); err != nil {
+					logger.Error("unmarshal entry", "error", err)
+				} else {
+					r.eventHandler(RegistryEvent(ev.Type), entry)
+				}
 			}
 		}
 	}
+}
 
-	// watcher永远不该退出
-	panic(errors.New("registry watcher closed"))
+// Close 关闭
+func (r *Registry) Close() {
+	r.client.Close()
 }
 
 // WithKeyPrefix 设置服务条目key前缀
