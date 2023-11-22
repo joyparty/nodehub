@@ -9,17 +9,32 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Component 组件
+type Component interface {
+	Name() string
+
+	Init(ctx context.Context) error
+
+	BeforeStart(ctx context.Context) error
+	Start(ctx context.Context) error
+	AfterStart(ctx context.Context)
+
+	BeforeStop(ctx context.Context) error
+	Stop(ctx context.Context) error
+	AfterStop(ctx context.Context)
+}
+
 // Node 节点，一个节点上可以运行多个网络服务
 type Node struct {
-	servers []Server
+	components []Component
 }
 
-// AddServer 添加网络服务
-func (n *Node) AddServer(s ...Server) {
-	n.servers = append(n.servers, s...)
+// AddComponent 添加组件
+func (n *Node) AddComponent(c ...Component) {
+	n.components = append(n.components, c...)
 }
 
-// Serve 启动所有网络服务
+// Serve 启动所有组件
 func (n *Node) Serve(ctx context.Context) error {
 	if err := n.startAll(ctx); err != nil {
 		return fmt.Errorf("start all server, %w", err)
@@ -40,18 +55,18 @@ func (n *Node) Serve(ctx context.Context) error {
 func (n *Node) startAll(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	for i := range n.servers {
-		s := n.servers[i]
+	for i := range n.components {
+		c := n.components[i]
 		g.Go(func() error {
-			if err := s.Init(ctx); err != nil {
-				return fmt.Errorf("initialize %s, %w", s.Name(), err)
-			} else if err := s.BeforeStart(ctx); err != nil {
-				return fmt.Errorf("before start %s, %w", s.Name(), err)
-			} else if err := s.Start(ctx); err != nil {
-				return fmt.Errorf("start %s, %w", s.Name(), err)
+			if err := c.Init(ctx); err != nil {
+				return fmt.Errorf("initialize %s, %w", c.Name(), err)
+			} else if err := c.BeforeStart(ctx); err != nil {
+				return fmt.Errorf("before start %s, %w", c.Name(), err)
+			} else if err := c.Start(ctx); err != nil {
+				return fmt.Errorf("start %s, %w", c.Name(), err)
 			}
 
-			s.AfterStart(ctx)
+			c.AfterStart(ctx)
 			return nil
 		})
 	}
@@ -61,16 +76,16 @@ func (n *Node) startAll(ctx context.Context) error {
 func (n *Node) stopAll(ctx context.Context) error {
 	g := &errgroup.Group{}
 
-	for i := range n.servers {
-		s := n.servers[i]
+	for i := range n.components {
+		c := n.components[i]
 		g.Go(func() error {
-			if err := s.BeforeStop(ctx); err != nil {
-				return fmt.Errorf("before stop %s, %w", s.Name(), err)
-			} else if err := s.Stop(ctx); err != nil {
-				return fmt.Errorf("stop %s, %w", s.Name(), err)
+			if err := c.BeforeStop(ctx); err != nil {
+				return fmt.Errorf("before stop %s, %w", c.Name(), err)
+			} else if err := c.Stop(ctx); err != nil {
+				return fmt.Errorf("stop %s, %w", c.Name(), err)
 			}
 
-			s.AfterStop(ctx)
+			c.AfterStop(ctx)
 			return nil
 		})
 	}
