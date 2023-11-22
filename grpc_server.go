@@ -17,10 +17,9 @@ type GRPCServer struct {
 }
 
 type grpcService struct {
-	Code     int32
-	Desc     *grpc.ServiceDesc
-	Stateful bool
-	Public   bool
+	Code   int32
+	Desc   *grpc.ServiceDesc
+	Public bool
 }
 
 // NewGRPCServer 构造函数
@@ -76,19 +75,11 @@ func (gs *GRPCServer) ToEntry() GRPCEntry {
 		Endpoint: gs.endpoint,
 		Services: lo.Map(gs.services, func(s grpcService, _ int) GRPCServiceDesc {
 			return GRPCServiceDesc{
-				Code:     s.Code,
-				Path:     fmt.Sprintf("/%s", s.Desc.ServiceName),
-				Stateful: s.Stateful,
-				Public:   s.Public,
+				Code:   s.Code,
+				Path:   fmt.Sprintf("/%s", s.Desc.ServiceName),
+				Public: s.Public,
 			}
 		}),
-	}
-}
-
-// WithStateful 设置是否有状态服务
-func WithStateful() func(*grpcService) {
-	return func(g *grpcService) {
-		g.Stateful = true
 	}
 }
 

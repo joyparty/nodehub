@@ -21,6 +21,8 @@ var (
 	ErrNoNodeOrDown = errors.New("no node or node is down")
 	// ErrNoNodeAvailable 没有可用节点
 	ErrNoNodeAvailable = errors.New("no node available")
+	// ErrGRPCServiceCode grpc服务代码未找到
+	ErrGRPCServiceCode = errors.New("grpc service code not found")
 )
 
 // RegistryEvent 注册表事件
@@ -107,9 +109,6 @@ type GRPCServiceDesc struct {
 	//
 	// example: /helloworld.Greeter
 	Path string `json:"path"`
-
-	// 是否有状态服务
-	Stateful bool `json:"stateful"`
 
 	// 是否允许客户端访问
 	Public bool `json:"public"`
@@ -328,11 +327,14 @@ func (r *GRPCResolver) updateOKNodes() {
 // GetConn 获取服务连接，随机选择一个可用节点
 func (r *GRPCResolver) GetConn(serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
 	r.l.RLock()
-	nodes, ok := r.okNodes[serviceCode]
-	desc = r.services[serviceCode]
+	nodes, foundNodes := r.okNodes[serviceCode]
+	desc, foundDesc := r.services[serviceCode]
 	r.l.RUnlock()
 
-	if !ok {
+	if !foundDesc {
+		err = ErrGRPCServiceCode
+		return
+	} else if !foundNodes {
 		err = ErrNoNodeAvailable
 		return
 	}
@@ -350,11 +352,14 @@ func (r *GRPCResolver) GetConn(serviceCode int32) (conn *grpc.ClientConn, desc G
 // GetNodeConn 获取指定节点的服务连接
 func (r *GRPCResolver) GetNodeConn(serviceCode int32, nodeID string) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
 	r.l.RLock()
-	node, ok := r.allNodes[nodeID]
-	desc = r.services[serviceCode]
+	node, foundNode := r.allNodes[nodeID]
+	desc, foundDesc := r.services[serviceCode]
 	r.l.RUnlock()
 
-	if !ok || node.State == NodeDown {
+	if !foundDesc {
+		err = ErrGRPCServiceCode
+		return
+	} else if !foundNode || node.State == NodeDown {
 		err = ErrNoNodeOrDown
 		return
 	}
