@@ -3,6 +3,8 @@ module nodehub
 go 1.21.4
 
 require (
+	github.com/google/uuid v1.4.0
+	github.com/gorilla/websocket v1.5.1
 	github.com/samber/lo v1.38.1
 	go.etcd.io/etcd/api/v3 v3.5.10
 	go.etcd.io/etcd/client/v3 v3.5.10
