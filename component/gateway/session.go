@@ -68,10 +68,28 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 
 	ws.id.Store(uuid.New().String())
 	ws.lastRWTime.Store(time.Now())
+	ws.setPingPongHandler()
 
 	go ws.sendLoop()
 	go ws.heartbeatLoop()
 	return ws
+}
+
+// 接收到ping pong消息后，也更新活跃时间
+func (ws *wsSession) setPingPongHandler() {
+	ws.conn.SetPongHandler(func(string) error {
+		ws.lastRWTime.Store(time.Now())
+		return nil
+	})
+
+	pingHandler := ws.conn.PingHandler()
+	ws.conn.SetPingHandler(func(appData string) error {
+		if err := pingHandler(appData); err != nil {
+			return err
+		}
+		ws.lastRWTime.Store(time.Now())
+		return nil
+	})
 }
 
 func (ws *wsSession) heartbeatLoop() {
@@ -168,7 +186,10 @@ func (ws *wsSession) sendLoop() {
 
 				logger.Error("send message", args...)
 			} else {
-				ws.lastRWTime.Store(time.Now())
+				// 只有发送二进制消息才更新活跃时间，发送Ping消息不更新
+				if payload.messageType == websocket.BinaryMessage {
+					ws.lastRWTime.Store(time.Now())
+				}
 			}
 		}
 	}
