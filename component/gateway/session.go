@@ -77,18 +77,18 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 
 // 接收到ping pong消息后，也更新活跃时间
 func (ws *wsSession) setPingPongHandler() {
-	ws.conn.SetPongHandler(func(string) error {
+	pongHandler := ws.conn.PongHandler()
+	ws.conn.SetPongHandler(func(appData string) error {
 		ws.lastRWTime.Store(time.Now())
-		return nil
+
+		return pongHandler(appData)
 	})
 
 	pingHandler := ws.conn.PingHandler()
 	ws.conn.SetPingHandler(func(appData string) error {
-		if err := pingHandler(appData); err != nil {
-			return err
-		}
 		ws.lastRWTime.Store(time.Now())
-		return nil
+
+		return pingHandler(appData)
 	})
 }
 
