@@ -36,14 +36,20 @@ func (gs *GRPCServer) RegisterService(code int32, desc *grpc.ServiceDesc, impl a
 		return errors.New("code must not be 0")
 	}
 
-	s := &grpcService{
+	for _, s := range gs.services {
+		if s.Code == code {
+			return fmt.Errorf("code %d already registered", code)
+		}
+	}
+
+	s := grpcService{
 		Code: code,
 		Desc: desc,
 	}
-
 	for _, opt := range opts {
-		opt(s)
+		opt(&s)
 	}
+	gs.services = append(gs.services, s)
 
 	gs.server.RegisterService(desc, impl)
 	return nil
