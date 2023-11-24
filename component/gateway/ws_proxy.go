@@ -70,6 +70,7 @@ func (wp *WebsocketProxy) Stop(ctx context.Context) error {
 	return nil
 }
 
+// TODO: 提供注入身份验证机制
 func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -107,6 +108,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// TODO: 把requestID和userID放到metadata里面
 func (wp *WebsocketProxy) handleRequest(sess Session, req *clientpb.Request) error {
 	conn, desc, err := wp.Resolver.GetConn(req.ServiceCode)
 	if err != nil {
