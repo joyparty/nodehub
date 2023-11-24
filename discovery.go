@@ -195,6 +195,20 @@ func (r *Registry) runKeeper() error {
 
 // 监听服务条目变更
 func (r *Registry) runWatcher() {
+	// 先处理已有条目
+	resp, err := r.client.Get(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		logger.Error("get exist entries", "error", err)
+	}
+	for _, kv := range resp.Kvs {
+		var entry NodeEntry
+		if err := json.Unmarshal(kv.Value, &entry); err != nil {
+			logger.Error("unmarshal entry", "error", err)
+		} else {
+			r.eventHandler(PUT, entry)
+		}
+	}
+
 	wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
 
 	for {
