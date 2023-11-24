@@ -14,6 +14,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -117,19 +118,24 @@ func (wp *WebsocketProxy) handleRequest(sess Session, req *clientpb.Request) err
 		return errRequestPrivateNode
 	}
 
-	resp := &clientpb.Response{}
+	input := &emptypb.Empty{}
+	if err := proto.Unmarshal(req.Data, input); err != nil {
+		return fmt.Errorf("unmarshal request data, %w", err)
+	}
+
+	output := &clientpb.Response{}
 	apiPath := path.Join(desc.Path, req.Method)
-	if err := grpc.Invoke(context.Background(), apiPath, req, resp, conn); err != nil {
+	if err := grpc.Invoke(context.Background(), apiPath, input, output, conn); err != nil {
 		return fmt.Errorf("invoke grpc, %w", err)
 	}
 
 	// google.protobuf.Empty类型，不需要下行数据
-	if proto.Size(resp) == 0 {
+	if proto.Size(output) == 0 {
 		return nil
 	}
 
-	resp.RequestId = req.Id
-	resp.ServiceCode = req.ServiceCode
+	output.RequestId = req.Id
+	output.ServiceCode = req.ServiceCode
 
-	return sess.Send(resp)
+	return sess.Send(output)
 }
