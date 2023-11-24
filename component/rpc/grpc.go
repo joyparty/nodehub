@@ -1,9 +1,10 @@
-package nodehub
+package rpc
 
 import (
 	"errors"
 	"fmt"
 	"net"
+	"nodehub"
 
 	"github.com/samber/lo"
 	"google.golang.org/grpc"
@@ -76,11 +77,11 @@ func (gs *GRPCServer) Stop() {
 }
 
 // ToEntry 转换为服务发现条目
-func (gs *GRPCServer) ToEntry() GRPCEntry {
-	return GRPCEntry{
+func (gs *GRPCServer) ToEntry() nodehub.GRPCEntry {
+	return nodehub.GRPCEntry{
 		Endpoint: gs.endpoint,
-		Services: lo.Map(gs.services, func(s grpcService, _ int) GRPCServiceDesc {
-			return GRPCServiceDesc{
+		Services: lo.Map(gs.services, func(s grpcService, _ int) nodehub.GRPCServiceDesc {
+			return nodehub.GRPCServiceDesc{
 				Code:   s.Code,
 				Path:   fmt.Sprintf("/%s", s.Desc.ServiceName),
 				Public: s.Public,

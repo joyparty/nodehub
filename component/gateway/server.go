@@ -25,6 +25,11 @@ type Server struct {
 	hs *http.Server
 }
 
+// Name 服务名称
+func (s *Server) Name() string {
+	return "gateway"
+}
+
 // Start 启动websocket服务器
 func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
