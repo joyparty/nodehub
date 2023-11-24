@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -62,7 +63,7 @@ func (gs *GRPCServer) Name() string {
 }
 
 // Start 启动服务
-func (gs *GRPCServer) Start() error {
+func (gs *GRPCServer) Start(ctx context.Context) error {
 	l, err := net.Listen("tcp", gs.endpoint)
 	if err != nil {
 		return fmt.Errorf("listen tcp, %w", err)
@@ -72,8 +73,9 @@ func (gs *GRPCServer) Start() error {
 }
 
 // Stop 停止服务
-func (gs *GRPCServer) Stop() {
+func (gs *GRPCServer) Stop(ctx context.Context) error {
 	gs.server.Stop()
+	return nil
 }
 
 // ToEntry 转换为服务发现条目

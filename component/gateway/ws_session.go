@@ -234,7 +234,7 @@ func newSessionHub() *sessionHub {
 }
 
 func (h *sessionHub) Store(c Session) {
-	h.clients.Store(c.ID, c)
+	h.clients.Store(c.ID(), c)
 }
 
 func (h *sessionHub) Load(id string) (Session, bool) {

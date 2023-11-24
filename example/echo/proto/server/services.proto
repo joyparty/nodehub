@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package server;
+
+option go_package = "nodehub/example/echo/proto/server";
+
+enum Services {
+	UNSPECIFIED = 0;
+	GATEWAY = 1;
+	ECHO = 2;
+}

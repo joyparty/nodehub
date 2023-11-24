@@ -12,16 +12,14 @@ import (
 // Component 组件
 type Component interface {
 	Name() string
-
-	Init(ctx context.Context) error
-
-	BeforeStart(ctx context.Context) error
 	Start(ctx context.Context) error
-	AfterStart(ctx context.Context)
-
-	BeforeStop(ctx context.Context) error
 	Stop(ctx context.Context) error
-	AfterStop(ctx context.Context)
+
+	// 如果实现了以下方法，会被自动调用
+	// BeforeStart(ctx context.Context) error
+	// AfterStart(ctx context.Context)
+	// BeforeStop(ctx context.Context) error
+	// AfterStop(ctx context.Context)
 }
 
 // Node 节点，一个节点上可以运行多个网络服务
@@ -58,15 +56,32 @@ func (n *Node) startAll(ctx context.Context) error {
 	for i := range n.components {
 		c := n.components[i]
 		g.Go(func() error {
-			if err := c.Init(ctx); err != nil {
-				return fmt.Errorf("initialize %s, %w", c.Name(), err)
-			} else if err := c.BeforeStart(ctx); err != nil {
-				return fmt.Errorf("before start %s, %w", c.Name(), err)
-			} else if err := c.Start(ctx); err != nil {
+			if v, ok := c.(interface {
+				Init(ctx context.Context) error
+			}); ok {
+				if err := v.Init(ctx); err != nil {
+					return fmt.Errorf("initialize %s, %w", c.Name(), err)
+				}
+			}
+
+			if v, ok := c.(interface {
+				BeforeStart(ctx context.Context) error
+			}); ok {
+				if err := v.BeforeStart(ctx); err != nil {
+					return fmt.Errorf("before start %s, %w", c.Name(), err)
+				}
+			}
+
+			if err := c.Start(ctx); err != nil {
 				return fmt.Errorf("start %s, %w", c.Name(), err)
 			}
 
-			c.AfterStart(ctx)
+			if v, ok := c.(interface {
+				AfterStart(ctx context.Context)
+			}); ok {
+				v.AfterStart(ctx)
+			}
+
 			return nil
 		})
 	}
@@ -79,13 +94,23 @@ func (n *Node) stopAll(ctx context.Context) error {
 	for i := range n.components {
 		c := n.components[i]
 		g.Go(func() error {
-			if err := c.BeforeStop(ctx); err != nil {
-				return fmt.Errorf("before stop %s, %w", c.Name(), err)
-			} else if err := c.Stop(ctx); err != nil {
+			if v, ok := c.(interface {
+				BeforeStop(ctx context.Context) error
+			}); ok {
+				if err := v.BeforeStop(ctx); err != nil {
+					return fmt.Errorf("before stop %s, %w", c.Name(), err)
+				}
+			}
+
+			if err := c.Stop(ctx); err != nil {
 				return fmt.Errorf("stop %s, %w", c.Name(), err)
 			}
 
-			c.AfterStop(ctx)
+			if v, ok := c.(interface {
+				AfterStop(ctx context.Context)
+			}); ok {
+				v.AfterStop(ctx)
+			}
 			return nil
 		})
 	}

@@ -1,0 +1,21 @@
+// protoc --proto_path=. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./*.proto
+syntax = "proto3";
+
+package server.echo;
+
+option go_package = "nodehub/example/echo/proto/server/echo";
+
+import "client/response.proto";
+
+enum Protocol {
+	UNSPECIFIED = 0;
+	MSG = 1;
+}
+
+service Echo {
+	rpc Send(Msg) returns (client.Response);
+}
+
+message Msg {
+	string message = 1;
+}

@@ -27,10 +27,10 @@ var (
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WebsocketProxy struct {
 	Resolver   *nodehub.GRPCResolver
-	SessionHub *sessionHub
 	ListenAddr string
 
-	hs *http.Server
+	sessionHub *sessionHub
+	hs         *http.Server
 }
 
 // Name 服务名称
@@ -41,16 +41,19 @@ func (wp *WebsocketProxy) Name() string {
 // Start 启动websocket服务器
 func (wp *WebsocketProxy) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", wp.serveHTTP)
+	mux.HandleFunc("/proxy", wp.serveHTTP)
 
 	hs := &http.Server{
 		Addr:    wp.ListenAddr,
 		Handler: http.HandlerFunc(mux.ServeHTTP),
 	}
+	wp.hs = hs
+
+	wp.sessionHub = newSessionHub()
 
 	go func() {
 		logger.Info("start gateway", "addr", wp.ListenAddr)
-		if err := hs.ListenAndServe(); err != nil {
+		if err := hs.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 
 			panic(fmt.Errorf("start gateway, %w", err))
@@ -62,6 +65,8 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 
 // Stop 停止websocket服务器
 func (wp *WebsocketProxy) Stop(ctx context.Context) error {
+	wp.hs.Shutdown(ctx)
+	wp.sessionHub.Close()
 	return nil
 }
 
@@ -75,7 +80,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	sess := newWsSession(conn)
 	defer sess.Close()
 
-	wp.SessionHub.Store(sess)
+	wp.sessionHub.Store(sess)
 
 	for {
 		req := &clientpb.Request{}

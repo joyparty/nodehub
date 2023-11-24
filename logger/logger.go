@@ -27,10 +27,10 @@ func Debug(msg string, args ...any) {
 
 // Info 打印信息日志
 func Info(msg string, args ...any) {
-	defaultLogger.Debug(msg, args...)
+	defaultLogger.Info(msg, args...)
 }
 
 // Error 打印错误日志
 func Error(msg string, args ...any) {
-	defaultLogger.Debug(msg, args...)
+	defaultLogger.Error(msg, args...)
 }
