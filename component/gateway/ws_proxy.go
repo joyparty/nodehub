@@ -8,11 +8,13 @@ import (
 	"nodehub/cluster"
 	"nodehub/logger"
 	clientpb "nodehub/proto/client"
+	gatewaypb "nodehub/proto/gateway"
 	"path"
 
 	"github.com/gorilla/websocket"
 	"github.com/panjf2000/ants/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -22,6 +24,9 @@ var (
 
 	errRequestPrivateNode = errors.New("request private node")
 )
+
+// ServiceCode gateway服务的service code默认为1
+const ServiceCode = 1
 
 // WebsocketProxy 网关服务器
 //
@@ -95,8 +100,6 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 		ants.Submit(func() {
 			if err := wp.handleRequest(sess, req); err != nil {
-				// TODO: 下行错误响应
-
 				logger.Error("handle request",
 					"error", err,
 					"service_code", req.ServiceCode,
@@ -104,6 +107,22 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 					"request_id", req.Id,
 					"remote_addr", conn.RemoteAddr().String(),
 				)
+
+				if s, ok := status.FromError(err); ok {
+					rpcError := &gatewaypb.RPCError{
+						ServiceCode: req.ServiceCode,
+						Method:      req.Method,
+						Status:      s.Proto(),
+					}
+
+					data, _ := proto.Marshal(rpcError)
+					sess.Send(&clientpb.Response{
+						RequestId:   req.Id,
+						ServiceCode: ServiceCode,
+						Route:       int32(gatewaypb.Protocol_RPC_ERROR),
+						Data:        data,
+					})
+				}
 			}
 		})
 	}
