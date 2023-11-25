@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"nodehub"
+	"nodehub/cluster"
 	"nodehub/logger"
 	clientpb "nodehub/proto/client"
 	"path"
@@ -27,7 +27,7 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WebsocketProxy struct {
-	Resolver   *nodehub.GRPCResolver
+	Registry   *cluster.Registry
 	ListenAddr string
 
 	sessionHub *sessionHub
@@ -111,7 +111,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 // TODO: 把requestID和userID放到metadata里面
 func (wp *WebsocketProxy) handleRequest(sess Session, req *clientpb.Request) error {
-	conn, desc, err := wp.Resolver.GetConn(req.ServiceCode)
+	conn, desc, err := wp.Registry.GetGRPCServiceConn(req.ServiceCode)
 	if err != nil {
 		return fmt.Errorf("get grpc conn, %w", err)
 	} else if !desc.Public {

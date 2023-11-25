@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"nodehub"
+	"nodehub/cluster"
 	"nodehub/component/rpc"
 	serverpb "nodehub/example/echo/proto/server"
 	pb "nodehub/example/echo/proto/server/echo"
@@ -18,7 +19,7 @@ import (
 
 var (
 	etcdClient *clientv3.Client
-	registry   *nodehub.Registry
+	registry   *cluster.Registry
 )
 
 func init() {
@@ -32,7 +33,7 @@ func init() {
 		panic(err)
 	}
 
-	registry, err = nodehub.NewRegistry(etcdClient)
+	registry, err = cluster.NewRegistry(etcdClient)
 	if err != nil {
 		panic(err)
 	}
@@ -48,10 +49,10 @@ func main() {
 	}
 	node.AddComponent(grpcServer)
 
-	entry := nodehub.NodeEntry{
+	entry := cluster.NodeEntry{
 		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:  "echo",
-		State: nodehub.NodeOK,
+		State: cluster.NodeOK,
 		GRPC:  grpcServer.ToEntry(),
 	}
 	if err := registry.Put(entry); err != nil {

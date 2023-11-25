@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"nodehub"
+	"nodehub/cluster"
 
 	"github.com/samber/lo"
 	"google.golang.org/grpc"
@@ -79,11 +79,11 @@ func (gs *GRPCServer) Stop(ctx context.Context) error {
 }
 
 // ToEntry 转换为服务发现条目
-func (gs *GRPCServer) ToEntry() nodehub.GRPCEntry {
-	return nodehub.GRPCEntry{
+func (gs *GRPCServer) ToEntry() cluster.GRPCEntry {
+	return cluster.GRPCEntry{
 		Endpoint: gs.endpoint,
-		Services: lo.Map(gs.services, func(s grpcService, _ int) nodehub.GRPCServiceDesc {
-			return nodehub.GRPCServiceDesc{
+		Services: lo.Map(gs.services, func(s grpcService, _ int) cluster.GRPCServiceDesc {
+			return cluster.GRPCServiceDesc{
 				Code:   s.Code,
 				Path:   fmt.Sprintf("/%s", s.Desc.ServiceName),
 				Public: s.Public,

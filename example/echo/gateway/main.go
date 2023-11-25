@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"nodehub"
+	"nodehub/cluster"
 	"nodehub/component/gateway"
 	"nodehub/component/rpc"
 	serverpb "nodehub/example/echo/proto/server"
@@ -19,8 +20,7 @@ import (
 
 var (
 	etcdClient *clientv3.Client
-	registry   *nodehub.Registry
-	resolver   *nodehub.GRPCResolver
+	registry   *cluster.Registry
 )
 
 func init() {
@@ -34,20 +34,7 @@ func init() {
 		panic(err)
 	}
 
-	resolver = nodehub.NewGRPCResolver()
-
-	registry, err = nodehub.NewRegistry(etcdClient,
-		nodehub.WithEventHandler(func(event nodehub.RegistryEvent, entry nodehub.NodeEntry) {
-			fmt.Printf("event: %d, entry: %+v\n", event, entry)
-
-			switch event {
-			case nodehub.PUT:
-				resolver.Update(entry)
-			case nodehub.DELETE:
-				resolver.Remove(entry)
-			}
-		}),
-	)
+	registry, err = cluster.NewRegistry(etcdClient)
 	if err != nil {
 		panic(err)
 	}
@@ -58,14 +45,14 @@ func main() {
 	node := &nodehub.Node{}
 
 	node.AddComponent(&gateway.WebsocketProxy{
-		Resolver:   resolver,
+		Registry:   registry,
 		ListenAddr: "127.0.0.1:9000",
 	})
 
-	entry := nodehub.NodeEntry{
+	entry := cluster.NodeEntry{
 		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
 		Name:  "gateway",
-		State: nodehub.NodeOK,
+		State: cluster.NodeOK,
 	}
 	if err := registry.Put(entry); err != nil {
 		panic(err)
