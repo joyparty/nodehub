@@ -12,6 +12,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	// MDRequestID grpc metadata中的request id key
+	MDRequestID = "x-req-id"
+	// MDUserID grpc metadata中的user id key
+	MDUserID = "x-user-id"
+)
+
 // Component 组件
 type Component interface {
 	Name() string

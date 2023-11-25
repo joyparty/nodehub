@@ -11,10 +11,12 @@ import (
 	clientpb "nodehub/proto/client"
 	gatewaypb "nodehub/proto/gateway"
 	"path"
+	"strconv"
 
 	"github.com/gorilla/websocket"
 	"github.com/panjf2000/ants/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
@@ -139,7 +141,13 @@ func (wp *WebsocketProxy) handleRequest(sess Session, req *clientpb.Request) err
 
 	output := &clientpb.Response{}
 	apiPath := path.Join(desc.Path, req.Method)
-	if err := grpc.Invoke(context.Background(), apiPath, input, output, conn); err != nil {
+
+	md := metadata.Pairs(
+		nodehub.MDRequestID, strconv.Itoa(int(req.Id)),
+	)
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
 		return fmt.Errorf("invoke grpc, %w", err)
 	}
 
