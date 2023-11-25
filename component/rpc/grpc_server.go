@@ -78,9 +78,9 @@ func (gs *GRPCServer) Stop(ctx context.Context) error {
 	return nil
 }
 
-// ToEntry 转换为服务发现条目
-func (gs *GRPCServer) ToEntry() cluster.GRPCEntry {
-	return cluster.GRPCEntry{
+// SetNodeEntry 设置节点条目
+func (gs *GRPCServer) SetNodeEntry(entry *cluster.NodeEntry) {
+	entry.GRPC = cluster.GRPCEntry{
 		Endpoint: gs.endpoint,
 		Services: lo.Map(gs.services, func(s grpcService, _ int) cluster.GRPCServiceDesc {
 			return cluster.GRPCServiceDesc{

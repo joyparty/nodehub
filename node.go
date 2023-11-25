@@ -3,8 +3,11 @@ package nodehub
 import (
 	"context"
 	"fmt"
+	"nodehub/cluster"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -24,7 +27,18 @@ type Component interface {
 
 // Node 节点，一个节点上可以运行多个网络服务
 type Node struct {
+	id         string
+	name       string
 	components []Component
+}
+
+// NewNode 构造函数
+func NewNode(name string) *Node {
+	return &Node{
+		id:         strconv.Itoa(int(time.Now().UnixNano())),
+		name:       name,
+		components: []Component{},
+	}
 }
 
 // AddComponent 添加组件
@@ -115,4 +129,22 @@ func (n *Node) stopAll(ctx context.Context) error {
 		})
 	}
 	return g.Wait()
+}
+
+// Entry 获取服务发现条目
+func (n *Node) Entry() cluster.NodeEntry {
+	entry := cluster.NodeEntry{
+		ID:    n.id,
+		State: cluster.NodeOK,
+		Name:  n.name,
+	}
+
+	for i := range n.components {
+		if v, ok := n.components[i].(interface {
+			SetNodeEntry(entry *cluster.NodeEntry)
+		}); ok {
+			v.SetNodeEntry(&entry)
+		}
+	}
+	return entry
 }

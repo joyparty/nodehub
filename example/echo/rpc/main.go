@@ -11,7 +11,6 @@ import (
 	pb "nodehub/example/echo/proto/server/echo"
 	"nodehub/logger"
 	clientpb "nodehub/proto/client"
-	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/proto"
@@ -41,7 +40,7 @@ func init() {
 }
 
 func main() {
-	node := &nodehub.Node{}
+	node := nodehub.NewNode("echo")
 
 	grpcServer, err := newGRPCServer()
 	if err != nil {
@@ -49,13 +48,7 @@ func main() {
 	}
 	node.AddComponent(grpcServer)
 
-	entry := cluster.NodeEntry{
-		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
-		Name:  "echo",
-		State: cluster.NodeOK,
-		GRPC:  grpcServer.ToEntry(),
-	}
-	if err := registry.Put(entry); err != nil {
+	if err := registry.Put(node.Entry()); err != nil {
 		panic(err)
 	}
 

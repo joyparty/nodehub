@@ -12,7 +12,6 @@ import (
 	pb "nodehub/example/echo/proto/server/echo"
 	"nodehub/logger"
 	clientpb "nodehub/proto/client"
-	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/proto"
@@ -42,19 +41,14 @@ func init() {
 }
 
 func main() {
-	node := &nodehub.Node{}
+	node := nodehub.NewNode("gateway")
 
 	node.AddComponent(&gateway.WebsocketProxy{
 		Registry:   registry,
 		ListenAddr: "127.0.0.1:9000",
 	})
 
-	entry := cluster.NodeEntry{
-		ID:    fmt.Sprintf("%d", time.Now().UnixNano()),
-		Name:  "gateway",
-		State: cluster.NodeOK,
-	}
-	if err := registry.Put(entry); err != nil {
+	if err := registry.Put(node.Entry()); err != nil {
 		panic(err)
 	}
 
