@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"syscall"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -21,7 +19,10 @@ const (
 
 // Component 组件
 type Component interface {
+	// Name 组件名称，仅用于显示
 	Name() string
+
+	// Start方法注意不要阻塞程序执行
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
 
@@ -49,6 +50,9 @@ func NewNode(name string) *Node {
 }
 
 // AddComponent 添加组件
+//
+// 组件的启动顺序与添加顺序一致
+// 组件的停止顺序与添加顺序相反
 func (n *Node) AddComponent(c ...Component) {
 	n.components = append(n.components, c...)
 }
@@ -72,70 +76,53 @@ func (n *Node) Serve(ctx context.Context) error {
 }
 
 func (n *Node) startAll(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	for i := range n.components {
-		c := n.components[i]
-		g.Go(func() error {
-			if v, ok := c.(interface {
-				Init(ctx context.Context) error
-			}); ok {
-				if err := v.Init(ctx); err != nil {
-					return fmt.Errorf("initialize %s, %w", c.Name(), err)
-				}
+	for _, c := range n.components {
+		if v, ok := c.(interface {
+			BeforeStart(ctx context.Context) error
+		}); ok {
+			if err := v.BeforeStart(ctx); err != nil {
+				return fmt.Errorf("before start %s, %w", c.Name(), err)
 			}
+		}
 
-			if v, ok := c.(interface {
-				BeforeStart(ctx context.Context) error
-			}); ok {
-				if err := v.BeforeStart(ctx); err != nil {
-					return fmt.Errorf("before start %s, %w", c.Name(), err)
-				}
-			}
+		if err := c.Start(ctx); err != nil {
+			return fmt.Errorf("start %s, %w", c.Name(), err)
+		}
 
-			if err := c.Start(ctx); err != nil {
-				return fmt.Errorf("start %s, %w", c.Name(), err)
-			}
-
-			if v, ok := c.(interface {
-				AfterStart(ctx context.Context)
-			}); ok {
-				v.AfterStart(ctx)
-			}
-
-			return nil
-		})
+		if v, ok := c.(interface {
+			AfterStart(ctx context.Context)
+		}); ok {
+			v.AfterStart(ctx)
+		}
 	}
-	return g.Wait()
+
+	return nil
 }
 
 func (n *Node) stopAll(ctx context.Context) error {
-	g := &errgroup.Group{}
-
-	for i := range n.components {
+	for i := len(n.components) - 1; i >= 0; i-- {
 		c := n.components[i]
-		g.Go(func() error {
-			if v, ok := c.(interface {
-				BeforeStop(ctx context.Context) error
-			}); ok {
-				if err := v.BeforeStop(ctx); err != nil {
-					return fmt.Errorf("before stop %s, %w", c.Name(), err)
-				}
-			}
 
-			if err := c.Stop(ctx); err != nil {
-				return fmt.Errorf("stop %s, %w", c.Name(), err)
+		if v, ok := c.(interface {
+			BeforeStop(ctx context.Context) error
+		}); ok {
+			if err := v.BeforeStop(ctx); err != nil {
+				return fmt.Errorf("before stop %s, %w", c.Name(), err)
 			}
+		}
 
-			if v, ok := c.(interface {
-				AfterStop(ctx context.Context)
-			}); ok {
-				v.AfterStop(ctx)
-			}
-			return nil
-		})
+		if err := c.Stop(ctx); err != nil {
+			return fmt.Errorf("stop %s, %w", c.Name(), err)
+		}
+
+		if v, ok := c.(interface {
+			AfterStop(ctx context.Context)
+		}); ok {
+			v.AfterStop(ctx)
+		}
 	}
-	return g.Wait()
+
+	return nil
 }
 
 // Entry 获取服务发现条目
