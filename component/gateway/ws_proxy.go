@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"nodehub"
 	"nodehub/cluster"
 	"nodehub/logger"
 	clientpb "nodehub/proto/client"
@@ -16,7 +17,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -109,19 +109,14 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				)
 
 				if s, ok := status.FromError(err); ok {
-					rpcError := &gatewaypb.RPCError{
+					resp, _ := nodehub.PackClientResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
 						ServiceCode: req.ServiceCode,
 						Method:      req.Method,
 						Status:      s.Proto(),
-					}
-
-					data, _ := proto.Marshal(rpcError)
-					sess.Send(&clientpb.Response{
-						RequestId:   req.Id,
-						ServiceCode: ServiceCode,
-						Route:       int32(gatewaypb.Protocol_RPC_ERROR),
-						Data:        data,
 					})
+					nodehub.SetRequestInfo(resp, req)
+
+					sess.Send(resp)
 				}
 			}
 		})
@@ -137,8 +132,8 @@ func (wp *WebsocketProxy) handleRequest(sess Session, req *clientpb.Request) err
 		return errRequestPrivateNode
 	}
 
-	input := &emptypb.Empty{}
-	if err := proto.Unmarshal(req.Data, input); err != nil {
+	input, err := nodehub.NewEmptyMessage(req.Data)
+	if err != nil {
 		return fmt.Errorf("unmarshal request data, %w", err)
 	}
 

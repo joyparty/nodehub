@@ -13,7 +13,6 @@ import (
 	clientpb "nodehub/proto/client"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -76,13 +75,5 @@ type echoService struct {
 }
 
 func (es *echoService) Send(ctx context.Context, msg *pb.Msg) (*clientpb.Response, error) {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, fmt.Errorf("marshal msg, %w", err)
-	}
-
-	return &clientpb.Response{
-		Route: int32(pb.Protocol_MSG),
-		Data:  data,
-	}, nil
+	return nodehub.PackClientResponse(int32(pb.Protocol_MSG), msg)
 }

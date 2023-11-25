@@ -8,16 +8,19 @@ option go_package = "nodehub/proto/client";
 message Response {
 	// 触发此次请求的request_id
 	// 如果是服务器端主动下发，request_id = 0
+	// 网关会自动给这个字段赋值
 	uint32 request_id = 1;
 
 	// 服务ID，对应内部节点的每种grpc服务
 	// 标识这个消息来自于哪个内部服务
+	// 网关会自动给这个字段赋值
 	int32 service_code = 2;
 
 	// 消息类型ID，可以是集群范围唯一，也可以是服务范围唯一
+	// 需要下发时自行指定
 	int32 route = 3;
 
-	// protobuf message序列化之后的数据
-	// 需要根据Route字段判断具体反序列化成哪个protobuf message
+	// 下行protobuf message序列化之后的数据
+	// 客户端需要根据Route字段判断具体反序列化成哪个protobuf message
 	bytes data = 4;
 }

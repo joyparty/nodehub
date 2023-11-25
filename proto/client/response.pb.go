@@ -28,14 +28,17 @@ type Response struct {
 
 	// 触发此次请求的request_id
 	// 如果是服务器端主动下发，request_id = 0
+	// 网关会自动给这个字段赋值
 	RequestId uint32 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// 服务ID，对应内部节点的每种grpc服务
 	// 标识这个消息来自于哪个内部服务
+	// 网关会自动给这个字段赋值
 	ServiceCode int32 `protobuf:"varint,2,opt,name=service_code,json=serviceCode,proto3" json:"service_code,omitempty"`
 	// 消息类型ID，可以是集群范围唯一，也可以是服务范围唯一
+	// 需要下发时自行指定
 	Route int32 `protobuf:"varint,3,opt,name=route,proto3" json:"route,omitempty"`
-	// protobuf message序列化之后的数据
-	// 需要根据Route字段判断具体反序列化成哪个protobuf message
+	// 下行protobuf message序列化之后的数据
+	// 客户端需要根据Route字段判断具体反序列化成哪个protobuf message
 	Data []byte `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
 }
 
