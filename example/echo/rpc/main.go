@@ -17,22 +17,20 @@ import (
 )
 
 var (
-	etcdClient *clientv3.Client
-	registry   *cluster.Registry
+	registry *cluster.Registry
 )
 
 func init() {
 	logger.SetLogger(slog.Default())
 
-	var err error
-	etcdClient, err = clientv3.New(clientv3.Config{
+	client, err := clientv3.New(clientv3.Config{
 		Endpoints: []string{"127.0.0.1:2379"},
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	registry, err = cluster.NewRegistry(etcdClient)
+	registry, err = cluster.NewRegistry(client)
 	if err != nil {
 		panic(err)
 	}
@@ -64,12 +62,7 @@ type server struct {
 
 func newGRPCServer() (*server, error) {
 	s := rpc.NewGRPCServer("127.0.0.1:9001")
-	if err := s.RegisterService(
-		int32(serverpb.Services_ECHO),
-		&pb.Echo_ServiceDesc,
-		&echoService{},
-		rpc.WithPublic(),
-	); err != nil {
+	if err := s.RegisterPublicService(int32(serverpb.Services_ECHO), &pb.Echo_ServiceDesc, &echoService{}); err != nil {
 		return nil, fmt.Errorf("register service, %w", err)
 	}
 

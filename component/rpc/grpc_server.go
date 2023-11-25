@@ -32,28 +32,37 @@ func NewGRPCServer(endpoint string, opts ...grpc.ServerOption) *GRPCServer {
 	}
 }
 
-// RegisterService 注册服务
-func (gs *GRPCServer) RegisterService(code int32, desc *grpc.ServiceDesc, impl any, opts ...func(*grpcService)) error {
-	if code == 0 {
+// RegisterPublicService 注册服务
+func (gs *GRPCServer) RegisterPublicService(code int32, desc *grpc.ServiceDesc, impl any) error {
+	return gs.registerService(impl, grpcService{
+		Code:   code,
+		Desc:   desc,
+		Public: true,
+	})
+}
+
+// RegisterPrivateService 注册内部服务
+func (gs *GRPCServer) RegisterPrivateService(code int32, desc *grpc.ServiceDesc, impl any) error {
+	return gs.registerService(impl, grpcService{
+		Code:   code,
+		Desc:   desc,
+		Public: false,
+	})
+}
+
+func (gs *GRPCServer) registerService(impl any, service grpcService) error {
+	if service.Code == 0 {
 		return errors.New("code must not be 0")
 	}
 
-	for _, s := range gs.services {
-		if s.Code == code {
-			return fmt.Errorf("code %d already registered", code)
+	for _, v := range gs.services {
+		if v.Code == service.Code {
+			return fmt.Errorf("code %d already registered", service.Code)
 		}
 	}
 
-	s := grpcService{
-		Code: code,
-		Desc: desc,
-	}
-	for _, opt := range opts {
-		opt(&s)
-	}
-	gs.services = append(gs.services, s)
-
-	gs.server.RegisterService(desc, impl)
+	gs.services = append(gs.services, service)
+	gs.server.RegisterService(service.Desc, impl)
 	return nil
 }
 
@@ -89,12 +98,5 @@ func (gs *GRPCServer) SetNodeEntry(entry *cluster.NodeEntry) {
 				Public: s.Public,
 			}
 		}),
-	}
-}
-
-// WithPublic 设置是否允许客户端访问
-func WithPublic() func(*grpcService) {
-	return func(g *grpcService) {
-		g.Public = true
 	}
 }
