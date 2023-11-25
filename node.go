@@ -146,11 +146,12 @@ func (n *Node) Entry() cluster.NodeEntry {
 		Name:  n.name,
 	}
 
+	// 把条目信息交给实现了这个接口的组件修改
 	for i := range n.components {
 		if v, ok := n.components[i].(interface {
-			SetNodeEntry(entry *cluster.NodeEntry)
+			CompleteNodeEntry(entry *cluster.NodeEntry)
 		}); ok {
-			v.SetNodeEntry(&entry)
+			v.CompleteNodeEntry(&entry)
 		}
 	}
 	return entry

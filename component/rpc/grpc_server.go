@@ -87,8 +87,8 @@ func (gs *GRPCServer) Stop(ctx context.Context) error {
 	return nil
 }
 
-// SetNodeEntry 设置节点条目
-func (gs *GRPCServer) SetNodeEntry(entry *cluster.NodeEntry) {
+// CompleteNodeEntry 设置条目中的grpc信息
+func (gs *GRPCServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.GRPC = cluster.GRPCEntry{
 		Endpoint: gs.endpoint,
 		Services: lo.Map(gs.services, func(s grpcService, _ int) cluster.GRPCServiceDesc {
