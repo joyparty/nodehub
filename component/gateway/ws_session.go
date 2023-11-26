@@ -43,7 +43,7 @@ type wsPayload struct {
 }
 
 type wsSession struct {
-	id   *atomic.Value
+	id   string
 	conn *websocket.Conn
 
 	// 不允许并发写，因此用队列方式排队写
@@ -58,7 +58,7 @@ type wsSession struct {
 
 func newWsSession(conn *websocket.Conn) *wsSession {
 	ws := &wsSession{
-		id:         &atomic.Value{},
+		id:         uuid.New().String(),
 		conn:       conn,
 		sendC:      make(chan wsPayload, 128),
 		done:       make(chan struct{}),
@@ -66,7 +66,6 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 		closed:     &atomic.Bool{},
 	}
 
-	ws.id.Store(uuid.New().String())
 	ws.lastRWTime.Store(time.Now())
 	ws.setPingPongHandler()
 
@@ -112,11 +111,11 @@ func (ws *wsSession) heartbeatLoop() {
 }
 
 func (ws *wsSession) ID() string {
-	return ws.id.Load().(string)
+	return ws.id
 }
 
 func (ws *wsSession) SetID(id string) {
-	ws.id.Store(id)
+	ws.id = id
 }
 
 func (ws *wsSession) Recv(req *clientpb.Request) error {

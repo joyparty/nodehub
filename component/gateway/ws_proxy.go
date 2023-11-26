@@ -87,9 +87,11 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := newWsSession(conn)
-	defer sess.Close()
-
 	wp.sessionHub.Store(sess)
+	defer func() {
+		wp.sessionHub.Delete(sess.ID())
+		sess.Close()
+	}()
 
 	for {
 		req := &clientpb.Request{}
