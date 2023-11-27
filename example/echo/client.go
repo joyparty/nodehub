@@ -24,7 +24,7 @@ func init() {
 }
 
 func main() {
-	endpoint := fmt.Sprintf("ws://%s/proxy", serverAddr)
+	endpoint := fmt.Sprintf("ws://%s/grpc", serverAddr)
 	conn, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
 	if err != nil {
 		panic(err)
@@ -37,7 +37,7 @@ func main() {
 		panic(err)
 	}
 	req.ServiceCode = int32(serverpb.Services_ECHO)
-	req.Method = "Sent"
+	req.Method = "Send"
 
 	data, err := proto.Marshal(req)
 	if err != nil {
