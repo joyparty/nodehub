@@ -60,7 +60,7 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 	ws := &wsSession{
 		id:         uuid.New().String(),
 		conn:       conn,
-		sendC:      make(chan wsPayload, 128),
+		sendC:      make(chan wsPayload, 3), // 为什么是三？因为事不过三
 		done:       make(chan struct{}),
 		lastRWTime: &atomic.Value{},
 		closed:     &atomic.Bool{},
