@@ -128,7 +128,12 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ants.Submit(func() {
-			if err := wp.handleUnary(sess, req, sessionMD.Copy()); err != nil {
+			md := sessionMD.Copy()
+			// 把request id放到request header
+			md.Set(nodehub.MDRequestID, strconv.Itoa(int(req.Id)))
+			ctx := metadata.NewIncomingContext(context.Background(), md)
+
+			if err := wp.handleUnary(ctx, sess, req); err != nil {
 				logger.Error("handle request",
 					"error", err,
 					"service_code", req.ServiceCode,
@@ -153,7 +158,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (wp *WebsocketProxy) handleUnary(sess Session, req *clientpb.Request, md metadata.MD) error {
+func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *clientpb.Request) error {
 	conn, desc, err := wp.Registry.GetGRPCServiceConn(req.ServiceCode)
 	if err != nil {
 		return fmt.Errorf("get grpc conn, %w", err)
@@ -166,10 +171,6 @@ func (wp *WebsocketProxy) handleUnary(sess Session, req *clientpb.Request, md me
 		return fmt.Errorf("unmarshal request data, %w", err)
 	}
 	output := &clientpb.Response{}
-
-	// 把request id放到request header
-	md.Set(nodehub.MDRequestID, strconv.Itoa(int(req.Id)))
-	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	apiPath := path.Join(desc.Path, req.Method)
 	if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
