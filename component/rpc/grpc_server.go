@@ -15,10 +15,10 @@ import (
 type GRPCServer struct {
 	endpoint string
 	server   *grpc.Server
-	services []grpcService
+	services []grpcServiceDesc
 }
 
-type grpcService struct {
+type grpcServiceDesc struct {
 	Code   int32
 	Desc   *grpc.ServiceDesc
 	Public bool
@@ -34,7 +34,7 @@ func NewGRPCServer(endpoint string, opts ...grpc.ServerOption) *GRPCServer {
 
 // RegisterPublicService 注册服务
 func (gs *GRPCServer) RegisterPublicService(code int32, desc *grpc.ServiceDesc, impl any) error {
-	return gs.registerService(impl, grpcService{
+	return gs.registerService(impl, grpcServiceDesc{
 		Code:   code,
 		Desc:   desc,
 		Public: true,
@@ -43,14 +43,14 @@ func (gs *GRPCServer) RegisterPublicService(code int32, desc *grpc.ServiceDesc, 
 
 // RegisterPrivateService 注册内部服务
 func (gs *GRPCServer) RegisterPrivateService(code int32, desc *grpc.ServiceDesc, impl any) error {
-	return gs.registerService(impl, grpcService{
+	return gs.registerService(impl, grpcServiceDesc{
 		Code:   code,
 		Desc:   desc,
 		Public: false,
 	})
 }
 
-func (gs *GRPCServer) registerService(impl any, service grpcService) error {
+func (gs *GRPCServer) registerService(impl any, service grpcServiceDesc) error {
 	if service.Code == 0 {
 		return errors.New("code must not be 0")
 	}
@@ -91,7 +91,7 @@ func (gs *GRPCServer) Stop(ctx context.Context) error {
 func (gs *GRPCServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.GRPC = cluster.GRPCEntry{
 		Endpoint: gs.endpoint,
-		Services: lo.Map(gs.services, func(s grpcService, _ int) cluster.GRPCServiceDesc {
+		Services: lo.Map(gs.services, func(s grpcServiceDesc, _ int) cluster.GRPCServiceDesc {
 			return cluster.GRPCServiceDesc{
 				Code:   s.Code,
 				Path:   fmt.Sprintf("/%s", s.Desc.ServiceName),

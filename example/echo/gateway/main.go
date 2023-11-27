@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log/slog"
 	"nodehub"
 	"nodehub/cluster"
@@ -13,9 +14,13 @@ import (
 
 var (
 	registry *cluster.Registry
+	addr     string
 )
 
 func init() {
+	flag.StringVar(&addr, "addr", "127.0.0.1:9000", "listen address")
+	flag.Parse()
+
 	logger.SetLogger(slog.Default())
 
 	client, err := clientv3.New(clientv3.Config{
@@ -37,7 +42,7 @@ func main() {
 
 	node.AddComponent(&gateway.WebsocketProxy{
 		Registry:   registry,
-		ListenAddr: "127.0.0.1:9000",
+		ListenAddr: addr,
 	})
 
 	if err := registry.Put(node.Entry()); err != nil {

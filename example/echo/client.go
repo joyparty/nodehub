@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	serverpb "nodehub/example/echo/proto/server"
 	pb "nodehub/example/echo/proto/server/echo"
@@ -13,11 +14,18 @@ import (
 )
 
 var (
-	requestID = &atomic.Uint32{}
+	requestID  = &atomic.Uint32{}
+	serverAddr string
 )
 
+func init() {
+	flag.StringVar(&serverAddr, "server", "127.0.0.1:9000", "server address")
+	flag.Parse()
+}
+
 func main() {
-	conn, _, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:9000/proxy", nil)
+	endpoint := fmt.Sprintf("ws://%s/proxy", serverAddr)
+	conn, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
 	if err != nil {
 		panic(err)
 	}

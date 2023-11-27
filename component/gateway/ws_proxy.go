@@ -103,7 +103,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ants.Submit(func() {
-			if err := wp.handleRequest(sess, req); err != nil {
+			if err := wp.handleUnary(sess, req); err != nil {
 				logger.Error("handle request",
 					"error", err,
 					"service_code", req.ServiceCode,
@@ -128,7 +128,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // TODO: 把requestID和userID放到metadata里面
-func (wp *WebsocketProxy) handleRequest(sess Session, req *clientpb.Request) error {
+func (wp *WebsocketProxy) handleUnary(sess Session, req *clientpb.Request) error {
 	conn, desc, err := wp.Registry.GetGRPCServiceConn(req.ServiceCode)
 	if err != nil {
 		return fmt.Errorf("get grpc conn, %w", err)
@@ -140,15 +140,14 @@ func (wp *WebsocketProxy) handleRequest(sess Session, req *clientpb.Request) err
 	if err != nil {
 		return fmt.Errorf("unmarshal request data, %w", err)
 	}
-
 	output := &clientpb.Response{}
-	apiPath := path.Join(desc.Path, req.Method)
 
 	md := metadata.Pairs(
 		nodehub.MDRequestID, strconv.Itoa(int(req.Id)),
 	)
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
+	apiPath := path.Join(desc.Path, req.Method)
 	if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
 		return fmt.Errorf("invoke grpc, %w", err)
 	}
