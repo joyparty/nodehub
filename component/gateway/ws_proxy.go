@@ -118,7 +118,8 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 						Method:      req.Method,
 						Status:      s.Proto(),
 					})
-					nodehub.SetRequestInfo(resp, req)
+					resp.RequestId = req.Id
+					resp.ServiceCode = ServiceCode
 
 					sess.Send(resp)
 				}

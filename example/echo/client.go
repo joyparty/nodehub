@@ -37,7 +37,7 @@ func main() {
 		panic(err)
 	}
 	req.ServiceCode = int32(serverpb.Services_ECHO)
-	req.Method = "Send"
+	req.Method = "Sent"
 
 	data, err := proto.Marshal(req)
 	if err != nil {
