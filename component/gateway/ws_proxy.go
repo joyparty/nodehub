@@ -12,6 +12,7 @@ import (
 	gatewaypb "nodehub/proto/gateway"
 	"path"
 	"strconv"
+	"sync"
 
 	"github.com/gorilla/websocket"
 	"github.com/panjf2000/ants/v2"
@@ -46,6 +47,9 @@ type WebsocketProxy struct {
 
 	sessionHub *sessionHub
 	hs         *http.Server
+
+	requestPool  *sync.Pool
+	responsePool *sync.Pool
 }
 
 // Name 服务名称
@@ -55,6 +59,18 @@ func (wp *WebsocketProxy) Name() string {
 
 // Start 启动websocket服务器
 func (wp *WebsocketProxy) Start(ctx context.Context) error {
+	wp.requestPool = &sync.Pool{
+		New: func() any {
+			return &clientpb.Request{}
+		},
+	}
+
+	wp.responsePool = &sync.Pool{
+		New: func() any {
+			return &clientpb.Response{}
+		},
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/grpc", wp.serveHTTP)
 
@@ -119,8 +135,12 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for {
-		req := &clientpb.Request{}
+		req := wp.requestPool.Get().(*clientpb.Request)
+		resetRequest(req)
+
 		if err := sess.Recv(req); err != nil {
+			wp.requestPool.Put(req)
+
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				logger.Error("recv request", "error", err)
 			}
@@ -128,6 +148,8 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		ants.Submit(func() {
+			defer wp.requestPool.Put(req)
+
 			md := sessionMD.Copy()
 			// 把request id放到request header
 			md.Set(nodehub.MDRequestID, strconv.Itoa(int(req.Id)))
@@ -170,7 +192,9 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 	if err != nil {
 		return fmt.Errorf("unmarshal request data, %w", err)
 	}
-	output := &clientpb.Response{}
+	output := wp.responsePool.Get().(*clientpb.Response)
+	defer wp.responsePool.Put(output)
+	resetResponse(output)
 
 	apiPath := path.Join(desc.Path, req.Method)
 	if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
@@ -186,4 +210,24 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 	output.ServiceCode = req.ServiceCode
 
 	return sess.Send(output)
+}
+
+func resetRequest(req *clientpb.Request) {
+	req.Id = 0
+	req.ServiceCode = 0
+	req.Method = ""
+
+	if len(req.Data) > 0 {
+		req.Data = req.Data[:0]
+	}
+}
+
+func resetResponse(resp *clientpb.Response) {
+	resp.RequestId = 0
+	resp.ServiceCode = 0
+	resp.Route = 0
+
+	if len(resp.Data) > 0 {
+		resp.Data = resp.Data[:0]
+	}
 }
