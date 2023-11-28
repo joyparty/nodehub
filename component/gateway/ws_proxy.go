@@ -225,7 +225,7 @@ func resetRequest(req *clientpb.Request) {
 func resetResponse(resp *clientpb.Response) {
 	resp.RequestId = 0
 	resp.ServiceCode = 0
-	resp.Route = 0
+	resp.Type = 0
 
 	if len(resp.Data) > 0 {
 		resp.Data = resp.Data[:0]

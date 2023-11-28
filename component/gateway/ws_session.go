@@ -178,7 +178,7 @@ func (ws *wsSession) sendLoop() {
 						args = append(args,
 							"requestID", message.GetRequestId(),
 							"serviceCode", message.GetServiceCode(),
-							"route", message.GetRoute(),
+							"type", message.GetType(),
 						)
 					}
 				}

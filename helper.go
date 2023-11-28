@@ -40,15 +40,15 @@ func PackClientRequest(serviceCode int32, method string, msg proto.Message) (*cl
 }
 
 // PackClientResponse 把下行的proto message打包为client.Response
-func PackClientResponse(route int32, msg proto.Message) (*clientpb.Response, error) {
+func PackClientResponse(msgType int32, msg proto.Message) (*clientpb.Response, error) {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &clientpb.Response{
-		Route: route,
-		Data:  data,
+		Type: msgType,
+		Data: data,
 	}, nil
 }
 
