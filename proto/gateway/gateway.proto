@@ -5,6 +5,8 @@ package gateway;
 option go_package = "nodehub/proto/gateway";
 
 import "google/rpc/status.proto";
+import "google/protobuf/timestamp.proto";
+import "client/response.proto";
 
 enum Protocol {
 	UNSPECIFIED = 0;
@@ -21,4 +23,18 @@ message RPCError {
 
 	// 详细错误信息
 	google.rpc.Status status = 3;
+}
+
+// 用于内部节点主动向客户端发送消息
+// 内部节点把notification push到消息队列
+// 网关节点从消息队列中获取notification，然后push到客户端
+message Notification {
+	// 消息接收者，网关节点根据user_id找到对应的客户端连接
+	string user_id = 1;
+
+	// 消息发布时间
+	google.protobuf.Timestamp time = 2;
+
+	// 消息内容
+	client.Response content = 3;
 }
