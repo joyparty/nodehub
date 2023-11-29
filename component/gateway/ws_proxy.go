@@ -246,7 +246,9 @@ func (wp *WebsocketProxy) notificationLoop() {
 			if sess, ok := wp.sessionHub.Load(msg.GetUserId()); ok {
 				// 只发送5分钟内的消息
 				if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
-					sess.Send(msg.Content)
+					ants.Submit(func() {
+						sess.Send(msg.Content)
+					})
 				}
 			}
 		}

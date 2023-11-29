@@ -23,6 +23,8 @@ var (
 
 	// ErrSessionClosed 会话已关闭
 	ErrSessionClosed = errors.New("session closed")
+
+	writeWait = 5 * time.Second
 )
 
 // Session 连接会话
@@ -165,6 +167,7 @@ func (ws *wsSession) sendLoop() {
 		case <-ws.done:
 			return
 		case payload := <-ws.sendC:
+			ws.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.conn.WriteMessage(payload.messageType, payload.data); err != nil {
 				args := []any{
 					"error", err,
