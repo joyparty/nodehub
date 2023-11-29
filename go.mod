@@ -3,8 +3,8 @@ module nodehub
 go 1.21.4
 
 require (
-	github.com/google/uuid v1.4.0
 	github.com/gorilla/websocket v1.5.1
+	github.com/oklog/ulid/v2 v2.1.0
 	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/redis/go-redis/v9 v9.3.0
 	github.com/samber/lo v1.38.1

@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -60,7 +60,7 @@ type wsSession struct {
 
 func newWsSession(conn *websocket.Conn) *wsSession {
 	ws := &wsSession{
-		id:         uuid.New().String(),
+		id:         ulid.Make().String(),
 		conn:       conn,
 		sendC:      make(chan wsPayload, 3), // 为什么是三？因为事不过三
 		done:       make(chan struct{}),

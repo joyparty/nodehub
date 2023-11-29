@@ -12,11 +12,11 @@ import (
 	"nodehub/proto/clientpb"
 	"nodehub/proto/gatewaypb"
 	"path"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/oklog/ulid/v2"
 	"github.com/panjf2000/ants/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -165,8 +165,8 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			defer wp.requestPool.Put(req)
 
 			md := sessionMD.Copy()
-			// 把request id放到request header
-			md.Set(nodehub.MDRequestID, strconv.Itoa(int(req.Id)))
+			// 事务ID
+			md.Set(nodehub.MDTransactionID, ulid.Make().String())
 			ctx := metadata.NewIncomingContext(context.Background(), md)
 
 			if err := wp.handleUnary(ctx, sess, req); err != nil {

@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	// MDRequestID grpc metadata中的request id key
-	MDRequestID = "x-req-id"
 	// MDUserID grpc metadata中的user id key
 	MDUserID = "x-user-id"
+	// MDTransactionID grpc metadata中的transaction id key，用于跟踪请求
+	MDTransactionID = "x-trans-id"
 )
 
 // Component 组件
