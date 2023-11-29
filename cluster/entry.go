@@ -16,7 +16,7 @@ const (
 
 // NodeEntry 节点服务发现条目
 type NodeEntry struct {
-	// 节点ID，集群内唯一，会被用于有状态服务路由
+	// 节点ID，集群内唯一
 	ID string `json:"id"`
 
 	// 节点名称，仅用于显示

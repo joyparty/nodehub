@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"nodehub/cluster"
 	"os/signal"
-	"strconv"
 	"syscall"
-	"time"
+
+	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -43,7 +43,7 @@ type Node struct {
 // NewNode 构造函数
 func NewNode(name string) *Node {
 	return &Node{
-		id:         strconv.Itoa(int(time.Now().UnixNano())),
+		id:         ulid.Make().String(),
 		name:       name,
 		components: []Component{},
 	}
