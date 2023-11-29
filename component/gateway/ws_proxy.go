@@ -28,7 +28,7 @@ import (
 var (
 	upgrader = websocket.Upgrader{}
 
-	errRequestPrivateNode = errors.New("request private node")
+	errRequestPrivateService = errors.New("request private service")
 )
 
 // ServiceCode gateway服务的service code默认为1
@@ -199,7 +199,7 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 	if err != nil {
 		return fmt.Errorf("get grpc conn, %w", err)
 	} else if !desc.Public {
-		return errRequestPrivateNode
+		return errRequestPrivateService
 	}
 
 	input, err := newEmptyMessage(req.Data)

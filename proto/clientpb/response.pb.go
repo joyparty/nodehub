@@ -32,7 +32,8 @@ type Response struct {
 	RequestId uint32 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// 服务ID，对应内部节点的每种grpc服务
 	// 标识这个消息来自于哪个内部服务
-	// 网关会自动给这个字段赋值
+	// grpc调用返回结果，网关会自动给这个字段赋值
+	// 如果是服务器端主动下发，需要自行赋值
 	ServiceCode int32 `protobuf:"varint,2,opt,name=service_code,json=serviceCode,proto3" json:"service_code,omitempty"`
 	// 消息类型ID，可以是集群范围唯一，也可以是服务范围唯一
 	// 需要下发时自行指定
