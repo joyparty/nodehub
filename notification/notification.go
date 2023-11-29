@@ -2,7 +2,7 @@ package notification
 
 import (
 	"context"
-	gatewaypb "nodehub/proto/gateway"
+	"nodehub/proto/gatewaypb"
 )
 
 // Publisher 把消息发布到消息队列

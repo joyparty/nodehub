@@ -1,8 +1,7 @@
 package nodehub
 
 import (
-	"nodehub/proto/client"
-	clientpb "nodehub/proto/client"
+	"nodehub/proto/clientpb"
 	"sync/atomic"
 
 	"google.golang.org/protobuf/proto"
@@ -19,7 +18,7 @@ func NewClientRequest() *clientpb.Request {
 }
 
 // SetRequestInfo 设置client.Response的requestId和serviceCode
-func SetRequestInfo(resp *client.Response, req *client.Request) {
+func SetRequestInfo(resp *clientpb.Response, req *clientpb.Request) {
 	resp.RequestId = req.Id
 	resp.ServiceCode = req.ServiceCode
 }

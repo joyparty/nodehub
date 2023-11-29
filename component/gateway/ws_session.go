@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"nodehub/logger"
-	clientpb "nodehub/proto/client"
+	"nodehub/proto/clientpb"
 	"sync"
 	"sync/atomic"
 	"time"

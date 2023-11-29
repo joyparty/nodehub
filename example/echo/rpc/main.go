@@ -11,7 +11,7 @@ import (
 	serverpb "nodehub/example/echo/proto/server"
 	pb "nodehub/example/echo/proto/server/echo"
 	"nodehub/logger"
-	clientpb "nodehub/proto/client"
+	"nodehub/proto/clientpb"
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"

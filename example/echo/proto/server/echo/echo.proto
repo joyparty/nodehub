@@ -5,7 +5,7 @@ package server.echo;
 
 option go_package = "nodehub/example/echo/proto/server/echo";
 
-import "client/response.proto";
+import "clientpb/response.proto";
 
 enum Protocol {
 	UNSPECIFIED = 0;

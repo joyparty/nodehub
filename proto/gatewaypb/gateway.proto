@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package gateway;
 
-option go_package = "nodehub/proto/gateway";
+option go_package = "nodehub/proto/gatewaypb";
 
 import "google/rpc/status.proto";
 import "google/protobuf/timestamp.proto";
-import "client/response.proto";
+import "clientpb/response.proto";
 
 enum Protocol {
 	UNSPECIFIED = 0;

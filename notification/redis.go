@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"nodehub/logger"
-	gatewaypb "nodehub/proto/gateway"
+	"nodehub/proto/gatewaypb"
 
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"

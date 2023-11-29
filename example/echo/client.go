@@ -5,8 +5,7 @@ import (
 	"fmt"
 	serverpb "nodehub/example/echo/proto/server"
 	pb "nodehub/example/echo/proto/server/echo"
-	"nodehub/proto/client"
-	clientpb "nodehub/proto/client"
+	"nodehub/proto/clientpb"
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
@@ -57,7 +56,7 @@ func main() {
 		panic(fmt.Errorf("invalid message type, %d", messageType))
 	}
 
-	response := &client.Response{}
+	response := &clientpb.Response{}
 	if err := proto.Unmarshal(data, response); err != nil {
 		panic(err)
 	}

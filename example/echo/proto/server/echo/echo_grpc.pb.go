@@ -13,7 +13,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	client "nodehub/proto/client"
+	clientpb "nodehub/proto/clientpb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -29,7 +29,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type EchoClient interface {
-	Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*client.Response, error)
+	Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*clientpb.Response, error)
 }
 
 type echoClient struct {
@@ -40,8 +40,8 @@ func NewEchoClient(cc grpc.ClientConnInterface) EchoClient {
 	return &echoClient{cc}
 }
 
-func (c *echoClient) Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*client.Response, error) {
-	out := new(client.Response)
+func (c *echoClient) Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*clientpb.Response, error) {
+	out := new(clientpb.Response)
 	err := c.cc.Invoke(ctx, Echo_Send_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (c *echoClient) Send(ctx context.Context, in *Msg, opts ...grpc.CallOption)
 // All implementations must embed UnimplementedEchoServer
 // for forward compatibility
 type EchoServer interface {
-	Send(context.Context, *Msg) (*client.Response, error)
+	Send(context.Context, *Msg) (*clientpb.Response, error)
 	mustEmbedUnimplementedEchoServer()
 }
 
@@ -61,7 +61,7 @@ type EchoServer interface {
 type UnimplementedEchoServer struct {
 }
 
-func (UnimplementedEchoServer) Send(context.Context, *Msg) (*client.Response, error) {
+func (UnimplementedEchoServer) Send(context.Context, *Msg) (*clientpb.Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Send not implemented")
 }
 func (UnimplementedEchoServer) mustEmbedUnimplementedEchoServer() {}
