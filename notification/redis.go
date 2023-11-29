@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"nodehub/logger"
 	"nodehub/proto/gatewaypb"
 
@@ -68,9 +67,6 @@ func (mq *RedisMQ) Subscribe(ctx context.Context) (<-chan *gatewaypb.Notificatio
 	nc := make(chan *gatewaypb.Notification)
 
 	go func() {
-		defer close(nc)
-		defer pubsub.Unsubscribe(ctx)
-
 		defer func() {
 			close(nc)
 
@@ -88,8 +84,7 @@ func (mq *RedisMQ) Subscribe(ctx context.Context) (<-chan *gatewaypb.Notificatio
 			case msg, ok := <-mc:
 				if !ok {
 					logger.Error("redis MQ consumer unexpected closed")
-
-					panic(errors.New("redis MQ consumer unexpected closed"))
+					return
 				}
 
 				data := []byte(msg.Payload)

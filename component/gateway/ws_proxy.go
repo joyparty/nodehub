@@ -8,11 +8,13 @@ import (
 	"nodehub"
 	"nodehub/cluster"
 	"nodehub/logger"
+	"nodehub/notification"
 	"nodehub/proto/clientpb"
 	"nodehub/proto/gatewaypb"
 	"path"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/panjf2000/ants/v2"
@@ -39,6 +41,9 @@ type WebsocketProxy struct {
 	Registry   *cluster.Registry
 	ListenAddr string
 
+	// 主动下发消息订阅者
+	Notifier notification.Subscriber
+
 	// 自定义身份验证逻辑，在websocket upgrade之前调用
 	// 返回的metadata会在此连接的所有grpc request中携带
 	// 返回的userID如果不为空，则会作为会话唯一标识使用，另外也会被自动加入到metadata中
@@ -51,15 +56,13 @@ type WebsocketProxy struct {
 
 	requestPool  *sync.Pool
 	responsePool *sync.Pool
+	done         chan struct{}
 }
 
-// Name 服务名称
-func (wp *WebsocketProxy) Name() string {
-	return "gateway"
-}
+func (wp *WebsocketProxy) init() {
+	wp.sessionHub = newSessionHub()
+	wp.done = make(chan struct{})
 
-// Start 启动websocket服务器
-func (wp *WebsocketProxy) Start(ctx context.Context) error {
 	wp.requestPool = &sync.Pool{
 		New: func() any {
 			return &clientpb.Request{}
@@ -72,6 +75,22 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 		},
 	}
 
+	if wp.Authorize == nil {
+		wp.Authorize = func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+			return "", metadata.MD{}, true
+		}
+	}
+}
+
+// Name 服务名称
+func (wp *WebsocketProxy) Name() string {
+	return "gateway"
+}
+
+// Start 启动websocket服务器
+func (wp *WebsocketProxy) Start(ctx context.Context) error {
+	wp.init()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/grpc", wp.serveHTTP)
 
@@ -81,14 +100,6 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 	}
 	wp.hs = hs
 
-	wp.sessionHub = newSessionHub()
-
-	if wp.Authorize == nil {
-		wp.Authorize = func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-			return "", metadata.MD{}, true
-		}
-	}
-
 	go func() {
 		logger.Info("start gateway", "addr", wp.ListenAddr)
 		if err := hs.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -97,6 +108,8 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 			panic(fmt.Errorf("start gateway, %w", err))
 		}
 	}()
+
+	go wp.notificationLoop()
 
 	return nil
 }
@@ -211,6 +224,33 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 	output.ServiceCode = req.ServiceCode
 
 	return sess.Send(output)
+}
+
+func (wp *WebsocketProxy) notificationLoop() {
+	if wp.Notifier == nil {
+		return
+	}
+
+	c, err := wp.Notifier.Subscribe(context.Background())
+	if err != nil {
+		logger.Error("subscribe notification", "error", err)
+
+		panic(fmt.Errorf("subscribe notification, %w", err))
+	}
+
+	for {
+		select {
+		case <-wp.done:
+			return
+		case msg := <-c:
+			if sess, ok := wp.sessionHub.Load(msg.GetUserId()); ok {
+				// 只发送5分钟内的消息
+				if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
+					sess.Send(msg.Content)
+				}
+			}
+		}
+	}
 }
 
 func resetRequest(req *clientpb.Request) {
