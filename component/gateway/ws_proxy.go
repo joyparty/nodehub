@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -165,7 +166,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				)
 
 				if s, ok := status.FromError(err); ok {
-					resp, _ := nodehub.PackClientResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
+					resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
 						ServiceCode: req.ServiceCode,
 						Method:      req.Method,
 						Status:      s.Proto(),
@@ -188,7 +189,7 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 		return errRequestPrivateNode
 	}
 
-	input, err := nodehub.NewEmptyMessage(req.Data)
+	input, err := newEmptyMessage(req.Data)
 	if err != nil {
 		return fmt.Errorf("unmarshal request data, %w", err)
 	}
@@ -230,4 +231,12 @@ func resetResponse(resp *clientpb.Response) {
 	if len(resp.Data) > 0 {
 		resp.Data = resp.Data[:0]
 	}
+}
+
+func newEmptyMessage(data []byte) (*emptypb.Empty, error) {
+	msg := &emptypb.Empty{}
+	if err := proto.Unmarshal(data, msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
 }
