@@ -21,7 +21,7 @@ type RedisClient interface {
 type RedisMQ struct {
 	client  RedisClient
 	channel string
-	shared  bool
+	sharded bool
 	done    chan struct{}
 }
 
@@ -29,7 +29,7 @@ type RedisMQ struct {
 //
 // client 可以使用 *redis.Client 或者 *redis.ClusterClient
 //
-// 当使用ClusterClient时，会采用shared模式
+// 当使用ClusterClient时，会采用sharded channel
 func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
 	// 如果是集群客户端，使用shared pubsub
 	_, shared := client.(*redis.ClusterClient)
@@ -37,7 +37,7 @@ func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
 	return &RedisMQ{
 		client:  client,
 		channel: channel,
-		shared:  shared,
+		sharded: shared,
 		done:    make(chan struct{}),
 	}
 }
@@ -50,7 +50,7 @@ func (mq *RedisMQ) Publish(ctx context.Context, message *gatewaypb.Notification)
 	}
 
 	var result *redis.IntCmd
-	if mq.shared {
+	if mq.sharded {
 		result = mq.client.SPublish(ctx, mq.channel, payload)
 	} else {
 		result = mq.client.Publish(ctx, mq.channel, payload)
@@ -62,7 +62,7 @@ func (mq *RedisMQ) Publish(ctx context.Context, message *gatewaypb.Notification)
 func (mq *RedisMQ) Subscribe(ctx context.Context) (<-chan *gatewaypb.Notification, error) {
 	var pubsub *redis.PubSub
 
-	if mq.shared {
+	if mq.sharded {
 		pubsub = mq.client.SSubscribe(ctx, mq.channel)
 	} else {
 		pubsub = mq.client.Subscribe(ctx, mq.channel)
@@ -75,7 +75,7 @@ func (mq *RedisMQ) Subscribe(ctx context.Context) (<-chan *gatewaypb.Notificatio
 		defer func() {
 			close(nc)
 
-			if mq.shared {
+			if mq.sharded {
 				pubsub.SUnsubscribe(ctx)
 			} else {
 				pubsub.Unsubscribe(ctx)
