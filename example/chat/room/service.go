@@ -19,6 +19,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var emptyReply = &emptypb.Empty{}
+
 type roomService struct {
 	roompb.UnimplementedRoomServer
 
@@ -34,7 +36,8 @@ func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*empt
 		Content: fmt.Sprintf("%s#%s join", req.Name, userID),
 	})
 
-	return nil, nil
+	logger.Info("join", "name", req.Name, "id", userID)
+	return emptyReply, nil
 }
 
 func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
@@ -48,7 +51,8 @@ func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 		})
 	}
 
-	return nil, nil
+	logger.Info("leave", "userID", userID)
+	return emptyReply, nil
 }
 
 func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptypb.Empty, error) {
@@ -67,8 +71,10 @@ func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptyp
 		} else {
 			rs.unicast(req.To, news)
 		}
+
+		logger.Info("say", "from", name, "to", req.To, "content", req.Content)
 	}
-	return nil, nil
+	return emptyReply, nil
 }
 
 func (rs *roomService) boardcast(news *roompb.News) {

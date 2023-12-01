@@ -101,7 +101,6 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 	wp.hs = hs
 
 	go func() {
-		logger.Info("start gateway", "addr", wp.ListenAddr)
 		if err := hs.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 
@@ -167,7 +166,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			md := sessionMD.Copy()
 			// 事务ID
 			md.Set(nodehub.MDTransactionID, ulid.Make().String())
-			ctx := metadata.NewIncomingContext(context.Background(), md)
+			ctx := metadata.NewOutgoingContext(context.Background(), md)
 
 			if err := wp.handleUnary(ctx, sess, req); err != nil {
 				logger.Error("handle request",
