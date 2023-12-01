@@ -2,27 +2,19 @@ package notification
 
 import (
 	"context"
+	"nodehub/internal/mq"
 	"nodehub/logger"
 	"nodehub/proto/gatewaypb"
 
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 )
 
 // RedisClient 实现了PubSub方法的客户端接口
-type RedisClient interface {
-	Publish(ctx context.Context, channel string, message any) *redis.IntCmd
-	SPublish(ctx context.Context, channel string, message any) *redis.IntCmd
-	Subscribe(ctx context.Context, channels ...string) *redis.PubSub
-	SSubscribe(ctx context.Context, channels ...string) *redis.PubSub
-}
+type RedisClient = mq.RedisClient
 
 // RedisMQ 是基于 Redis 的消息队列
 type RedisMQ struct {
-	client  RedisClient
-	channel string
-	sharded bool
-	done    chan struct{}
+	core *mq.RedisMQ
 }
 
 // NewRedisMQ 构造函数
@@ -31,87 +23,49 @@ type RedisMQ struct {
 //
 // 当使用ClusterClient时，会采用sharded channel
 func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
-	// 如果是集群客户端，使用shared pubsub
-	_, shared := client.(*redis.ClusterClient)
-
 	return &RedisMQ{
-		client:  client,
-		channel: channel,
-		sharded: shared,
-		done:    make(chan struct{}),
+		core: mq.NewRedisMQ(client, channel),
 	}
 }
 
 // Publish 把消息发布到消息队列
-func (mq *RedisMQ) Publish(ctx context.Context, message *gatewaypb.Notification) error {
+func (rq *RedisMQ) Publish(ctx context.Context, message *gatewaypb.Notification) error {
 	payload, err := proto.Marshal(message)
 	if err != nil {
 		return err
 	}
-
-	var result *redis.IntCmd
-	if mq.sharded {
-		result = mq.client.SPublish(ctx, mq.channel, payload)
-	} else {
-		result = mq.client.Publish(ctx, mq.channel, payload)
-	}
-	return result.Err()
+	return rq.core.Publish(ctx, payload)
 }
 
 // Subscribe 从消息队列订阅消息
-func (mq *RedisMQ) Subscribe(ctx context.Context) (<-chan *gatewaypb.Notification, error) {
-	var pubsub *redis.PubSub
-
-	if mq.sharded {
-		pubsub = mq.client.SSubscribe(ctx, mq.channel)
-	} else {
-		pubsub = mq.client.Subscribe(ctx, mq.channel)
+func (rq *RedisMQ) Subscribe(ctx context.Context) (<-chan *gatewaypb.Notification, error) {
+	payloadC, err := rq.core.Subscribe(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	mc := pubsub.Channel()
-	nc := make(chan *gatewaypb.Notification)
-
+	resultC := make(chan *gatewaypb.Notification)
 	go func() {
-		defer func() {
-			close(nc)
+		defer close(resultC)
 
-			if mq.sharded {
-				pubsub.SUnsubscribe(ctx)
-			} else {
-				pubsub.Unsubscribe(ctx)
+		for payload := range payloadC {
+			n := &gatewaypb.Notification{}
+			if err := proto.Unmarshal(payload, n); err != nil {
+				logger.Error("unmarshal notification", "error", err)
+				continue
 			}
-		}()
-
-		for {
 			select {
-			case <-mq.done:
+			case <-ctx.Done():
 				return
-			case msg, ok := <-mc:
-				if !ok {
-					logger.Error("redis MQ consumer unexpected closed")
-					return
-				}
-
-				data := []byte(msg.Payload)
-
-				n := &gatewaypb.Notification{}
-				if err := proto.Unmarshal(data, n); err != nil {
-					continue
-				}
-
-				select {
-				case <-mq.done:
-					return
-				case nc <- n:
-				}
+			case resultC <- n:
 			}
 		}
 	}()
 
-	return nc, nil
+	return resultC, nil
 }
 
 // Close 关闭消息队列
-func (mq *RedisMQ) Close() {
-	close(mq.done)
+func (rq *RedisMQ) Close() {
+	rq.core.Close()
 }
