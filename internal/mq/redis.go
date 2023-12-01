@@ -73,6 +73,7 @@ func (mq *RedisMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
 			} else {
 				pubsub.Unsubscribe(ctx)
 			}
+			pubsub.Close()
 		}()
 
 		for {
