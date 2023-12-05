@@ -110,6 +110,8 @@ func (r *Registry) runWatcher() {
 			return
 		}
 
+		logger.Info("update cluster nodes", "event", event.String(), "entry", entry)
+
 		switch event {
 		case mvccpb.PUT:
 			r.grpcResolver.Update(entry)

@@ -39,11 +39,7 @@ func init() {
 
 func main() {
 	node := nodehub.NewNode("gateway")
-
-	node.AddComponent(&gateway.WebsocketProxy{
-		Registry:   registry,
-		ListenAddr: addr,
-	})
+	node.AddComponent(gateway.NewWebsocketProxy(registry, addr))
 
 	if err := registry.Put(node.Entry()); err != nil {
 		panic(err)

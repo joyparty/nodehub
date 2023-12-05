@@ -38,48 +38,54 @@ const ServiceCode = 1
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WebsocketProxy struct {
-	Registry   *cluster.Registry
-	ListenAddr string
-
-	// 主动下发消息订阅者
-	Notifier notification.Subscriber
-
-	// 自定义身份验证逻辑，在websocket upgrade之前调用
-	// 返回的metadata会在此连接的所有grpc request中携带
-	// 返回的userID如果不为空，则会作为会话唯一标识使用，另外也会被自动加入到metadata中
-	// 如果返回ok为false，会直接关闭连接
-	// 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
-	Authorize func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool)
-
-	sessionHub *sessionHub
-	hs         *http.Server
-
+	registry     *cluster.Registry
+	listenAddr   string
+	notifier     notification.Subscriber
+	authorize    Authorize
+	sessionHub   *sessionHub
+	hs           *http.Server
 	requestPool  *sync.Pool
 	responsePool *sync.Pool
 	done         chan struct{}
 }
 
-func (wp *WebsocketProxy) init() {
-	wp.sessionHub = newSessionHub()
-	wp.done = make(chan struct{})
+// NewWebsocketProxy 构造函数
+func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...WebsocketProxyOption) *WebsocketProxy {
+	wp := &WebsocketProxy{
+		registry:   registry,
+		listenAddr: listenAddr,
+		sessionHub: newSessionHub(),
+		done:       make(chan struct{}),
 
-	wp.requestPool = &sync.Pool{
-		New: func() any {
-			return &clientpb.Request{}
-		},
-	}
-
-	wp.responsePool = &sync.Pool{
-		New: func() any {
-			return &clientpb.Response{}
-		},
-	}
-
-	if wp.Authorize == nil {
-		wp.Authorize = func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+		authorize: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
 			return "", metadata.MD{}, true
-		}
+		},
+
+		requestPool: &sync.Pool{
+			New: func() any {
+				return &clientpb.Request{}
+			},
+		},
+		responsePool: &sync.Pool{
+			New: func() any {
+				return &clientpb.Response{}
+			},
+		},
 	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/grpc", wp.serveHTTP)
+
+	wp.hs = &http.Server{
+		Addr:    wp.listenAddr,
+		Handler: http.HandlerFunc(mux.ServeHTTP),
+	}
+
+	for _, fn := range opt {
+		fn(wp)
+	}
+
+	return wp
 }
 
 // Name 服务名称
@@ -89,19 +95,8 @@ func (wp *WebsocketProxy) Name() string {
 
 // Start 启动websocket服务器
 func (wp *WebsocketProxy) Start(ctx context.Context) error {
-	wp.init()
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/grpc", wp.serveHTTP)
-
-	hs := &http.Server{
-		Addr:    wp.ListenAddr,
-		Handler: http.HandlerFunc(mux.ServeHTTP),
-	}
-	wp.hs = hs
-
 	go func() {
-		if err := hs.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := wp.hs.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 
 			panic(fmt.Errorf("start gateway, %w", err))
@@ -121,7 +116,7 @@ func (wp *WebsocketProxy) Stop(ctx context.Context) error {
 }
 
 func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	userID, sessionMD, ok := wp.Authorize(w, r)
+	userID, sessionMD, ok := wp.authorize(w, r)
 	if !ok {
 		logger.Debug("deny by authorize", "remote_addr", r.RemoteAddr)
 		return
@@ -194,7 +189,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *clientpb.Request) error {
-	conn, desc, err := wp.Registry.GetGRPCServiceConn(req.ServiceCode)
+	conn, desc, err := wp.registry.GetGRPCServiceConn(req.ServiceCode)
 	if err != nil {
 		return fmt.Errorf("get grpc conn, %w", err)
 	} else if !desc.Public {
@@ -226,11 +221,11 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 }
 
 func (wp *WebsocketProxy) notificationLoop() {
-	if wp.Notifier == nil {
+	if wp.notifier == nil {
 		return
 	}
 
-	c, err := wp.Notifier.Subscribe(context.Background())
+	c, err := wp.notifier.Subscribe(context.Background())
 	if err != nil {
 		logger.Error("subscribe notification", "error", err)
 
@@ -280,4 +275,30 @@ func newEmptyMessage(data []byte) (*emptypb.Empty, error) {
 		return nil, err
 	}
 	return msg, nil
+}
+
+// WebsocketProxyOption 配置选项
+type WebsocketProxyOption func(*WebsocketProxy)
+
+// WithNotifier 设置主动下发消息订阅者
+func WithNotifier(n notification.Subscriber) WebsocketProxyOption {
+	return func(wp *WebsocketProxy) {
+		wp.notifier = n
+	}
+}
+
+// Authorize 身份验证逻辑
+//
+// 自定义身份验证逻辑，在websocket upgrade之前调用
+// 返回的metadata会在此连接的所有grpc request中携带
+// 返回的userID如果不为空，则会作为会话唯一标识使用，另外也会被自动加入到metadata中
+// 如果返回ok为false，会直接关闭连接
+// 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
+type Authorize func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool)
+
+// WithAuthorize 设置身份验证逻辑
+func WithAuthorize(fn Authorize) WebsocketProxyOption {
+	return func(wp *WebsocketProxy) {
+		wp.authorize = fn
+	}
 }

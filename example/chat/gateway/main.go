@@ -53,18 +53,16 @@ func init() {
 
 func main() {
 	uid := &atomic.Int32{}
-	proxy := &gateway.WebsocketProxy{
-		Registry:   registry,
-		ListenAddr: listenAddr,
-		Notifier:   subscriber,
 
-		Authorize: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+	proxy := gateway.NewWebsocketProxy(registry, listenAddr,
+		gateway.WithNotifier(subscriber),
+		gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
 			userID = fmt.Sprintf("%d", uid.Add(1))
 			md = metadata.MD{}
 			ok = true
 			return
-		},
-	}
+		}),
+	)
 
 	node := nodehub.NewNode("gateway")
 	node.AddComponent(proxy)
