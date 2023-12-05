@@ -38,22 +38,24 @@ const ServiceCode = 1
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WebsocketProxy struct {
-	registry     *cluster.Registry
-	listenAddr   string
-	notifier     notification.Subscriber
-	authorize    Authorize
-	sessionHub   *sessionHub
-	hs           *http.Server
+	registry  *cluster.Registry
+	notifier  notification.Subscriber
+	authorize Authorize
+
+	requestLogger logger.Logger
+	server        *http.Server
+	sessionHub    *sessionHub
+
 	requestPool  *sync.Pool
 	responsePool *sync.Pool
-	done         chan struct{}
+
+	done chan struct{}
 }
 
 // NewWebsocketProxy 构造函数
 func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...WebsocketProxyOption) *WebsocketProxy {
 	wp := &WebsocketProxy{
 		registry:   registry,
-		listenAddr: listenAddr,
 		sessionHub: newSessionHub(),
 		done:       make(chan struct{}),
 
@@ -76,8 +78,8 @@ func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...Web
 	mux := http.NewServeMux()
 	mux.HandleFunc("/grpc", wp.serveHTTP)
 
-	wp.hs = &http.Server{
-		Addr:    wp.listenAddr,
+	wp.server = &http.Server{
+		Addr:    listenAddr,
 		Handler: http.HandlerFunc(mux.ServeHTTP),
 	}
 
@@ -96,7 +98,7 @@ func (wp *WebsocketProxy) Name() string {
 // Start 启动websocket服务器
 func (wp *WebsocketProxy) Start(ctx context.Context) error {
 	go func() {
-		if err := wp.hs.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := wp.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 
 			panic(fmt.Errorf("start gateway, %w", err))
@@ -110,7 +112,8 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 
 // Stop 停止websocket服务器
 func (wp *WebsocketProxy) Stop(ctx context.Context) error {
-	wp.hs.Shutdown(ctx)
+	close(wp.done)
+	wp.server.Shutdown(ctx)
 	wp.sessionHub.Close()
 	return nil
 }
@@ -164,14 +167,6 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			ctx := metadata.NewOutgoingContext(context.Background(), md)
 
 			if err := wp.handleUnary(ctx, sess, req); err != nil {
-				logger.Error("handle request",
-					"error", err,
-					"service_code", req.ServiceCode,
-					"method", req.Method,
-					"request_id", req.Id,
-					"remote_addr", conn.RemoteAddr().String(),
-				)
-
 				if s, ok := status.FromError(err); ok {
 					resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
 						ServiceCode: req.ServiceCode,
@@ -188,7 +183,12 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *clientpb.Request) error {
+func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *clientpb.Request) (err error) {
+	start := time.Now()
+	defer func() {
+		wp.logRequest(ctx, sess, req, start, err)
+	}()
+
 	conn, desc, err := wp.registry.GetGRPCServiceConn(req.ServiceCode)
 	if err != nil {
 		return fmt.Errorf("get grpc conn, %w", err)
@@ -218,6 +218,47 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 	output.ServiceCode = req.ServiceCode
 
 	return sess.Send(output)
+}
+
+func (wp *WebsocketProxy) logRequest(
+	ctx context.Context,
+	sess Session,
+	req *clientpb.Request,
+	start time.Time,
+	err error,
+) {
+	if err == nil && wp.requestLogger == nil {
+		return
+	}
+
+	logValues := []any{
+		"reqID", req.Id,
+		"remoteAddr", sess.RemoteAddr(),
+		"serviceCode", req.ServiceCode,
+		"method", req.Method,
+		"duration", time.Since(start).String(),
+	}
+
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		if v := md.Get(nodehub.MDTransactionID); len(v) > 0 {
+			logValues = append(logValues, "transID", v[0])
+		}
+		if v := md.Get(nodehub.MDUserID); len(v) > 0 {
+			logValues = append(logValues, "userID", v[0])
+		}
+	}
+
+	if err != nil {
+		logValues = append(logValues, "error", err)
+
+		if wp.requestLogger == nil {
+			logger.Error("handle request", logValues...)
+		} else {
+			wp.requestLogger.Error("handle request", logValues...)
+		}
+	} else {
+		wp.requestLogger.Info("handle request", logValues...)
+	}
 }
 
 func (wp *WebsocketProxy) notificationLoop() {
@@ -300,5 +341,12 @@ type Authorize func(w http.ResponseWriter, r *http.Request) (userID string, md m
 func WithAuthorize(fn Authorize) WebsocketProxyOption {
 	return func(wp *WebsocketProxy) {
 		wp.authorize = fn
+	}
+}
+
+// WithRequestLog 设置是否记录请求日志
+func WithRequestLog(l logger.Logger) WebsocketProxyOption {
+	return func(wp *WebsocketProxy) {
+		wp.requestLogger = l
 	}
 }
