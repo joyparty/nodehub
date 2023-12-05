@@ -22,7 +22,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Echo_Send_FullMethodName = "/server.echo.Echo/Send"
+	Echo_Send_FullMethodName = "/echo.Echo/Send"
 )
 
 // EchoClient is the client API for Echo service.
@@ -99,7 +99,7 @@ func _Echo_Send_Handler(srv interface{}, ctx context.Context, dec func(interface
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Echo_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "server.echo.Echo",
+	ServiceName: "echo.Echo",
 	HandlerType: (*EchoServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -55,7 +56,6 @@ func main() {
 		panic(err)
 	}
 
-	logger.Info("start echo service", "listen", addr)
 	if err := node.Serve(context.Background()); err != nil {
 		panic(err)
 	}
@@ -66,7 +66,7 @@ type server struct {
 }
 
 func newGRPCServer() (*server, error) {
-	s := rpc.NewGRPCServer(addr)
+	s := rpc.NewGRPCServer(addr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 	if err := s.RegisterPublicService(int32(serverpb.Services_ECHO), &pb.Echo_ServiceDesc, &echoService{}); err != nil {
 		return nil, fmt.Errorf("register service, %w", err)
 	}
@@ -83,5 +83,5 @@ type echoService struct {
 func (es *echoService) Send(ctx context.Context, msg *pb.Msg) (*clientpb.Response, error) {
 	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), addr, msg.GetMessage())
 
-	return nodehub.PackClientResponse(int32(pb.Protocol_MSG), msg)
+	return clientpb.NewResponse(int32(pb.Protocol_MSG), msg)
 }

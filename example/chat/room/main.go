@@ -16,6 +16,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -67,7 +68,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		members:   &sync.Map{},
 	}
 
-	server := rpc.NewGRPCServer(listenAddr)
+	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 	if err := server.RegisterPublicService(int32(servicepb.Services_ROOM), &roompb.Room_ServiceDesc, service); err != nil {
 		return nil, err
 	}

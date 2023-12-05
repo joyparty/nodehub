@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"nodehub/cluster"
+	"nodehub/logger"
 	"os/signal"
 	"syscall"
 
@@ -88,6 +89,7 @@ func (n *Node) startAll(ctx context.Context) error {
 		if err := c.Start(ctx); err != nil {
 			return fmt.Errorf("start %s, %w", c.Name(), err)
 		}
+		logger.Info("start component", "name", c.Name())
 
 		if v, ok := c.(interface {
 			AfterStart(ctx context.Context)
@@ -114,6 +116,7 @@ func (n *Node) stopAll(ctx context.Context) error {
 		if err := c.Stop(ctx); err != nil {
 			return fmt.Errorf("stop %s, %w", c.Name(), err)
 		}
+		logger.Info("stop component", "name", c.Name())
 
 		if v, ok := c.(interface {
 			AfterStop(ctx context.Context)
