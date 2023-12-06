@@ -178,6 +178,10 @@ func (r *Registry) ForeachNodes(f func(NodeEntry) bool) {
 
 // Close 关闭
 func (r *Registry) Close() {
+	if r.leaseID != clientv3.NoLease {
+		r.client.Revoke(r.client.Ctx(), r.leaseID)
+	}
+
 	r.grpcResolver.Close()
 	r.client.Close()
 }
