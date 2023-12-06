@@ -95,6 +95,11 @@ func (wp *WebsocketProxy) Name() string {
 	return "gateway"
 }
 
+// CompleteNodeEntry 补全节点信息
+func (wp *WebsocketProxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
+	entry.Websocket = fmt.Sprintf("ws://%s/grpc", wp.server.Addr)
+}
+
 // Start 启动websocket服务器
 func (wp *WebsocketProxy) Start(ctx context.Context) error {
 	go func() {

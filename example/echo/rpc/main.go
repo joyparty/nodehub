@@ -44,17 +44,13 @@ func init() {
 }
 
 func main() {
-	node := nodehub.NewNode("echo")
-
 	grpcServer, err := newGRPCServer()
 	if err != nil {
 		panic(err)
 	}
-	node.AddComponent(grpcServer)
 
-	if err := registry.Put(node.Entry()); err != nil {
-		panic(err)
-	}
+	node := nodehub.NewNode("echo", registry)
+	node.AddComponent(grpcServer)
 
 	if err := node.Serve(context.Background()); err != nil {
 		panic(err)

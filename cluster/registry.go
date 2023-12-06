@@ -86,12 +86,14 @@ func (r *Registry) runKeeper() error {
 		if err != nil {
 			logger.Error("keep lease alive", "error", err)
 		} else {
-			for resp := range ch {
+			for {
 				select {
+				case _, ok := <-ch:
+					if !ok {
+						return
+					}
 				case <-r.client.Ctx().Done():
 					return
-				default:
-					_ = resp
 				}
 			}
 		}

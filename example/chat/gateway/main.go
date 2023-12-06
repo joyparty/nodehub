@@ -64,9 +64,8 @@ func main() {
 		}),
 	)
 
-	node := nodehub.NewNode("gateway")
+	node := nodehub.NewNode("gateway", registry)
 	node.AddComponent(proxy)
-	mustDo(registry.Put(node.Entry()))
 
 	logger.Info("gateway server start", "listen", listenAddr)
 	mustDo(node.Serve(context.Background()))

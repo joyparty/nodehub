@@ -38,7 +38,7 @@ func init() {
 }
 
 func main() {
-	node := nodehub.NewNode("gateway")
+	node := nodehub.NewNode("gateway", registry)
 	node.AddComponent(gateway.NewWebsocketProxy(registry, addr, gateway.WithRequestLog(slog.Default())))
 
 	if err := registry.Put(node.Entry()); err != nil {

@@ -38,14 +38,16 @@ type Component interface {
 type Node struct {
 	id         ulid.ULID
 	name       string
+	registry   *cluster.Registry
 	components []Component
 }
 
 // NewNode 构造函数
-func NewNode(name string) *Node {
+func NewNode(name string, registry *cluster.Registry) *Node {
 	return &Node{
 		id:         ulid.Make(),
 		name:       name,
+		registry:   registry,
 		components: []Component{},
 	}
 }
@@ -64,6 +66,11 @@ func (n *Node) Serve(ctx context.Context) error {
 		return fmt.Errorf("start all server, %w", err)
 	}
 
+	// 服务发现注册
+	if err := n.registry.Put(n.Entry()); err != nil {
+		return fmt.Errorf("register node, %w", err)
+	}
+
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -72,6 +79,9 @@ func (n *Node) Serve(ctx context.Context) error {
 		if err := n.stopAll(ctx); err != nil {
 			return fmt.Errorf("stop all server, %w", err)
 		}
+
+		// 服务发现注销
+		n.registry.Close()
 	}
 	return nil
 }

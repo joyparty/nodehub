@@ -29,6 +29,9 @@ type NodeEntry struct {
 	// 节点状态
 	State NodeState `json:"state"`
 
+	// websocket连接地址
+	Websocket string `json:"websocket,omitempty"`
+
 	// grpc服务信息
 	GRPC GRPCEntry `json:"grpc"`
 

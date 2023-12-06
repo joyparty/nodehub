@@ -54,9 +54,8 @@ func init() {
 func main() {
 	server := mustReturn(newGRPCServer())
 
-	node := nodehub.NewNode("room")
+	node := nodehub.NewNode("room", registry)
 	node.AddComponent(server)
-	mustDo(registry.Put(node.Entry()))
 
 	logger.Info("room server start", "listen", listenAddr)
 	mustDo(node.Serve(context.Background()))
