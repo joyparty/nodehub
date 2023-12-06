@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package client;
 
-option go_package = "nodehub/proto/clientpb";
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/clientpb";
 
 // 客户端向网关请求使用的统一消息格式
 // 请求会被网关转换为grpc请求转发到内部服务

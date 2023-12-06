@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package services;
 
-option go_package = "nodehub/example/chat/proto/servicepb";
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb";
 
 enum Services {
 	UNSPECIFIED = 0;

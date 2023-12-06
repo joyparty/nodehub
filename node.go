@@ -3,10 +3,11 @@ package nodehub
 import (
 	"context"
 	"fmt"
-	"nodehub/cluster"
-	"nodehub/logger"
 	"os/signal"
 	"syscall"
+
+	"gitlab.haochang.tv/gopkg/nodehub/cluster"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
 
 	"github.com/oklog/ulid/v2"
 )

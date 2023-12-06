@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package room;
 
-option go_package = "nodehub/example/chat/proto/roompb";
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb";
 
 import "google/protobuf/empty.proto";
 

@@ -2,11 +2,11 @@ package rpc
 
 import (
 	"context"
-	"nodehub"
-	"nodehub/logger"
-	"nodehub/proto/clientpb"
 	"time"
 
+	"gitlab.haochang.tv/gopkg/nodehub"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"

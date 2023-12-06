@@ -1,4 +1,4 @@
-module nodehub
+module gitlab.haochang.tv/gopkg/nodehub
 
 go 1.21.4
 

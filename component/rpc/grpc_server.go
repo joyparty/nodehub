@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"nodehub/cluster"
 
 	"github.com/samber/lo"
+	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"google.golang.org/grpc"
 )
 

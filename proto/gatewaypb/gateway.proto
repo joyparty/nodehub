@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package gateway;
 
-option go_package = "nodehub/proto/gatewaypb";
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb";
 
 import "google/rpc/status.proto";
 import "google/protobuf/timestamp.proto";

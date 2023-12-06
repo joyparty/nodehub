@@ -4,11 +4,11 @@ import (
 	"context"
 	"flag"
 	"log/slog"
-	"nodehub"
-	"nodehub/cluster"
-	"nodehub/component/gateway"
-	"nodehub/logger"
 
+	"gitlab.haochang.tv/gopkg/nodehub"
+	"gitlab.haochang.tv/gopkg/nodehub/cluster"
+	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 

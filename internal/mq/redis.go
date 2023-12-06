@@ -2,9 +2,9 @@ package mq
 
 import (
 	"context"
-	"nodehub/logger"
 
 	"github.com/redis/go-redis/v9"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
 )
 
 // RedisClient 实现了PubSub方法的客户端接口

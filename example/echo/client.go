@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	serverpb "nodehub/example/echo/proto/server"
-	pb "nodehub/example/echo/proto/server/echo"
-	"nodehub/proto/clientpb"
 	"sync/atomic"
 
 	"github.com/gorilla/websocket"
+	serverpb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server"
+	pb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echo"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"google.golang.org/protobuf/proto"
 )
 

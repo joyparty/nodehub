@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package client;
 
-option go_package = "nodehub/proto/clientpb";
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/clientpb";
 
 // 网关向客户端返回的统一消息格式
 message Response {

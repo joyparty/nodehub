@@ -5,14 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"nodehub/example/chat/proto/roompb"
-	"nodehub/example/chat/proto/servicepb"
-	"nodehub/logger"
-	"nodehub/proto/clientpb"
 	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
+	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )

@@ -2,7 +2,8 @@ package notification
 
 import (
 	"context"
-	"nodehub/proto/gatewaypb"
+
+	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
 )
 
 // Publisher 把消息发布到消息队列

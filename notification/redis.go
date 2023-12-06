@@ -2,10 +2,10 @@ package notification
 
 import (
 	"context"
-	"nodehub/internal/mq"
-	"nodehub/logger"
-	"nodehub/proto/gatewaypb"
 
+	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
 	"google.golang.org/protobuf/proto"
 )
 

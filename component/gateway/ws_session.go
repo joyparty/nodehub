@@ -3,14 +3,14 @@ package gateway
 import (
 	"errors"
 	"fmt"
-	"nodehub/logger"
-	"nodehub/proto/clientpb"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/oklog/ulid/v2"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"google.golang.org/protobuf/proto"
 )
 
