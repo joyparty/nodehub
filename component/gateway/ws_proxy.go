@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"path"
 	"sync"
@@ -102,8 +103,13 @@ func (wp *WebsocketProxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
 
 // Start 启动websocket服务器
 func (wp *WebsocketProxy) Start(ctx context.Context) error {
+	l, err := net.Listen("tcp", wp.server.Addr)
+	if err != nil {
+		return fmt.Errorf("listen, %w", err)
+	}
+
 	go func() {
-		if err := wp.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := wp.server.Serve(l); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 
 			panic(fmt.Errorf("start gateway, %w", err))
