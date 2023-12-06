@@ -195,9 +195,12 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *clientpb.Request) (err error) {
-	start := time.Now()
+	var (
+		start    = time.Now()
+		upstream *grpc.ClientConn
+	)
 	defer func() {
-		wp.logRequest(ctx, sess, req, start, err)
+		wp.logRequest(ctx, upstream, sess, req, start, err)
 	}()
 
 	conn, desc, err := wp.registry.GetGRPCServiceConn(req.ServiceCode)
@@ -206,6 +209,7 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 	} else if !desc.Public {
 		return errRequestPrivateService
 	}
+	upstream = conn
 
 	input, err := newEmptyMessage(req.Data)
 	if err != nil {
@@ -233,6 +237,7 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 
 func (wp *WebsocketProxy) logRequest(
 	ctx context.Context,
+	upstream *grpc.ClientConn,
 	sess Session,
 	req *clientpb.Request,
 	start time.Time,
@@ -248,6 +253,10 @@ func (wp *WebsocketProxy) logRequest(
 		"serviceCode", req.ServiceCode,
 		"method", req.Method,
 		"duration", time.Since(start).String(),
+	}
+
+	if upstream != nil {
+		logValues = append(logValues, "upstream", upstream.Target())
 	}
 
 	if md, ok := metadata.FromOutgoingContext(ctx); ok {
