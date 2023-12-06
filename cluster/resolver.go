@@ -3,10 +3,12 @@ package cluster
 import (
 	"fmt"
 	"math/rand"
+	"reflect"
 	"runtime"
 	"sync"
 
 	"github.com/oklog/ulid/v2"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -57,7 +59,13 @@ func (r *grpcResolver) Update(node NodeEntry) {
 	r.allNodes[node.ID] = node
 
 	for _, desc := range node.GRPC.Services {
-		r.services[desc.Code] = desc
+		if v, ok := r.services[desc.Code]; ok {
+			if !reflect.DeepEqual(v, desc) {
+				logger.Error("unexpected grpc service description", "old", v, "new", desc)
+			}
+		} else {
+			r.services[desc.Code] = desc
+		}
 	}
 
 	r.updateOKNodes()
