@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"reflect"
 	"runtime"
-	"sync"
 
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
@@ -16,30 +15,27 @@ import (
 
 // grpcResolver grpc服务发现
 type grpcResolver struct {
-	// nodeID => NodeEntry
-	allNodes map[ulid.ULID]NodeEntry
+	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
 	// 所有节点状态为ok的可用节点
 	// serviceCode => []NodeEntry
-	okNodes map[int32][]NodeEntry
+	okNodes *gokit.MapOf[int32, []NodeEntry]
 
 	// serviceCode => GRPCServiceDesc
-	services map[int32]GRPCServiceDesc
+	services *gokit.MapOf[int32, GRPCServiceDesc]
 
 	// endpoint => *grpc.ClientConn
 	conns *gokit.MapOf[string, *grpc.ClientConn]
 
 	dialOptions []grpc.DialOption
-
-	l sync.RWMutex
 }
 
 // newGRPCResolver 创建grpc服务发现
 func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 	return &grpcResolver{
-		allNodes: make(map[ulid.ULID]NodeEntry),
-		okNodes:  make(map[int32][]NodeEntry),
-		services: make(map[int32]GRPCServiceDesc),
+		allNodes: gokit.NewMapOf[ulid.ULID, NodeEntry](),
+		okNodes:  gokit.NewMapOf[int32, []NodeEntry](),
+		services: gokit.NewMapOf[int32, GRPCServiceDesc](),
 		conns:    gokit.NewMapOf[string, *grpc.ClientConn](),
 		dialOptions: append([]grpc.DialOption{
 			// 内部服务节点之间不需要加密
@@ -54,22 +50,19 @@ func (r *grpcResolver) Update(node NodeEntry) {
 		return
 	}
 
-	r.l.Lock()
-	defer r.l.Unlock()
-
-	r.allNodes[node.ID] = node
+	r.allNodes.Store(node.ID, node)
 
 	for _, desc := range node.GRPC.Services {
-		if v, ok := r.services[desc.Code]; ok {
+		if v, ok := r.services.Load(desc.Code); ok {
 			if !reflect.DeepEqual(v, desc) {
 				logger.Error("unexpected grpc service description", "old", v, "new", desc)
 			}
 		} else {
-			r.services[desc.Code] = desc
+			r.services.Store(desc.Code, desc)
 		}
-	}
 
-	r.updateOKNodes()
+		r.updateOKNodes(desc.Code)
+	}
 }
 
 // Remove 删除条目
@@ -78,37 +71,44 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 		return
 	}
 
-	r.l.Lock()
-	defer r.l.Unlock()
-
-	delete(r.allNodes, node.ID)
-	r.updateOKNodes()
+	r.allNodes.Delete(node.ID)
+	for _, desc := range node.GRPC.Services {
+		r.updateOKNodes(desc.Code)
+	}
 }
 
-func (r *grpcResolver) updateOKNodes() {
-	nodes := make(map[int32][]NodeEntry)
+func (r *grpcResolver) updateOKNodes(serviceCode int32) {
+	nodes := []NodeEntry{}
 
-	for _, node := range r.allNodes {
-		if node.State == NodeOK {
-			for _, desc := range node.GRPC.Services {
-				nodes[desc.Code] = append(nodes[desc.Code], node)
+	r.allNodes.Range(func(_ ulid.ULID, entry NodeEntry) bool {
+		if entry.State == NodeOK {
+			for _, desc := range entry.GRPC.Services {
+				if desc.Code == serviceCode {
+					nodes = append(nodes, entry)
+					break
+				}
 			}
 		}
+		return true
+	})
+
+	if len(nodes) == 0 {
+		r.okNodes.Delete(serviceCode)
+	} else {
+		r.okNodes.Store(serviceCode, nodes)
 	}
-	r.okNodes = nodes
 }
 
 // GetServiceConn 获取服务连接，随机选择一个可用节点
 func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
-	r.l.RLock()
-	nodes, foundNodes := r.okNodes[serviceCode]
-	desc, foundDesc := r.services[serviceCode]
-	r.l.RUnlock()
-
+	desc, foundDesc := r.services.Load(serviceCode)
 	if !foundDesc {
 		err = ErrGRPCServiceCode
 		return
-	} else if !foundNodes {
+	}
+
+	nodes, foundNodes := r.okNodes.Load(serviceCode)
+	if !foundNodes {
 		err = ErrNoNodeAvailable
 		return
 	}
@@ -125,15 +125,14 @@ func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn,
 
 // GetServiceNodeConn 获取服务连接，指定节点
 func (r *grpcResolver) GetServiceNodeConn(serviceCode int32, nodeID ulid.ULID) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
-	r.l.RLock()
-	node, foundNode := r.allNodes[nodeID]
-	desc, foundDesc := r.services[serviceCode]
-	r.l.RUnlock()
-
+	desc, foundDesc := r.services.Load(serviceCode)
 	if !foundDesc {
 		err = ErrGRPCServiceCode
 		return
-	} else if !foundNode || node.State == NodeDown {
+	}
+
+	node, foundNode := r.allNodes.Load(nodeID)
+	if !foundNode || node.State == NodeDown {
 		err = ErrNoNodeOrDown
 		return
 	}
@@ -144,10 +143,7 @@ func (r *grpcResolver) GetServiceNodeConn(serviceCode int32, nodeID ulid.ULID) (
 
 // GetNodeConn 获取节点连接
 func (r *grpcResolver) GetNodeConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
-	r.l.RLock()
-	node, foundNode := r.allNodes[nodeID]
-	r.l.RUnlock()
-
+	node, foundNode := r.allNodes.Load(nodeID)
 	if !foundNode || node.State == NodeDown {
 		err = ErrNoNodeOrDown
 		return
