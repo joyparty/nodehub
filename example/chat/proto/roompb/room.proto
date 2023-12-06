@@ -8,9 +8,7 @@ import "google/protobuf/empty.proto";
 
 enum Protocol {
 	UNSPECIFIED = 0;
-	JOIN_REQUEST = 1;
-	SAY_REQUEST = 2;
-	NEWS = 3;
+	NEWS = 1;
 }
 
 service Room {
