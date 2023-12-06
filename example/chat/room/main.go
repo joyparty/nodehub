@@ -5,8 +5,8 @@ import (
 	"flag"
 	"log/slog"
 	"os"
-	"sync"
 
+	"github.com/joyparty/gokit"
 	"github.com/redis/go-redis/v9"
 	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
@@ -64,7 +64,7 @@ func main() {
 func newGRPCServer() (*rpc.GRPCServer, error) {
 	service := &roomService{
 		publisher: publisher,
-		members:   &sync.Map{},
+		members:   gokit.NewMapOf[string, string](),
 	}
 
 	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))

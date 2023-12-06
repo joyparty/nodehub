@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"google.golang.org/grpc"
@@ -26,7 +27,7 @@ type grpcResolver struct {
 	services map[int32]GRPCServiceDesc
 
 	// endpoint => *grpc.ClientConn
-	conns *sync.Map
+	conns *gokit.MapOf[string, *grpc.ClientConn]
 
 	dialOptions []grpc.DialOption
 
@@ -39,7 +40,7 @@ func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 		allNodes: make(map[ulid.ULID]NodeEntry),
 		okNodes:  make(map[int32][]NodeEntry),
 		services: make(map[int32]GRPCServiceDesc),
-		conns:    new(sync.Map),
+		conns:    gokit.NewMapOf[string, *grpc.ClientConn](),
 		dialOptions: append([]grpc.DialOption{
 			// 内部服务节点之间不需要加密
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -158,7 +159,7 @@ func (r *grpcResolver) GetNodeConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err
 
 func (r *grpcResolver) getConn(endpoint string) (*grpc.ClientConn, error) {
 	if conn, ok := r.conns.Load(endpoint); ok {
-		return conn.(*grpc.ClientConn), nil
+		return conn, nil
 	}
 
 	conn, err := grpc.Dial(endpoint, r.dialOptions...)
@@ -174,8 +175,8 @@ func (r *grpcResolver) getConn(endpoint string) (*grpc.ClientConn, error) {
 }
 
 func (r *grpcResolver) Close() {
-	r.conns.Range(func(key, value any) bool {
-		_ = value.(*grpc.ClientConn).Close()
+	r.conns.Range(func(key string, value *grpc.ClientConn) bool {
+		_ = value.Close()
 		r.conns.Delete(key)
 		return true
 	})

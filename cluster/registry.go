@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"sync"
 
+	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -30,7 +30,7 @@ type Registry struct {
 	grpcResolver *grpcResolver
 
 	leaseID  clientv3.LeaseID
-	allNodes *sync.Map
+	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 }
 
 // NewRegistry 创建服务注册表
@@ -39,7 +39,7 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		client:       client,
 		keyPrefix:    "/nodehub/node",
 		grpcResolver: newGRPCResolver(),
-		allNodes:     &sync.Map{},
+		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
 	}
 
 	for _, fn := range opt {
@@ -176,8 +176,8 @@ func (r *Registry) GetGRPCConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err err
 //
 // 如果f返回false，则停止遍历
 func (r *Registry) ForeachNodes(f func(NodeEntry) bool) {
-	r.allNodes.Range(func(_, v any) bool {
-		return f(v.(NodeEntry))
+	r.allNodes.Range(func(_ ulid.ULID, v NodeEntry) bool {
+		return f(v)
 	})
 }
 

@@ -3,11 +3,11 @@ package gateway
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
@@ -52,7 +52,7 @@ type wsSession struct {
 	sendC chan wsPayload
 
 	// 最后一次读写时间
-	lastRWTime *atomic.Value
+	lastRWTime gokit.ValueOf[time.Time]
 
 	done   chan struct{}
 	closed *atomic.Bool
@@ -64,7 +64,7 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 		conn:       conn,
 		sendC:      make(chan wsPayload, 3), // 为什么是三？因为事不过三
 		done:       make(chan struct{}),
-		lastRWTime: &atomic.Value{},
+		lastRWTime: gokit.NewValueOf[time.Time](),
 		closed:     &atomic.Bool{},
 	}
 
@@ -198,7 +198,7 @@ func (ws *wsSession) sendLoop() {
 }
 
 func (ws *wsSession) LastRWTime() time.Time {
-	return ws.lastRWTime.Load().(time.Time)
+	return ws.lastRWTime.Load()
 }
 
 func (ws *wsSession) LocalAddr() string {
@@ -219,14 +219,14 @@ func (ws *wsSession) Close() error {
 
 // sessionHub 会话集合
 type sessionHub struct {
-	clients *sync.Map
+	clients *gokit.MapOf[string, Session]
 	done    chan struct{}
 	closed  *atomic.Bool
 }
 
 func newSessionHub() *sessionHub {
 	hub := &sessionHub{
-		clients: &sync.Map{},
+		clients: gokit.NewMapOf[string, Session](),
 		done:    make(chan struct{}),
 		closed:  &atomic.Bool{},
 	}
@@ -251,8 +251,8 @@ func (h *sessionHub) Delete(id string) {
 }
 
 func (h *sessionHub) Range(f func(s Session) bool) {
-	h.clients.Range(func(_, value any) bool {
-		return f(value.(Session))
+	h.clients.Range(func(_ string, value Session) bool {
+		return f(value)
 	})
 }
 

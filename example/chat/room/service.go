@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
+	"github.com/joyparty/gokit"
 	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
@@ -25,7 +25,7 @@ type roomService struct {
 	roompb.UnimplementedRoomServer
 
 	publisher notification.Publisher
-	members   *sync.Map // id => name
+	members   *gokit.MapOf[string, string] // id => name
 }
 
 func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*emptypb.Empty, error) {
@@ -43,11 +43,11 @@ func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*empt
 func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
 	userID := mustUserID(ctx)
 
-	if v, ok := rs.members.Load(userID); ok {
+	if name, ok := rs.members.Load(userID); ok {
 		rs.members.Delete(userID)
 
 		rs.boardcast(&roompb.News{
-			Content: fmt.Sprintf("%s#%s leave", v.(string), userID),
+			Content: fmt.Sprintf("%s#%s leave", name, userID),
 		})
 	}
 
@@ -57,9 +57,7 @@ func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 
 func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptypb.Empty, error) {
 	userID := mustUserID(ctx)
-	if v, ok := rs.members.Load(userID); ok {
-		name := v.(string)
-
+	if name, ok := rs.members.Load(userID); ok {
 		news := &roompb.News{
 			FromId:   userID,
 			FromName: name,
@@ -86,9 +84,9 @@ func (rs *roomService) boardcast(news *roompb.News) {
 		Content: response,
 	}
 
-	rs.members.Range(func(key, value any) bool {
+	rs.members.Range(func(id, name string) bool {
 		v, _ := proto.Clone(notify).(*gatewaypb.Notification)
-		v.UserId = key.(string)
+		v.UserId = id
 
 		if err := rs.publisher.Publish(context.Background(), v); err != nil {
 			logger.Error("publish notification", "error", err)
@@ -106,9 +104,9 @@ func (rs *roomService) unicast(toName string, news *roompb.News) {
 		Content: response,
 	}
 
-	rs.members.Range(func(key, value any) bool {
-		if value.(string) == toName {
-			notify.UserId = key.(string)
+	rs.members.Range(func(id, name string) bool {
+		if name == toName {
+			notify.UserId = id
 
 			if err := rs.publisher.Publish(context.Background(), notify); err != nil {
 				logger.Error("publish notification", "error", err)

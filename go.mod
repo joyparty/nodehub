@@ -4,6 +4,7 @@ go 1.21.4
 
 require (
 	github.com/gorilla/websocket v1.5.1
+	github.com/joyparty/gokit v0.0.0-20231206095605-90aae88ff526
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/redis/go-redis/v9 v9.3.0
