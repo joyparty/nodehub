@@ -8,6 +8,7 @@ import (
 
 	"github.com/samber/lo"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
+	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"google.golang.org/grpc"
 )
 
@@ -78,7 +79,15 @@ func (gs *GRPCServer) Start(ctx context.Context) error {
 		return fmt.Errorf("listen tcp, %w", err)
 	}
 
-	return gs.server.Serve(l)
+	go func() {
+		if err := gs.server.Serve(l); err != nil {
+			logger.Error("start grpc", "error", err)
+
+			panic(fmt.Errorf("start grpc, %w", err))
+		}
+	}()
+
+	return nil
 }
 
 // Stop 停止服务
