@@ -36,14 +36,15 @@ func LogUnary(l logger.Logger) grpc.UnaryServerInterceptor {
 				vals = append(vals, "reqType", v.ProtoReflect().Descriptor().FullName())
 			}
 
-			if v, ok := resp.(*clientpb.Response); ok {
-				vals = append(vals, "respType", v.Type)
-			}
-
 			if err != nil {
 				vals = append(vals, "error", err)
+
 				l.Error("grpc request", vals...)
 			} else {
+				if v, ok := resp.(*clientpb.Response); ok && proto.Size(v) > 0 {
+					vals = append(vals, "respType", v.Type)
+				}
+
 				l.Info("grpc request", vals...)
 			}
 		}()
