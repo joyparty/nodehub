@@ -162,9 +162,14 @@ func (r *Registry) GetGRPCServiceConn(serviceCode int32) (conn *grpc.ClientConn,
 	return r.grpcResolver.GetServiceConn(serviceCode)
 }
 
-// GetGRPCNodeConn 获取指定节点的grpc服务连接
-func (r *Registry) GetGRPCNodeConn(nodeID ulid.ULID, serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
-	return r.grpcResolver.GetNodeConn(nodeID, serviceCode)
+// GetGRPCServiceNodeConn 获取指定节点的grpc服务连接
+func (r *Registry) GetGRPCServiceNodeConn(serviceCode int32, nodeID ulid.ULID) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
+	return r.grpcResolver.GetServiceNodeConn(serviceCode, nodeID)
+}
+
+// GetGRPCConn 获取grpc连接
+func (r *Registry) GetGRPCConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
+	return r.grpcResolver.GetNodeConn(nodeID)
 }
 
 // ForeachNodes 遍历所有节点

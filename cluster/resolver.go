@@ -114,8 +114,8 @@ func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn,
 	return
 }
 
-// GetNodeConn 获取指定节点的服务连接
-func (r *grpcResolver) GetNodeConn(nodeID ulid.ULID, serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
+// GetServiceNodeConn 获取服务连接，指定节点
+func (r *grpcResolver) GetServiceNodeConn(serviceCode int32, nodeID ulid.ULID) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
 	r.l.RLock()
 	node, foundNode := r.allNodes[nodeID]
 	desc, foundDesc := r.services[serviceCode]
@@ -125,6 +125,21 @@ func (r *grpcResolver) GetNodeConn(nodeID ulid.ULID, serviceCode int32) (conn *g
 		err = ErrGRPCServiceCode
 		return
 	} else if !foundNode || node.State == NodeDown {
+		err = ErrNoNodeOrDown
+		return
+	}
+
+	conn, err = r.getConn(node.GRPC.Endpoint)
+	return
+}
+
+// GetNodeConn 获取节点连接
+func (r *grpcResolver) GetNodeConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
+	r.l.RLock()
+	node, foundNode := r.allNodes[nodeID]
+	r.l.RUnlock()
+
+	if !foundNode || node.State == NodeDown {
 		err = ErrNoNodeOrDown
 		return
 	}
