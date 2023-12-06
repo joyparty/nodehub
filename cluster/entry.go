@@ -1,6 +1,10 @@
 package cluster
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/oklog/ulid/v2"
+)
 
 // NodeState 节点状态
 type NodeState string
@@ -17,7 +21,7 @@ const (
 // NodeEntry 节点服务发现条目
 type NodeEntry struct {
 	// 节点ID，集群内唯一
-	ID string `json:"id"`
+	ID ulid.ULID `json:"id"`
 
 	// 节点名称，仅用于显示
 	Name string `json:"name"`
@@ -34,7 +38,7 @@ type NodeEntry struct {
 
 // Validate 验证条目是否合法
 func (e NodeEntry) Validate() error {
-	if e.ID == "" {
+	if e.ID.Time() == 0 {
 		return errors.New("id is empty")
 	} else if e.Name == "" {
 		return errors.New("name is empty")

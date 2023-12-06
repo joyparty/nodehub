@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -13,7 +14,7 @@ import (
 // grpcResolver grpc服务发现
 type grpcResolver struct {
 	// nodeID => NodeEntry
-	allNodes map[string]NodeEntry
+	allNodes map[ulid.ULID]NodeEntry
 
 	// 所有节点状态为ok的可用节点
 	// serviceCode => []NodeEntry
@@ -33,7 +34,7 @@ type grpcResolver struct {
 // newGRPCResolver 创建grpc服务发现
 func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 	return &grpcResolver{
-		allNodes: make(map[string]NodeEntry),
+		allNodes: make(map[ulid.ULID]NodeEntry),
 		okNodes:  make(map[int32][]NodeEntry),
 		services: make(map[int32]GRPCServiceDesc),
 		conns:    new(sync.Map),
@@ -114,7 +115,7 @@ func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn,
 }
 
 // GetNodeConn 获取指定节点的服务连接
-func (r *grpcResolver) GetNodeConn(nodeID string, serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
+func (r *grpcResolver) GetNodeConn(nodeID ulid.ULID, serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
 	r.l.RLock()
 	node, foundNode := r.allNodes[nodeID]
 	desc, foundDesc := r.services[serviceCode]

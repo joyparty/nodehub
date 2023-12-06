@@ -7,6 +7,7 @@ import (
 	"path"
 	"sync"
 
+	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -66,7 +67,7 @@ func (r *Registry) Put(entry NodeEntry) error {
 		return fmt.Errorf("marshal entry, %w", err)
 	}
 
-	key := path.Join(r.keyPrefix, entry.ID)
+	key := path.Join(r.keyPrefix, entry.ID.String())
 	_, err = r.client.Put(r.client.Ctx(), key, string(value), clientv3.WithLease(r.leaseID))
 	return err
 }
@@ -160,7 +161,7 @@ func (r *Registry) GetGRPCServiceConn(serviceCode int32) (conn *grpc.ClientConn,
 }
 
 // GetGRPCNodeConn 获取指定节点的grpc服务连接
-func (r *Registry) GetGRPCNodeConn(nodeID string, serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
+func (r *Registry) GetGRPCNodeConn(nodeID ulid.ULID, serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
 	return r.grpcResolver.GetNodeConn(nodeID, serviceCode)
 }
 

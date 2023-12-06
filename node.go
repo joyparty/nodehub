@@ -6,10 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-
-	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -37,7 +36,7 @@ type Component interface {
 
 // Node 节点，一个节点上可以运行多个网络服务
 type Node struct {
-	id         string
+	id         ulid.ULID
 	name       string
 	components []Component
 }
@@ -45,7 +44,7 @@ type Node struct {
 // NewNode 构造函数
 func NewNode(name string) *Node {
 	return &Node{
-		id:         ulid.Make().String(),
+		id:         ulid.Make(),
 		name:       name,
 		components: []Component{},
 	}
