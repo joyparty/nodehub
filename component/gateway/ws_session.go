@@ -171,7 +171,7 @@ func (ws *wsSession) sendLoop() {
 			if err := ws.conn.WriteMessage(payload.messageType, payload.data); err != nil {
 				args := []any{
 					"error", err,
-					"clientID", ws.ID(),
+					"sessID", ws.ID(),
 					"remoteAddr", ws.RemoteAddr(),
 				}
 

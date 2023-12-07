@@ -21,6 +21,7 @@ type Component interface {
 	Stop(ctx context.Context) error
 
 	// 如果实现了以下方法，会被自动调用
+	// CompleteNodeEntry(*cluster.NodeEntry)
 	// BeforeStart(ctx context.Context) error
 	// AfterStart(ctx context.Context)
 	// BeforeStop(ctx context.Context) error
