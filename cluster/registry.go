@@ -8,6 +8,7 @@ import (
 
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
+	"github.com/reactivex/rxgo/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -31,6 +32,9 @@ type Registry struct {
 
 	leaseID  clientv3.LeaseID
 	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
+
+	events     chan rxgo.Item
+	observable rxgo.Observable
 }
 
 // NewRegistry 创建服务注册表
@@ -41,6 +45,10 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		grpcResolver: newGRPCResolver(),
 		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
 	}
+
+	events := make(chan rxgo.Item)
+	r.events = events
+	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
 
 	for _, fn := range opt {
 		fn(r)
@@ -118,12 +126,14 @@ func (r *Registry) runWatcher() {
 		switch event {
 		case mvccpb.PUT:
 			r.grpcResolver.Update(entry)
-
 			r.allNodes.Store(entry.ID, entry)
+
+			r.events <- rxgo.Of(eventUpdateNode{Entry: entry})
 		case mvccpb.DELETE:
 			r.grpcResolver.Remove(entry)
-
 			r.allNodes.Delete(entry.ID)
+
+			r.events <- rxgo.Of(eventDeleteNode{Entry: entry})
 		}
 	}
 
@@ -181,12 +191,28 @@ func (r *Registry) ForeachNodes(f func(NodeEntry) bool) {
 	})
 }
 
+// Subscribe 订阅节点变更
+func (r *Registry) Subscribe(onUpdate func(NodeEntry), onDelete func(NodeEntry)) {
+	r.observable.ForEach(
+		func(item any) {
+			switch event := item.(type) {
+			case eventUpdateNode:
+				onUpdate(event.Entry)
+			case eventDeleteNode:
+				onDelete(event.Entry)
+			}
+		},
+		func(err error) {},
+		func() {},
+	)
+}
+
 // Close 关闭
 func (r *Registry) Close() {
+	close(r.events)
 	if r.leaseID != clientv3.NoLease {
 		r.client.Revoke(r.client.Ctx(), r.leaseID)
 	}
-
 	r.grpcResolver.Close()
 	r.client.Close()
 }
