@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/joyparty/gokit"
-	"gitlab.haochang.tv/gopkg/nodehub"
+	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
@@ -124,7 +124,7 @@ func mustUserID(ctx context.Context) string {
 		panic(errors.New("no metadata"))
 	}
 
-	vals := md.Get(nodehub.MDUserID)
+	vals := md.Get(rpc.MDUserID)
 	if len(vals) == 0 {
 		panic(errors.New("no user id"))
 	}

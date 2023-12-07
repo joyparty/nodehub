@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"google.golang.org/grpc"
@@ -23,11 +22,11 @@ func LogUnary(l logger.Logger) grpc.UnaryServerInterceptor {
 			}
 
 			if md, ok := metadata.FromIncomingContext(ctx); ok {
-				if v := md.Get(nodehub.MDUserID); len(v) > 0 {
+				if v := md.Get(MDUserID); len(v) > 0 {
 					vals = append(vals, "userID", v[0])
 				}
 
-				if v := md.Get(nodehub.MDTransactionID); len(v) > 0 {
+				if v := md.Get(MDTransactionID); len(v) > 0 {
 					vals = append(vals, "transID", v[0])
 				}
 			}

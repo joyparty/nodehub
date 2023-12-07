@@ -12,6 +12,13 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	// MDUserID grpc metadata中的user id key
+	MDUserID = "x-user-id"
+	// MDTransactionID grpc metadata中的transaction id key，用于跟踪请求
+	MDTransactionID = "x-trans-id"
+)
+
 // GRPCServer grpc服务
 type GRPCServer struct {
 	endpoint string

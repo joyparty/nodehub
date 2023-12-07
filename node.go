@@ -11,13 +11,6 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 )
 
-const (
-	// MDUserID grpc metadata中的user id key
-	MDUserID = "x-user-id"
-	// MDTransactionID grpc metadata中的transaction id key，用于跟踪请求
-	MDTransactionID = "x-trans-id"
-)
-
 // Component 组件
 type Component interface {
 	// Name 组件名称，仅用于显示

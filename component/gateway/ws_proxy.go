@@ -13,8 +13,8 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/oklog/ulid/v2"
 	"github.com/panjf2000/ants/v2"
-	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
+	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/notification"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
@@ -136,7 +136,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if userID != "" {
 		// 把user id放到request header
-		sessionMD.Set(nodehub.MDUserID, userID)
+		sessionMD.Set(rpc.MDUserID, userID)
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -174,7 +174,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 			md := sessionMD.Copy()
 			// 事务ID
-			md.Set(nodehub.MDTransactionID, ulid.Make().String())
+			md.Set(rpc.MDTransactionID, ulid.Make().String())
 			ctx := metadata.NewOutgoingContext(context.Background(), md)
 
 			if err := wp.handleUnary(ctx, sess, req); err != nil {
@@ -260,10 +260,10 @@ func (wp *WebsocketProxy) logRequest(
 	}
 
 	if md, ok := metadata.FromOutgoingContext(ctx); ok {
-		if v := md.Get(nodehub.MDTransactionID); len(v) > 0 {
+		if v := md.Get(rpc.MDTransactionID); len(v) > 0 {
 			logValues = append(logValues, "transID", v[0])
 		}
-		if v := md.Get(nodehub.MDUserID); len(v) > 0 {
+		if v := md.Get(rpc.MDUserID); len(v) > 0 {
 			logValues = append(logValues, "userID", v[0])
 		}
 	}
