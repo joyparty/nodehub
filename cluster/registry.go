@@ -209,12 +209,12 @@ func (r *Registry) Subscribe(onUpdate func(NodeEntry), onDelete func(NodeEntry))
 
 // Close 关闭
 func (r *Registry) Close() {
-	close(r.events)
 	if r.leaseID != clientv3.NoLease {
 		r.client.Revoke(r.client.Ctx(), r.leaseID)
 	}
 	r.grpcResolver.Close()
 	r.client.Close()
+	close(r.events)
 }
 
 // WithKeyPrefix 设置服务条目key前缀
