@@ -298,12 +298,14 @@ func (wp *WebsocketProxy) notificationLoop() {
 		case <-wp.done:
 			return
 		case msg := <-c:
-			if sess, ok := wp.sessionHub.Load(msg.GetUserId()); ok {
-				// 只发送5分钟内的消息
-				if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
-					ants.Submit(func() {
-						sess.Send(msg.Content)
-					})
+			// 只发送5分钟内的消息
+			if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
+				for _, userID := range msg.GetReceiver() {
+					if sess, ok := wp.sessionHub.Load(userID); ok {
+						ants.Submit(func() {
+							sess.Send(msg.Content)
+						})
+					}
 				}
 			}
 		}

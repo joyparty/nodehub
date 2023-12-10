@@ -55,7 +55,7 @@ message Response {
 // 网关节点从消息队列中获取notification，然后push到客户端
 message Notification {
 	// 消息接收者，网关节点根据user_id找到对应的客户端连接
-	string user_id = 1;
+	repeated string receiver = 1;
 
 	// 消息发布时间
 	google.protobuf.Timestamp time = 2;

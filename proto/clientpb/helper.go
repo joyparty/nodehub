@@ -1,6 +1,9 @@
 package clientpb
 
-import "google.golang.org/protobuf/proto"
+import (
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
 
 // NewResponse 把proto message打包为client.Response
 func NewResponse(msgType int32, msg proto.Message) (*Response, error) {
@@ -13,4 +16,13 @@ func NewResponse(msgType int32, msg proto.Message) (*Response, error) {
 		Type: msgType,
 		Data: data,
 	}, nil
+}
+
+// NewNotification 创建push消息
+func NewNotification(receiver []string, content *Response) *Notification {
+	return &Notification{
+		Receiver: receiver,
+		Time:     timestamppb.Now(),
+		Content:  content,
+	}
 }
