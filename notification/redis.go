@@ -5,7 +5,7 @@ import (
 
 	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -29,7 +29,7 @@ func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
 }
 
 // Publish 把消息发布到消息队列
-func (rq *RedisMQ) Publish(ctx context.Context, message *gatewaypb.Notification) error {
+func (rq *RedisMQ) Publish(ctx context.Context, message *clientpb.Notification) error {
 	payload, err := proto.Marshal(message)
 	if err != nil {
 		return err
@@ -38,18 +38,18 @@ func (rq *RedisMQ) Publish(ctx context.Context, message *gatewaypb.Notification)
 }
 
 // Subscribe 从消息队列订阅消息
-func (rq *RedisMQ) Subscribe(ctx context.Context) (<-chan *gatewaypb.Notification, error) {
+func (rq *RedisMQ) Subscribe(ctx context.Context) (<-chan *clientpb.Notification, error) {
 	payloadC, err := rq.core.Subscribe(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	resultC := make(chan *gatewaypb.Notification)
+	resultC := make(chan *clientpb.Notification)
 	go func() {
 		defer close(resultC)
 
 		for payload := range payloadC {
-			n := &gatewaypb.Notification{}
+			n := &clientpb.Notification{}
 			if err := proto.Unmarshal(payload, n); err != nil {
 				logger.Error("unmarshal notification", "error", err)
 				continue

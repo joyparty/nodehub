@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package client;
+
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/clientpb";
+
+import "google/protobuf/timestamp.proto";
+
+// 客户端向网关请求使用的统一消息格式
+// 请求会被网关转换为grpc请求转发到内部服务
+message Request {
+	// 由客户端生成，网关会在response内原样返回
+	// id是会话级别唯一的
+	uint32 id = 1;
+
+	// 服务ID，对应内部节点的每种grpc服务
+	// 内部节点在注册服务发现时，会将服务ID注册到etcd中
+	// 网关根据Service字段将请求转发到对应的内部节点
+	// 另外，网关在构造grpc请求时，会使用Service和Method字段构造grpc请求的路径名
+	int32 service_code = 2;
+
+	// grpc方法名，大小写敏感，例如: SayHello
+	// 与Service不同，Service变化较少，所以可以采用枚举值的方式减少传输数据量
+	// 方法名变化较多，所以采用字符串的方式传输
+	string method = 3;
+
+	// grpc方法对应的protobuf message序列化之后的数据
+	// 具体对应关系需要自行查看grpc服务的protobuf文件
+	bytes data = 4;
+}
+
+message Response {
+	// 触发此次请求的request_id
+	// 如果是服务器端主动下发，request_id = 0
+	// 网关会自动给这个字段赋值
+	uint32 request_id = 1;
+
+	// 服务ID，对应内部节点的每种grpc服务
+	// 标识这个消息来自于哪个内部服务
+	// grpc调用返回结果，网关会自动给这个字段赋值
+	// 如果是服务器端主动下发，需要自行赋值
+	int32 service_code = 2;
+
+	// 消息类型ID，可以是集群范围唯一，也可以是服务范围唯一
+	// 需要下发时自行指定
+	int32 type = 3;
+
+	// 下行protobuf message序列化之后的数据
+	// 客户端需要根据Route字段判断具体反序列化成哪个protobuf message
+	bytes data = 4;
+}
+
+// 用于内部节点主动向客户端发送消息
+// 内部节点把notification push到消息队列
+// 网关节点从消息队列中获取notification，然后push到客户端
+message Notification {
+	// 消息接收者，网关节点根据user_id找到对应的客户端连接
+	string user_id = 1;
+
+	// 消息发布时间
+	google.protobuf.Timestamp time = 2;
+
+	// 消息内容
+	Response content = 3;
+}
