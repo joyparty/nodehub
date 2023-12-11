@@ -94,6 +94,9 @@ func main() {
 		req.ServiceCode = int32(servicepb.Services_ROOM)
 		req.Method = "Say"
 		mustDo(sendRequest(conn, req))
+
+		time.Sleep(1 * time.Second)
+		return
 	}
 
 	// do nothing

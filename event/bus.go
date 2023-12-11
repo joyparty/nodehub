@@ -80,30 +80,23 @@ func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
 		return fmt.Errorf("unknown event %s.%s", wantType.PkgPath(), wantType.Name())
 	}
 
-	payloadC, err := bus.mq.Subscribe(ctx)
-	if err != nil {
-		return fmt.Errorf("subscribe queue, %w", err)
-	}
-
-	go func() {
-		for data := range payloadC {
-			p := payload{}
-			if err := json.Unmarshal(data, &p); err != nil {
-				logger.Error("unmarshal event payload", "error", err)
-				continue
-			}
-
-			if p.Type == eventType {
-				ev := reflect.New(wantType)
-				if err := json.Unmarshal(p.Detail, ev.Interface()); err != nil {
-					logger.Error("unmarshal event", "error", err)
-					continue
-				}
-
-				fn.Call([]reflect.Value{ev.Elem()})
-			}
+	bus.mq.Subscribe(ctx, func(data []byte) {
+		p := payload{}
+		if err := json.Unmarshal(data, &p); err != nil {
+			logger.Error("unmarshal event payload", "error", err)
+			return
 		}
-	}()
+
+		if p.Type == eventType {
+			ev := reflect.New(wantType)
+			if err := json.Unmarshal(p.Detail, ev.Interface()); err != nil {
+				logger.Error("unmarshal event", "error", err)
+				return
+			}
+
+			fn.Call([]reflect.Value{ev.Elem()})
+		}
+	})
 
 	return nil
 }

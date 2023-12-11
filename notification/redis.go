@@ -38,31 +38,17 @@ func (rq *RedisMQ) Publish(ctx context.Context, message *clientpb.Notification) 
 }
 
 // Subscribe 从消息队列订阅消息
-func (rq *RedisMQ) Subscribe(ctx context.Context) (<-chan *clientpb.Notification, error) {
-	payloadC, err := rq.core.Subscribe(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	resultC := make(chan *clientpb.Notification)
-	go func() {
-		defer close(resultC)
-
-		for payload := range payloadC {
-			n := &clientpb.Notification{}
-			if err := proto.Unmarshal(payload, n); err != nil {
-				logger.Error("unmarshal notification", "error", err)
-				continue
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case resultC <- n:
-			}
+func (rq *RedisMQ) Subscribe(ctx context.Context, handler func(*clientpb.Notification)) error {
+	rq.core.Subscribe(ctx, func(payload []byte) {
+		n := &clientpb.Notification{}
+		if err := proto.Unmarshal(payload, n); err != nil {
+			logger.Error("unmarshal notification", "error", err)
+			return
 		}
-	}()
+		handler(n)
+	})
 
-	return resultC, nil
+	return nil
 }
 
 // Close 关闭消息队列

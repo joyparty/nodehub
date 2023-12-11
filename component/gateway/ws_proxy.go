@@ -309,30 +309,18 @@ func (wp *WebsocketProxy) notificationLoop() {
 		return
 	}
 
-	c, err := wp.notifier.Subscribe(context.Background())
-	if err != nil {
-		logger.Error("subscribe notification", "error", err)
-
-		panic(fmt.Errorf("subscribe notification, %w", err))
-	}
-
-	for {
-		select {
-		case <-wp.done:
-			return
-		case msg := <-c:
-			// 只发送5分钟内的消息
-			if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
-				for _, userID := range msg.GetReceiver() {
-					if sess, ok := wp.sessionHub.Load(userID); ok {
-						ants.Submit(func() {
-							sess.Send(msg.Content)
-						})
-					}
+	wp.notifier.Subscribe(context.Background(), func(msg *clientpb.Notification) {
+		// 只发送5分钟内的消息
+		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
+			for _, userID := range msg.GetReceiver() {
+				if sess, ok := wp.sessionHub.Load(userID); ok {
+					ants.Submit(func() {
+						sess.Send(msg.Content)
+					})
 				}
 			}
 		}
-	}
+	})
 }
 
 func resetRequest(req *clientpb.Request) {
