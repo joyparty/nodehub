@@ -15,6 +15,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
+	"gitlab.haochang.tv/gopkg/nodehub/event"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/notification"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
@@ -42,6 +43,7 @@ type WebsocketProxy struct {
 	registry  *cluster.Registry
 	notifier  notification.Subscriber
 	authorize Authorize
+	eventBus  event.Bus
 
 	requestLogger logger.Logger
 	server        *http.Server
@@ -123,6 +125,15 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 
 // Stop 停止websocket服务器
 func (wp *WebsocketProxy) Stop(ctx context.Context) error {
+	if wp.authorize != nil && wp.eventBus != nil {
+		wp.sessionHub.Range(func(s Session) bool {
+			wp.eventBus.Publish(context.Background(), event.UserDisconnected{
+				UserID: s.ID(),
+			})
+			return true
+		})
+	}
+
 	close(wp.done)
 	wp.server.Shutdown(ctx)
 	wp.sessionHub.Close()
@@ -154,7 +165,19 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		wp.sessionHub.Delete(sess.ID())
 		sess.Close()
+
+		if userID != "" && wp.eventBus != nil {
+			wp.eventBus.Publish(context.Background(), event.UserDisconnected{
+				UserID: userID,
+			})
+		}
 	}()
+
+	if userID != "" && wp.eventBus != nil {
+		wp.eventBus.Publish(context.Background(), event.UserConnected{
+			UserID: userID,
+		})
+	}
 
 	for {
 		req := wp.requestPool.Get().(*clientpb.Request)
@@ -370,5 +393,12 @@ func WithAuthorize(fn Authorize) WebsocketProxyOption {
 func WithRequestLog(l logger.Logger) WebsocketProxyOption {
 	return func(wp *WebsocketProxy) {
 		wp.requestLogger = l
+	}
+}
+
+// WithEventBus 设置事件总线
+func WithEventBus(bus event.Bus) WebsocketProxyOption {
+	return func(wp *WebsocketProxy) {
+		wp.eventBus = bus
 	}
 }
