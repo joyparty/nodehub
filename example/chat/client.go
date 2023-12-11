@@ -28,7 +28,7 @@ var (
 func init() {
 	flag.StringVar(&serverAddr, "server", "127.0.0.1:9000", "server address")
 	flag.StringVar(&userName, "name", "no name", "user name")
-	flag.StringVar(&words, "words", "", "words send after join")
+	flag.StringVar(&words, "say", "", "words send after join")
 	flag.Parse()
 
 	logger.SetLogger(slog.Default())

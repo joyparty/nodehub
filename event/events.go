@@ -24,7 +24,7 @@ func Register(eventType string, ev any) {
 		panic(fmt.Errorf("event %q already registered", eventType))
 	}
 
-	valueType := typeOf(ev)
+	valueType := deref(reflect.TypeOf(ev))
 	events[eventType] = valueType
 	types[valueType] = eventType
 }
@@ -35,7 +35,7 @@ type payload struct {
 }
 
 func newPayload(ev any) (p payload, err error) {
-	eventType, ok := types[typeOf(ev)]
+	eventType, ok := types[deref(reflect.TypeOf(ev))]
 	if !ok {
 		err = fmt.Errorf("unknown event %q", eventType)
 		return
@@ -46,31 +46,11 @@ func newPayload(ev any) (p payload, err error) {
 	return
 }
 
-func typeOf(ev any) reflect.Type {
-	t := reflect.TypeOf(ev)
+func deref(t reflect.Type) reflect.Type {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	return t
-}
-
-type unmarshaler func(p payload) (event any, err error)
-
-func newUnmarshaler(want any) (unmarshaler, string, error) {
-	wantType := typeOf(want)
-	eventType, ok := types[wantType]
-	if !ok {
-		return nil, "", fmt.Errorf("unknown event %s.%s", wantType.PkgPath(), wantType.Name())
-	}
-
-	return func(p payload) (any, error) {
-		ev := reflect.New(wantType)
-		if err := json.Unmarshal(p.Detail, ev.Interface()); err != nil {
-			return nil, fmt.Errorf("unmarshal event, %w", err)
-		}
-
-		return ev.Elem().Interface(), nil
-	}, eventType, nil
 }
 
 // UserConnected 用户连接事件

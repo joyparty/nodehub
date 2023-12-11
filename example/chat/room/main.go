@@ -68,29 +68,26 @@ func main() {
 func newGRPCServer() (*rpc.GRPCServer, error) {
 	service := &roomService{
 		publisher: publisher,
-		eventBus:  eventBus,
 		members:   gokit.NewMapOf[string, string](),
 	}
 
-	go func() {
-		ch, err := eventBus.Subscribe(context.Background(), event.UserConnected{}, event.UserDisconnected{})
-		if err != nil {
-			panic(err)
-		}
+	if err := eventBus.Subscribe(context.Background(), func(ev event.UserConnected) {
+		service.boardcast(&roompb.News{
+			Content: fmt.Sprintf("event: user#%s connected", ev.UserID),
+		})
+	}); err != nil {
+		panic(err)
+	}
 
-		for v := range ch {
-			if e, ok := v.(event.UserConnected); ok {
-				service.boardcast(&roompb.News{
-					Content: fmt.Sprintf("event: user#%s connected", e.UserID),
-				})
-			} else if e, ok := v.(event.UserDisconnected); ok {
-				service.members.Delete(e.UserID)
-				service.boardcast(&roompb.News{
-					Content: fmt.Sprintf("event: user#%s disconnected", e.UserID),
-				})
-			}
-		}
-	}()
+	if err := eventBus.Subscribe(context.Background(), func(ev event.UserDisconnected) {
+		service.members.Delete(ev.UserID)
+
+		service.boardcast(&roompb.News{
+			Content: fmt.Sprintf("event: user#%s disconnected", ev.UserID),
+		})
+	}); err != nil {
+		panic(err)
+	}
 
 	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 	if err := server.RegisterPublicService(int32(servicepb.Services_ROOM), &roompb.Room_ServiceDesc, service); err != nil {

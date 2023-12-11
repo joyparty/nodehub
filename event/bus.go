@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
@@ -24,8 +25,15 @@ type Bus interface {
 	// Subscribe 订阅事件
 	//
 	// Example:
-	//   bus.Subscribe(ctx, event.UserConnected{}, event.UserDisconnected{})
-	Subscribe(ctx context.Context, want ...any) (events <-chan any, err error)
+	//
+	//	 bus.Subscribe(ctx, func(ev event.UserConnected) {
+	//			// ...
+	//	 })
+	//
+	//	 bus.Subscribe(ctx, func(ev event.UserDisconnected) {
+	//			// ...
+	//	 })
+	Subscribe(ctx context.Context, handler any) error
 
 	// Close 关闭事件总线连接
 	Close()
@@ -56,29 +64,28 @@ func (bus *redisBus) Publish(ctx context.Context, event any) error {
 	return bus.mq.Publish(ctx, data)
 }
 
-func (bus *redisBus) Subscribe(ctx context.Context, want ...any) (<-chan any, error) {
-	if len(want) == 0 {
-		return nil, errors.New("no event specified")
+func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
+	fn := reflect.ValueOf(handler)
+
+	fnType := fn.Type()
+	if fnType.Kind() != reflect.Func {
+		return errors.New("handler must be a function")
+	} else if fnType.NumIn() != 1 {
+		return errors.New("handler must have one argument")
 	}
 
-	unmarshalers := map[string]unmarshaler{}
-	for _, w := range want {
-		handler, eventType, err := newUnmarshaler(w)
-		if err != nil {
-			return nil, err
-		}
-		unmarshalers[eventType] = handler
+	wantType := fnType.In(0)
+	eventType, ok := types[deref(wantType)]
+	if !ok {
+		return fmt.Errorf("unknown event %s.%s", wantType.PkgPath(), wantType.Name())
 	}
 
 	payloadC, err := bus.mq.Subscribe(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("subscribe queue, %w", err)
+		return fmt.Errorf("subscribe queue, %w", err)
 	}
 
-	eventC := make(chan any)
 	go func() {
-		defer close(eventC)
-
 		for data := range payloadC {
 			p := payload{}
 			if err := json.Unmarshal(data, &p); err != nil {
@@ -86,23 +93,19 @@ func (bus *redisBus) Subscribe(ctx context.Context, want ...any) (<-chan any, er
 				continue
 			}
 
-			if handler, ok := unmarshalers[p.Type]; ok {
-				ev, err := handler(p)
-				if err != nil {
+			if p.Type == eventType {
+				ev := reflect.New(wantType)
+				if err := json.Unmarshal(p.Detail, ev.Interface()); err != nil {
 					logger.Error("unmarshal event", "error", err)
 					continue
 				}
 
-				select {
-				case <-ctx.Done():
-					return
-				case eventC <- ev:
-				}
+				fn.Call([]reflect.Value{ev.Elem()})
 			}
 		}
 	}()
 
-	return eventC, nil
+	return nil
 }
 
 func (bus *redisBus) Close() {

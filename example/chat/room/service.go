@@ -7,7 +7,6 @@ import (
 
 	"github.com/joyparty/gokit"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
-	"gitlab.haochang.tv/gopkg/nodehub/event"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
@@ -23,7 +22,6 @@ type roomService struct {
 	roompb.UnimplementedRoomServer
 
 	publisher notification.Publisher
-	eventBus  event.Bus
 	members   *gokit.MapOf[string, string] // id => name
 }
 
