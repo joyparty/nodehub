@@ -192,7 +192,8 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		ants.Submit(func() {
+		// FIXME: 请求同一个服务的消息保持时序性，不同的服务可以并发请求
+		func() {
 			defer wp.requestPool.Put(req)
 
 			md := sessionMD.Copy()
@@ -213,7 +214,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 					sess.Send(resp)
 				}
 			}
-		})
+		}()
 	}
 }
 
