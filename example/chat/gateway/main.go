@@ -13,6 +13,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
+	"gitlab.haochang.tv/gopkg/nodehub/event"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/notification"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -22,6 +23,7 @@ import (
 var (
 	registry   *cluster.Registry
 	subscriber notification.Subscriber
+	eventBus   event.Bus
 
 	listenAddr string
 	redisAddr  string
@@ -49,6 +51,7 @@ func init() {
 		Addr:    redisAddr,
 	})
 	subscriber = notification.NewRedisMQ(redisClient, "chat")
+	eventBus = event.NewBus(redisClient)
 }
 
 func main() {
@@ -62,6 +65,7 @@ func main() {
 			ok = true
 			return
 		}),
+		gateway.WithEventBus(eventBus),
 	)
 
 	node := nodehub.NewNode("gateway", registry)

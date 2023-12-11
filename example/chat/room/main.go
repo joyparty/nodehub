@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -11,6 +12,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
+	"gitlab.haochang.tv/gopkg/nodehub/event"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
@@ -22,6 +24,7 @@ import (
 var (
 	registry  *cluster.Registry
 	publisher notification.Publisher
+	eventBus  event.Bus
 
 	listenAddr string
 	redisAddr  string
@@ -49,6 +52,7 @@ func init() {
 		Addr:    redisAddr,
 	})
 	publisher = notification.NewRedisMQ(redisClient, "chat")
+	eventBus = event.NewBus(redisClient)
 }
 
 func main() {
@@ -64,8 +68,29 @@ func main() {
 func newGRPCServer() (*rpc.GRPCServer, error) {
 	service := &roomService{
 		publisher: publisher,
+		eventBus:  eventBus,
 		members:   gokit.NewMapOf[string, string](),
 	}
+
+	go func() {
+		ch, err := eventBus.Subscribe(context.Background(), event.UserConnected{}, event.UserDisconnected{})
+		if err != nil {
+			panic(err)
+		}
+
+		for v := range ch {
+			if e, ok := v.(event.UserConnected); ok {
+				service.boardcast(&roompb.News{
+					Content: fmt.Sprintf("event: user#%s connected", e.UserID),
+				})
+			} else if e, ok := v.(event.UserDisconnected); ok {
+				service.members.Delete(e.UserID)
+				service.boardcast(&roompb.News{
+					Content: fmt.Sprintf("event: user#%s disconnected", e.UserID),
+				})
+			}
+		}
+	}()
 
 	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 	if err := server.RegisterPublicService(int32(servicepb.Services_ROOM), &roompb.Room_ServiceDesc, service); err != nil {
