@@ -18,8 +18,7 @@ func init() {
 
 // Register 注册事件
 //
-// 每种事件在注册时需要指定一个类型名
-// 订阅者可以根据类型名来订阅感兴趣的事件
+// 每种事件在注册时需要指定一个类型名，类型名只需要保证唯一即可
 func Register(eventType string, ev any) {
 	if _, ok := events[eventType]; ok {
 		panic(fmt.Errorf("event %q already registered", eventType))

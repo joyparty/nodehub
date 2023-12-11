@@ -15,8 +15,19 @@ type RedisClient = mq.RedisClient
 
 // Bus 事件总线
 type Bus interface {
+	// Publish 发布事件
+	//
+	// Example:
+	//   bus.Publish(ctx, event.UserConnected{...})
 	Publish(ctx context.Context, event any) error
+
+	// Subscribe 订阅事件
+	//
+	// Example:
+	//   bus.Subscribe(ctx, event.UserConnected{}, event.UserDisconnected{})
 	Subscribe(ctx context.Context, want ...any) (events <-chan any, err error)
+
+	// Close 关闭事件总线连接
 	Close()
 }
 
@@ -45,7 +56,6 @@ func (bus *redisBus) Publish(ctx context.Context, event any) error {
 	return bus.mq.Publish(ctx, data)
 }
 
-// example: bus.Subscribe(ctx, event.UserConnected{}, event.UserDisconnected{})
 func (bus *redisBus) Subscribe(ctx context.Context, want ...any) (<-chan any, error) {
 	if len(want) == 0 {
 		return nil, errors.New("no event specified")
