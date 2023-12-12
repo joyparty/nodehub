@@ -31,6 +31,18 @@ var (
 	upgrader = websocket.Upgrader{}
 
 	errRequestPrivateService = errors.New("request private service")
+
+	requestPool = &sync.Pool{
+		New: func() any {
+			return &clientpb.Request{}
+		},
+	}
+
+	responsePool = &sync.Pool{
+		New: func() any {
+			return &clientpb.Response{}
+		},
+	}
 )
 
 // ServiceCode gateway服务的service code默认为1
@@ -49,9 +61,6 @@ type WebsocketProxy struct {
 	server        *http.Server
 	sessionHub    *sessionHub
 
-	requestPool  *sync.Pool
-	responsePool *sync.Pool
-
 	done chan struct{}
 }
 
@@ -64,17 +73,6 @@ func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...Web
 
 		authorize: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
 			return "", metadata.MD{}, true
-		},
-
-		requestPool: &sync.Pool{
-			New: func() any {
-				return &clientpb.Request{}
-			},
-		},
-		responsePool: &sync.Pool{
-			New: func() any {
-				return &clientpb.Response{}
-			},
 		},
 	}
 
@@ -180,11 +178,11 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for {
-		req := wp.requestPool.Get().(*clientpb.Request)
+		req := requestPool.Get().(*clientpb.Request)
 		resetRequest(req)
 
 		if err := sess.Recv(req); err != nil {
-			wp.requestPool.Put(req)
+			requestPool.Put(req)
 
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				logger.Error("recv request", "error", err)
@@ -194,7 +192,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// FIXME: 请求同一个服务的消息保持时序性，不同的服务可以并发请求
 		func() {
-			defer wp.requestPool.Put(req)
+			defer requestPool.Put(req)
 
 			md := sessionMD.Copy()
 			// 事务ID
@@ -239,8 +237,8 @@ func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *cl
 	if err != nil {
 		return fmt.Errorf("unmarshal request data, %w", err)
 	}
-	output := wp.responsePool.Get().(*clientpb.Response)
-	defer wp.responsePool.Put(output)
+	output := responsePool.Get().(*clientpb.Response)
+	defer responsePool.Put(output)
 	resetResponse(output)
 
 	apiPath := path.Join(desc.Path, req.Method)
