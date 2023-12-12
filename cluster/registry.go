@@ -33,7 +33,6 @@ type Registry struct {
 	leaseID  clientv3.LeaseID
 	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
-	events     chan rxgo.Item
 	observable rxgo.Observable
 }
 
@@ -46,10 +45,6 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
 	}
 
-	events := make(chan rxgo.Item)
-	r.events = events
-	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
-
 	for _, fn := range opt {
 		fn(r)
 	}
@@ -58,7 +53,9 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		return nil, fmt.Errorf("run keeper, %w", err)
 	}
 
-	go r.runWatcher()
+	events := r.runWatcher()
+	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
+
 	return r, nil
 }
 
@@ -113,58 +110,66 @@ func (r *Registry) runKeeper() error {
 }
 
 // 监听服务条目变更
-func (r *Registry) runWatcher() {
-	updateNodes := func(event mvccpb.Event_EventType, value []byte) {
-		var entry NodeEntry
-		if err := json.Unmarshal(value, &entry); err != nil {
-			logger.Error("unmarshal entry", "error", err)
-			return
+func (r *Registry) runWatcher() <-chan rxgo.Item {
+	events := make(chan rxgo.Item)
+
+	go func() {
+		defer close(events)
+
+		updateNodes := func(event mvccpb.Event_EventType, value []byte) {
+			var entry NodeEntry
+			if err := json.Unmarshal(value, &entry); err != nil {
+				logger.Error("unmarshal entry", "error", err)
+				return
+			}
+
+			logger.Info("update cluster nodes", "event", event.String(), "entry", entry)
+
+			switch event {
+			case mvccpb.PUT:
+				r.grpcResolver.Update(entry)
+				r.allNodes.Store(entry.ID, entry)
+
+				events <- rxgo.Of(eventUpdateNode{Entry: entry})
+			case mvccpb.DELETE:
+				r.grpcResolver.Remove(entry)
+				r.allNodes.Delete(entry.ID)
+
+				events <- rxgo.Of(eventDeleteNode{Entry: entry})
+			}
 		}
 
-		logger.Info("update cluster nodes", "event", event.String(), "entry", entry)
-
-		switch event {
-		case mvccpb.PUT:
-			r.grpcResolver.Update(entry)
-			r.allNodes.Store(entry.ID, entry)
-
-			r.events <- rxgo.Of(eventUpdateNode{Entry: entry})
-		case mvccpb.DELETE:
-			r.grpcResolver.Remove(entry)
-			r.allNodes.Delete(entry.ID)
-
-			r.events <- rxgo.Of(eventDeleteNode{Entry: entry})
+		// 处理已有条目
+		resp, err := r.client.Get(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix())
+		if err != nil {
+			logger.Error("get exist entries", "error", err)
 		}
-	}
+		for _, kv := range resp.Kvs {
+			updateNodes(mvccpb.PUT, kv.Value)
+		}
 
-	// 处理已有条目
-	resp, err := r.client.Get(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix())
-	if err != nil {
-		logger.Error("get exist entries", "error", err)
-	}
-	for _, kv := range resp.Kvs {
-		updateNodes(mvccpb.PUT, kv.Value)
-	}
-
-	// 监听变更
-	wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
-	for {
-		select {
-		case <-r.client.Ctx().Done():
-			return
-		case wResp := <-wCh:
-			for _, ev := range wResp.Events {
-				switch ev.Type {
-				case mvccpb.PUT:
-					updateNodes(ev.Type, ev.Kv.Value)
-				case mvccpb.DELETE:
-					updateNodes(ev.Type, ev.PrevKv.Value)
-				default:
-					logger.Error("unknown event type", "type", ev.Type)
+		// 监听变更
+		wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
+		for {
+			select {
+			case <-r.client.Ctx().Done():
+				return
+			case wResp := <-wCh:
+				for _, ev := range wResp.Events {
+					switch ev.Type {
+					case mvccpb.PUT:
+						updateNodes(ev.Type, ev.Kv.Value)
+					case mvccpb.DELETE:
+						updateNodes(ev.Type, ev.PrevKv.Value)
+					default:
+						logger.Error("unknown event type", "type", ev.Type)
+					}
 				}
 			}
 		}
-	}
+	}()
+
+	return events
 }
 
 // GetGRPCServiceConn 获取grpc服务连接
@@ -214,7 +219,6 @@ func (r *Registry) Close() {
 	}
 	r.grpcResolver.Close()
 	r.client.Close()
-	close(r.events)
 }
 
 // WithKeyPrefix 设置服务条目key前缀
