@@ -134,7 +134,7 @@ func (wp *WebsocketProxy) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
+func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { // revive:disable-line
 	sess, err := wp.newSession(w, r)
 	if err != nil {
 		logger.Error("initialize session", "error", err)
@@ -159,6 +159,77 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	type request struct {
+		service int32
+		fn      func() error
+	}
+
+	requestC := make(chan request)
+	defer close(requestC)
+
+	// 把每个service的请求分发到不同的worker处理
+	// 确保对同一个service的请求是顺序处理的
+	go func() {
+		type worker struct {
+			C          chan func() error
+			ActiveTime time.Time
+		}
+
+		workerC := make(chan chan func() error)
+		defer close(workerC)
+
+		go func() {
+			// 接收到新的worker channel，启动goroutine处理
+			for v := range workerC {
+				taskC := v
+				go func() {
+					for fn := range taskC {
+						fn() // 错误会被打印到请求日志中，这里就不需要再处理
+					}
+				}()
+			}
+		}()
+
+		workers := map[int32]*worker{}
+		defer func() {
+			for _, w := range workers {
+				close(w.C)
+			}
+		}()
+
+		ticker := time.NewTicker(1 * time.Minute)
+		for {
+			select {
+			case <-wp.done:
+				return
+			case <-ticker.C:
+				// 清除不活跃的worker
+				for key, w := range workers {
+					if time.Since(w.ActiveTime) > 5*time.Minute {
+						close(w.C)
+						delete(workers, key)
+					}
+				}
+			case req, ok := <-requestC:
+				if !ok {
+					return
+				}
+
+				w, ok := workers[req.service]
+				if !ok {
+					w = &worker{
+						C: make(chan func() error, 100),
+					}
+					workers[req.service] = w
+					workerC <- w.C
+				}
+
+				w.C <- req.fn
+				w.ActiveTime = time.Now()
+			}
+		}
+	}()
+
 	for {
 		req := requestPool.Get().(*clientpb.Request)
 		resetRequest(req)
@@ -172,9 +243,15 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// FIXME: 请求同一个服务的消息保持时序性，不同的服务可以并发请求
-		task := wp.newUnaryRequest(context.Background(), req, sess)
-		task() // 错误会被打印到请求日志中，这里就不需要再处理
+		fn := wp.newUnaryRequest(context.Background(), req, sess)
+		select {
+		case <-wp.done:
+			return
+		case requestC <- request{
+			service: req.ServiceCode,
+			fn:      fn,
+		}:
+		}
 	}
 }
 
