@@ -11,6 +11,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -31,6 +32,8 @@ var (
 type Session interface {
 	ID() string
 	SetID(string)
+	SetMetadata(metadata.MD)
+	MetadataCopy() metadata.MD
 	Recv(*clientpb.Request) error
 	Send(*clientpb.Response) error
 	LocalAddr() string
@@ -47,6 +50,7 @@ type wsPayload struct {
 type wsSession struct {
 	id   string
 	conn *websocket.Conn
+	md   metadata.MD
 
 	// 不允许并发写，因此用队列方式排队写
 	sendC chan wsPayload
@@ -118,6 +122,14 @@ func (ws *wsSession) ID() string {
 
 func (ws *wsSession) SetID(id string) {
 	ws.id = id
+}
+
+func (ws *wsSession) SetMetadata(md metadata.MD) {
+	ws.md = md
+}
+
+func (ws *wsSession) MetadataCopy() metadata.MD {
+	return ws.md.Copy()
 }
 
 func (ws *wsSession) Recv(req *clientpb.Request) error {

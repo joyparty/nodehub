@@ -70,10 +70,6 @@ func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...Web
 		registry:   registry,
 		sessionHub: newSessionHub(),
 		done:       make(chan struct{}),
-
-		authorize: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-			return "", metadata.MD{}, true
-		},
 	}
 
 	mux := http.NewServeMux()
@@ -139,24 +135,10 @@ func (wp *WebsocketProxy) Stop(ctx context.Context) error {
 }
 
 func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	userID, sessionMD, ok := wp.authorize(w, r)
-	if !ok {
-		logger.Debug("deny by authorize", "remote_addr", r.RemoteAddr)
-		return
-	} else if userID != "" {
-		// 把user id放到request header
-		sessionMD.Set(rpc.MDUserID, userID)
-	}
-
-	conn, err := upgrader.Upgrade(w, r, nil)
+	sess, err := wp.newSession(w, r)
 	if err != nil {
-		logger.Error("upgrade websocket", "error", err)
+		logger.Error("initialize session", "error", err)
 		return
-	}
-
-	sess := newWsSession(conn)
-	if userID != "" {
-		sess.SetID(userID)
 	}
 
 	wp.sessionHub.Store(sess)
@@ -164,16 +146,16 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		wp.sessionHub.Delete(sess.ID())
 		sess.Close()
 
-		if userID != "" && wp.eventBus != nil {
+		if wp.eventBus != nil && wp.authorize != nil {
 			wp.eventBus.Publish(context.Background(), event.UserDisconnected{
-				UserID: userID,
+				UserID: sess.ID(),
 			})
 		}
 	}()
 
-	if userID != "" && wp.eventBus != nil {
+	if wp.eventBus != nil && wp.authorize != nil {
 		wp.eventBus.Publish(context.Background(), event.UserConnected{
-			UserID: userID,
+			UserID: sess.ID(),
 		})
 	}
 
@@ -191,70 +173,103 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// FIXME: 请求同一个服务的消息保持时序性，不同的服务可以并发请求
-		func() {
-			defer requestPool.Put(req)
-
-			md := sessionMD.Copy()
-			// 事务ID
-			md.Set(rpc.MDTransactionID, ulid.Make().String())
-			ctx := metadata.NewOutgoingContext(context.Background(), md)
-
-			if err := wp.handleUnary(ctx, sess, req); err != nil {
-				if s, ok := status.FromError(err); ok {
-					resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
-						ServiceCode: req.ServiceCode,
-						Method:      req.Method,
-						Status:      s.Proto(),
-					})
-					resp.RequestId = req.Id
-					resp.ServiceCode = ServiceCode
-
-					sess.Send(resp)
-				}
-			}
-		}()
+		task := wp.newUnaryRequest(context.Background(), req, sess)
+		task() // 错误会被打印到请求日志中，这里就不需要再处理
 	}
 }
 
-func (wp *WebsocketProxy) handleUnary(ctx context.Context, sess Session, req *clientpb.Request) (err error) {
+func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
 	var (
-		start    = time.Now()
-		upstream *grpc.ClientConn
+		userID string
+		md     = metadata.MD{}
+		ok     bool
 	)
-	defer func() {
-		wp.logRequest(ctx, upstream, sess, req, start, err)
-	}()
 
-	conn, desc, err := wp.registry.GetGRPCServiceConn(req.ServiceCode)
+	if wp.authorize != nil {
+		userID, md, ok = wp.authorize(w, r)
+		if !ok {
+			return nil, errors.New("deny by authorize")
+		} else if md == nil {
+			md = metadata.MD{}
+		}
+	}
+
+	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		return fmt.Errorf("get grpc conn, %w", err)
-	} else if !desc.Public {
-		return errRequestPrivateService
-	}
-	upstream = conn
-
-	input, err := newEmptyMessage(req.Data)
-	if err != nil {
-		return fmt.Errorf("unmarshal request data, %w", err)
-	}
-	output := responsePool.Get().(*clientpb.Response)
-	defer responsePool.Put(output)
-	resetResponse(output)
-
-	apiPath := path.Join(desc.Path, req.Method)
-	if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
-		return fmt.Errorf("invoke grpc, %w", err)
+		return nil, fmt.Errorf("upgrade websocket, %w", err)
 	}
 
-	// google.protobuf.Empty类型，不需要下行数据
-	if proto.Size(output) == 0 {
-		return nil
+	sess := newWsSession(wsConn)
+	if userID != "" {
+		sess.SetID(userID)
+		md.Set(rpc.MDUserID, userID)
 	}
 
-	output.RequestId = req.Id
-	output.ServiceCode = req.ServiceCode
+	if len(md) > 0 {
+		sess.SetMetadata(md)
+	}
+	return sess, nil
+}
 
-	return sess.Send(output)
+func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) func() error {
+	startTime := time.Now()
+
+	return func() (err error) {
+		var (
+			conn *grpc.ClientConn
+			desc cluster.GRPCServiceDesc
+		)
+
+		defer func() {
+			wp.logRequest(ctx, conn, sess, req, startTime, err)
+
+			requestPool.Put(req)
+		}()
+
+		conn, desc, err = wp.registry.GetGRPCServiceConn(req.ServiceCode)
+		if err != nil {
+			return fmt.Errorf("get grpc conn, %w", err)
+		}
+
+		input, err := newEmptyMessage(req.Data)
+		if err != nil {
+			return fmt.Errorf("unmarshal request data, %w", err)
+		}
+
+		output := responsePool.Get().(*clientpb.Response)
+		defer responsePool.Put(output)
+		resetResponse(output)
+
+		md := sess.MetadataCopy()
+		md.Set(rpc.MDTransactionID, ulid.Make().String()) // 事务ID
+		ctx = metadata.NewOutgoingContext(ctx, md)
+
+		apiPath := path.Join(desc.Path, req.Method)
+		if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
+			if s, ok := status.FromError(err); ok {
+				resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
+					ServiceCode: req.ServiceCode,
+					Method:      req.Method,
+					Status:      s.Proto(),
+				})
+				resp.RequestId = req.Id
+				resp.ServiceCode = ServiceCode
+
+				sess.Send(resp)
+			}
+
+			return fmt.Errorf("invoke grpc, %w", err)
+		}
+
+		// google.protobuf.Empty类型，不需要下行数据
+		if proto.Size(output) == 0 {
+			return nil
+		}
+		output.RequestId = req.Id
+		output.ServiceCode = req.ServiceCode
+
+		return sess.Send(output)
+	}
 }
 
 func (wp *WebsocketProxy) logRequest(
