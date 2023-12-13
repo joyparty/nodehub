@@ -294,6 +294,7 @@ func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Se
 func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) func() {
 	startTime := time.Now()
 
+	// 以status.Error()构造的错误，都会被下行通知到客户端
 	doRequest := func() (err error) {
 		var (
 			conn *grpc.ClientConn
