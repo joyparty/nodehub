@@ -14,6 +14,9 @@ var (
 func init() {
 	Register("user:connected", UserConnected{})
 	Register("user:disconnected", UserDisconnected{})
+
+	Register("node:assign", NodeAssign{})
+	Register("node:unassign", NodeUnassign{})
 }
 
 // Register 注册事件
@@ -55,10 +58,22 @@ func deref(t reflect.Type) reflect.Type {
 
 // UserConnected 用户连接事件
 type UserConnected struct {
-	UserID string
+	UserID string `json:"userID"`
 }
 
 // UserDisconnected 用户断开连接事件
 type UserDisconnected struct {
-	UserID string
+	UserID string `json:"userID"`
+}
+
+// NodeAssign 给用户分配有状态节点
+type NodeAssign struct {
+	NodeID string `json:"nodeID"`
+	UserID string `json:"userID"`
+}
+
+// NodeUnassign 取消用户分配的有状态节点
+type NodeUnassign struct {
+	NodeID string `json:"nodeID"`
+	UserID string `json:"userID"`
 }

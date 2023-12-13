@@ -16,6 +16,11 @@ const (
 	NodeLazy NodeState = "lazy"
 	// NodeDown 下线，不接受任何请求
 	NodeDown NodeState = "down"
+
+	// AutoAllocate 自动分配
+	AutoAllocate = "auto"
+	// ExplicitAllocate 显式分配
+	ExplicitAllocate = "explicit"
 )
 
 // NodeEntry 节点服务发现条目
@@ -69,6 +74,12 @@ func (e GRPCEntry) Validate() error {
 	} else if e.Endpoint == "" {
 		return errors.New("grpc endpoint is empty")
 	}
+
+	for _, service := range e.Services {
+		if err := service.Validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -86,4 +97,34 @@ type GRPCServiceDesc struct {
 
 	// 是否允许客户端访问
 	Public bool `json:"public"`
+
+	// Stateful 是否有状态服务
+	Stateful bool
+
+	// Allocation 有状态节点分配方式
+	//
+	//  - auto: 自动分配，第一次请求时，如果还没有分配，会根据负载均衡策略自动选择一个可用节点
+	//  - explicit: 显式分配，只有分配了节点之后，客户端才能够访问，没有分配就无法访问
+	Allocation string
+}
+
+// Validate 验证条目是否合法
+func (desc GRPCServiceDesc) Validate() error {
+	if desc.Code == 0 {
+		return errors.New("code is empty")
+	} else if desc.Path == "" {
+		return errors.New("path is empty")
+	}
+
+	if desc.Stateful {
+		switch desc.Allocation {
+		case AutoAllocate, ExplicitAllocate:
+		case "":
+			return errors.New("allocation is empty")
+		default:
+			return errors.New("allocation is invalid")
+		}
+	}
+
+	return nil
 }
