@@ -31,8 +31,6 @@ import (
 var (
 	upgrader = websocket.Upgrader{}
 
-	errRequestPrivateService = errors.New("request private service")
-
 	requestPool = &sync.Pool{
 		New: func() any {
 			return &clientpb.Request{}
@@ -296,36 +294,17 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	doRequest := func() (err error) {
-		var (
-			conn *grpc.ClientConn
-			desc cluster.GRPCServiceDesc
-		)
-
+		var conn *grpc.ClientConn
 		defer func() {
 			wp.logRequest(ctx, conn, sess, req, startTime, err)
 
 			requestPool.Put(req)
 		}()
 
-		desc, ok := wp.registry.GetGRPCServiceDesc(req.ServiceCode)
-		if !ok {
-			return status.Errorf(codes.NotFound, "grpc service %d code not found", req.ServiceCode)
-		} else if !desc.Public {
-			return status.Error(codes.PermissionDenied, "request private service")
-		}
-
-		if v := req.GetNodeId(); v != "" {
-			nodeID, err := ulid.Parse(v)
-			if err != nil {
-				return status.Errorf(codes.InvalidArgument, "invalid node id %s", v)
-			}
-
-			conn, err = wp.registry.GetGRPCNodeConn(nodeID)
-		} else {
-			conn, err = wp.registry.GetGRPCServiceConn(req.ServiceCode)
-		}
+		var method string
+		conn, method, err = wp.getUpstream(req)
 		if err != nil {
-			return status.Errorf(codes.Unavailable, "get grpc conn, %v", err)
+			return
 		}
 
 		input, err := newEmptyMessage(req.Data)
@@ -341,9 +320,8 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 		md.Set(rpc.MDTransactionID, ulid.Make().String()) // 事务ID
 		ctx = metadata.NewOutgoingContext(ctx, md)
 
-		apiPath := path.Join(desc.Path, req.Method)
-		if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
-			return fmt.Errorf("invoke grpc, %w", err)
+		if err := grpc.Invoke(ctx, method, input, output, conn); err != nil {
+			return fmt.Errorf("call grpc, %w", err)
 		}
 
 		// google.protobuf.Empty类型，不需要下行数据
@@ -371,6 +349,42 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 			}
 		}
 	}
+}
+
+func (wp *WebsocketProxy) getUpstream(req *clientpb.Request) (conn *grpc.ClientConn, method string, err error) {
+	desc, ok := wp.registry.GetGRPCServiceDesc(req.ServiceCode)
+	if !ok {
+		err = status.Errorf(codes.NotFound, "grpc service %d code not found", req.ServiceCode)
+		return
+	} else if !desc.Public {
+		err = status.Error(codes.PermissionDenied, "request private service")
+		return
+	}
+	method = path.Join(desc.Path, req.Method)
+
+	if !desc.Stateful {
+		conn, err = wp.registry.GetGRPCServiceConn(req.ServiceCode)
+		if err != nil {
+			err = status.Errorf(codes.Unavailable, "get grpc conn, %v", err)
+		}
+		return
+	}
+
+	if v := req.GetNodeId(); v != "" {
+		var nodeID ulid.ULID
+		if err = nodeID.UnmarshalText([]byte(v)); err != nil {
+			err = status.Errorf(codes.InvalidArgument, "invalid node id %s", v)
+			return
+		}
+
+		conn, err = wp.registry.GetGRPCNodeConn(nodeID)
+	}
+	// TODO: 没有指定node id时，从有状态路由表内获取，或者自动分配并保存到路由表
+
+	if err != nil {
+		err = status.Errorf(codes.Unavailable, "get grpc conn, %v", err)
+	}
+	return
 }
 
 func (wp *WebsocketProxy) logRequest(
