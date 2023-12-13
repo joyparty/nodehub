@@ -13,20 +13,25 @@ message Request {
 	// id是会话级别唯一的
 	uint32 id = 1;
 
+	// 节点ID
+	// 如果有值，网关会把本次请求直接转发到指定的节点
+	// 用于有状态服务接口请求
+	string node_id = 2;
+
 	// 服务ID，对应内部节点的每种grpc服务
 	// 内部节点在注册服务发现时，会将服务ID注册到etcd中
 	// 网关根据Service字段将请求转发到对应的内部节点
 	// 另外，网关在构造grpc请求时，会使用Service和Method字段构造grpc请求的路径名
-	int32 service_code = 2;
+	int32 service_code = 3;
 
 	// grpc方法名，大小写敏感，例如: SayHello
 	// 与Service不同，Service变化较少，所以可以采用枚举值的方式减少传输数据量
 	// 方法名变化较多，所以采用字符串的方式传输
-	string method = 3;
+	string method = 4;
 
 	// grpc方法对应的protobuf message序列化之后的数据
 	// 具体对应关系需要自行查看grpc服务的protobuf文件
-	bytes data = 4;
+	bytes data = 5;
 }
 
 message Response {

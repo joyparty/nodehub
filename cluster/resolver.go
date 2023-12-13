@@ -99,14 +99,13 @@ func (r *grpcResolver) updateOKNodes(serviceCode int32) {
 	}
 }
 
-// GetServiceConn 获取服务连接，随机选择一个可用节点
-func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
-	desc, foundDesc := r.services.Load(serviceCode)
-	if !foundDesc {
-		err = ErrGRPCServiceCode
-		return
-	}
+// GetServiceDesc 获取服务描述
+func (r *grpcResolver) GetServiceDesc(serviceCode int32) (GRPCServiceDesc, bool) {
+	return r.services.Load(serviceCode)
+}
 
+// GetServiceConn 获取服务连接，随机选择一个可用节点
+func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn, err error) {
 	nodes, foundNodes := r.okNodes.Load(serviceCode)
 	if !foundNodes {
 		err = ErrNoNodeAvailable
@@ -119,24 +118,6 @@ func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn,
 	} else {
 		node = nodes[rand.Intn(l)]
 	}
-	conn, err = r.getConn(node.GRPC.Endpoint)
-	return
-}
-
-// GetServiceNodeConn 获取服务连接，指定节点
-func (r *grpcResolver) GetServiceNodeConn(serviceCode int32, nodeID ulid.ULID) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
-	desc, foundDesc := r.services.Load(serviceCode)
-	if !foundDesc {
-		err = ErrGRPCServiceCode
-		return
-	}
-
-	node, foundNode := r.allNodes.Load(nodeID)
-	if !foundNode || node.State == NodeDown {
-		err = ErrNoNodeOrDown
-		return
-	}
-
 	conn, err = r.getConn(node.GRPC.Endpoint)
 	return
 }

@@ -20,8 +20,6 @@ var (
 	ErrNoNodeOrDown = errors.New("no node or node is down")
 	// ErrNoNodeAvailable 没有可用节点
 	ErrNoNodeAvailable = errors.New("no node available")
-	// ErrGRPCServiceCode grpc服务代码未找到
-	ErrGRPCServiceCode = errors.New("grpc service code not found")
 )
 
 // Registry 服务注册表
@@ -172,18 +170,18 @@ func (r *Registry) runWatcher() <-chan rxgo.Item {
 	return events
 }
 
+// GetGRPCServiceDesc 获取grpc服务描述
+func (r *Registry) GetGRPCServiceDesc(serviceCode int32) (GRPCServiceDesc, bool) {
+	return r.grpcResolver.GetServiceDesc(serviceCode)
+}
+
 // GetGRPCServiceConn 获取grpc服务连接
-func (r *Registry) GetGRPCServiceConn(serviceCode int32) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
+func (r *Registry) GetGRPCServiceConn(serviceCode int32) (conn *grpc.ClientConn, err error) {
 	return r.grpcResolver.GetServiceConn(serviceCode)
 }
 
-// GetGRPCServiceNodeConn 获取指定节点的grpc服务连接
-func (r *Registry) GetGRPCServiceNodeConn(serviceCode int32, nodeID ulid.ULID) (conn *grpc.ClientConn, desc GRPCServiceDesc, err error) {
-	return r.grpcResolver.GetServiceNodeConn(serviceCode, nodeID)
-}
-
-// GetGRPCConn 获取grpc连接
-func (r *Registry) GetGRPCConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
+// GetGRPCNodeConn 获取指定节点的grpc连接
+func (r *Registry) GetGRPCNodeConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
 	return r.grpcResolver.GetNodeConn(nodeID)
 }
 

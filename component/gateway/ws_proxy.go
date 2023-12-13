@@ -305,7 +305,23 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 			requestPool.Put(req)
 		}()
 
-		conn, desc, err = wp.registry.GetGRPCServiceConn(req.ServiceCode)
+		desc, ok := wp.registry.GetGRPCServiceDesc(req.ServiceCode)
+		if !ok {
+			return fmt.Errorf("grpc service %d code not found", req.ServiceCode)
+		} else if !desc.Public {
+			return errRequestPrivateService
+		}
+
+		if v := req.GetNodeId(); v != "" {
+			nodeID, err := ulid.Parse(v)
+			if err != nil {
+				return fmt.Errorf("invalid node id, %w", err)
+			}
+
+			conn, err = wp.registry.GetGRPCNodeConn(nodeID)
+		} else {
+			conn, err = wp.registry.GetGRPCServiceConn(req.ServiceCode)
+		}
 		if err != nil {
 			return fmt.Errorf("get grpc conn, %w", err)
 		}
