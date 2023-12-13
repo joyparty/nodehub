@@ -21,6 +21,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -161,7 +162,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 
 	type request struct {
 		service int32
-		fn      func() error
+		fn      func()
 	}
 
 	requestC := make(chan request)
@@ -171,11 +172,11 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 	// 确保对同一个service的请求是顺序处理的
 	go func() {
 		type worker struct {
-			C          chan func() error
+			C          chan func()
 			ActiveTime time.Time
 		}
 
-		workerC := make(chan chan func() error)
+		workerC := make(chan chan func())
 		defer close(workerC)
 
 		go func() {
@@ -220,7 +221,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 				w, ok := workers[req.service]
 				if !ok {
 					w = &worker{
-						C: make(chan func() error, 100),
+						C: make(chan func(), 100),
 					}
 					workers[req.service] = w
 					workerC <- w.C
@@ -290,10 +291,10 @@ func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Se
 	return sess, nil
 }
 
-func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) func() error {
+func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) func() {
 	startTime := time.Now()
 
-	return func() (err error) {
+	doRequest := func() (err error) {
 		var (
 			conn *grpc.ClientConn
 			desc cluster.GRPCServiceDesc
@@ -307,15 +308,15 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 
 		desc, ok := wp.registry.GetGRPCServiceDesc(req.ServiceCode)
 		if !ok {
-			return fmt.Errorf("grpc service %d code not found", req.ServiceCode)
+			return status.Errorf(codes.NotFound, "grpc service %d code not found", req.ServiceCode)
 		} else if !desc.Public {
-			return errRequestPrivateService
+			return status.Error(codes.PermissionDenied, "request private service")
 		}
 
 		if v := req.GetNodeId(); v != "" {
 			nodeID, err := ulid.Parse(v)
 			if err != nil {
-				return fmt.Errorf("invalid node id, %w", err)
+				return status.Errorf(codes.InvalidArgument, "invalid node id %s", v)
 			}
 
 			conn, err = wp.registry.GetGRPCNodeConn(nodeID)
@@ -323,7 +324,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 			conn, err = wp.registry.GetGRPCServiceConn(req.ServiceCode)
 		}
 		if err != nil {
-			return fmt.Errorf("get grpc conn, %w", err)
+			return status.Errorf(codes.Unavailable, "get grpc conn, %v", err)
 		}
 
 		input, err := newEmptyMessage(req.Data)
@@ -341,18 +342,6 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 
 		apiPath := path.Join(desc.Path, req.Method)
 		if err := grpc.Invoke(ctx, apiPath, input, output, conn); err != nil {
-			if s, ok := status.FromError(err); ok {
-				resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
-					ServiceCode: req.ServiceCode,
-					Method:      req.Method,
-					Status:      s.Proto(),
-				})
-				resp.RequestId = req.Id
-				resp.ServiceCode = ServiceCode
-
-				sess.Send(resp)
-			}
-
 			return fmt.Errorf("invoke grpc, %w", err)
 		}
 
@@ -364,6 +353,22 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 		output.ServiceCode = req.ServiceCode
 
 		return sess.Send(output)
+	}
+
+	return func() {
+		if err := doRequest(); err != nil {
+			if s, ok := status.FromError(err); ok {
+				resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
+					ServiceCode: req.ServiceCode,
+					Method:      req.Method,
+					Status:      s.Proto(),
+				})
+				resp.RequestId = req.Id
+				resp.ServiceCode = ServiceCode
+
+				sess.Send(resp)
+			}
+		}
 	}
 }
 
