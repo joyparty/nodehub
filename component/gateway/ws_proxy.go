@@ -150,7 +150,16 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 		return
 	}
 
+	// 初始化
 	wp.sessionHub.Store(sess)
+
+	if wp.eventBus != nil && wp.authorize != nil {
+		wp.eventBus.Publish(context.Background(), event.UserConnected{
+			UserID: sess.ID(),
+		})
+	}
+
+	// 结束清理
 	defer func() {
 		wp.sessionHub.Delete(sess.ID())
 		sess.Close()
@@ -170,12 +179,6 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 			}
 		})
 	}()
-
-	if wp.eventBus != nil && wp.authorize != nil {
-		wp.eventBus.Publish(context.Background(), event.UserConnected{
-			UserID: sess.ID(),
-		})
-	}
 
 	type request struct {
 		service int32
