@@ -255,7 +255,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 
 	for {
 		req := requestPool.Get().(*clientpb.Request)
-		resetRequest(req)
+		clientpb.ResetRequest(req)
 
 		if err := sess.Recv(req); err != nil {
 			requestPool.Put(req)
@@ -336,7 +336,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 
 		output := responsePool.Get().(*clientpb.Response)
 		defer responsePool.Put(output)
-		resetResponse(output)
+		clientpb.ResetResponse(output)
 
 		md := sess.MetadataCopy()
 		md.Set(rpc.MDTransactionID, ulid.Make().String()) // 事务ID
@@ -496,26 +496,6 @@ func (wp *WebsocketProxy) notificationLoop() {
 			}
 		}
 	})
-}
-
-func resetRequest(req *clientpb.Request) {
-	req.Id = 0
-	req.ServiceCode = 0
-	req.Method = ""
-
-	if len(req.Data) > 0 {
-		req.Data = req.Data[:0]
-	}
-}
-
-func resetResponse(resp *clientpb.Response) {
-	resp.RequestId = 0
-	resp.ServiceCode = 0
-	resp.Type = 0
-
-	if len(resp.Data) > 0 {
-		resp.Data = resp.Data[:0]
-	}
 }
 
 func newEmptyMessage(data []byte) (*emptypb.Empty, error) {

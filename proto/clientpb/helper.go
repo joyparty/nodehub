@@ -26,3 +26,26 @@ func NewNotification(receiver []string, content *Response) *Notification {
 		Content:  content,
 	}
 }
+
+// ResetRequest 重置请求对象
+func ResetRequest(req *Request) {
+	req.Id = 0
+	req.NodeId = ""
+	req.ServiceCode = 0
+	req.Method = ""
+
+	if len(req.Data) > 0 {
+		req.Data = req.Data[:0]
+	}
+}
+
+// ResetResponse 重置响应对象
+func ResetResponse(resp *Response) {
+	resp.RequestId = 0
+	resp.ServiceCode = 0
+	resp.Type = 0
+
+	if len(resp.Data) > 0 {
+		resp.Data = resp.Data[:0]
+	}
+}
