@@ -59,6 +59,7 @@ type WebsocketProxy struct {
 	requestLogger logger.Logger
 	server        *http.Server
 	sessionHub    *sessionHub
+	stateTable    *stateTable
 
 	done chan struct{}
 }
@@ -68,6 +69,7 @@ func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...Web
 	wp := &WebsocketProxy{
 		registry:   registry,
 		sessionHub: newSessionHub(),
+		stateTable: newStateTable(),
 		done:       make(chan struct{}),
 	}
 
@@ -113,6 +115,14 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 
 	go wp.notificationLoop()
 
+	// 有状态路由更新
+	wp.eventBus.Subscribe(ctx, func(ev event.NodeAssign) {
+		wp.stateTable.Store(ev.UserID, ev.ServiceCode, ev.NodeID)
+	})
+	wp.eventBus.Subscribe(ctx, func(ev event.NodeUnassign) {
+		wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
+	})
+
 	return nil
 }
 
@@ -150,6 +160,9 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 				UserID: sess.ID(),
 			})
 		}
+
+		// FIXME: 延迟一段时间之后再清除，如果断线重连回来则放弃清除
+		wp.stateTable.Clean(sess.ID())
 	}()
 
 	if wp.eventBus != nil && wp.authorize != nil {
@@ -302,7 +315,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 		}()
 
 		var method string
-		conn, method, err = wp.getUpstream(req)
+		conn, method, err = wp.getUpstream(sess, req)
 		if err != nil {
 			return
 		}
@@ -351,10 +364,10 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 	}
 }
 
-func (wp *WebsocketProxy) getUpstream(req *clientpb.Request) (conn *grpc.ClientConn, method string, err error) {
-	desc, ok := wp.registry.GetGRPCServiceDesc(req.ServiceCode)
+func (wp *WebsocketProxy) getUpstream(sess Session, req *clientpb.Request) (conn *grpc.ClientConn, method string, err error) {
+	desc, ok := wp.registry.GetGRPCDesc(req.ServiceCode)
 	if !ok {
-		err = status.Errorf(codes.NotFound, "grpc service %d code not found", req.ServiceCode)
+		err = status.Errorf(codes.NotFound, "grpc service code(%d) not found", req.ServiceCode)
 		return
 	} else if !desc.Public {
 		err = status.Error(codes.PermissionDenied, "request private service")
@@ -362,25 +375,49 @@ func (wp *WebsocketProxy) getUpstream(req *clientpb.Request) (conn *grpc.ClientC
 	}
 	method = path.Join(desc.Path, req.Method)
 
+	var nodeID string
+	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
-		conn, err = wp.registry.GetGRPCServiceConn(req.ServiceCode)
+		nodeID, err = wp.registry.PickGRPCNode(req.ServiceCode)
 		if err != nil {
-			err = status.Errorf(codes.Unavailable, "get grpc conn, %v", err)
-		}
-		return
-	}
-
-	if v := req.GetNodeId(); v != "" {
-		var nodeID ulid.ULID
-		if err = nodeID.UnmarshalText([]byte(v)); err != nil {
-			err = status.Errorf(codes.InvalidArgument, "invalid node id %s", v)
+			err = status.Errorf(codes.Unavailable, "pick grpc node, %v", err)
 			return
 		}
 
-		conn, err = wp.registry.GetGRPCNodeConn(nodeID)
+		goto FINISH
 	}
-	// TODO: 没有指定node id时，从有状态路由表内获取，或者自动分配并保存到路由表
 
+	// 从请求参数或者状态路由表内获取节点ID
+	if nodeID = req.GetNodeId(); nodeID == "" {
+		if v, ok := wp.stateTable.Find(sess.ID(), req.ServiceCode); ok {
+			nodeID = v
+		}
+	}
+
+	if nodeID != "" {
+		goto FINISH
+	}
+
+	// 显式分配策略，如果没有找到节点就中止处理
+	if desc.Allocation == cluster.ExplicitAllocate {
+		err = status.Error(codes.PermissionDenied, "no node allocated")
+		return
+	}
+
+	// 自动分配策略，根据负载均衡策略选择一个节点发送
+	nodeID, err = wp.registry.PickGRPCNode(req.ServiceCode)
+	if err != nil {
+		err = status.Errorf(codes.Unavailable, "pick grpc node, %v", err)
+		return
+	}
+	defer func() {
+		if err == nil {
+			wp.stateTable.Store(sess.ID(), req.ServiceCode, nodeID)
+		}
+	}()
+
+FINISH:
+	conn, err = wp.registry.GetGRPCConn(nodeID)
 	if err != nil {
 		err = status.Errorf(codes.Unavailable, "get grpc conn, %v", err)
 	}

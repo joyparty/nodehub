@@ -68,12 +68,14 @@ type UserDisconnected struct {
 
 // NodeAssign 给用户分配有状态节点
 type NodeAssign struct {
-	NodeID string `json:"nodeID"`
-	UserID string `json:"userID"`
+	ServiceCode int32  `json:"serviceCode"`
+	NodeID      string `json:"nodeID"`
+	UserID      string `json:"userID"`
 }
 
 // NodeUnassign 取消用户分配的有状态节点
 type NodeUnassign struct {
-	NodeID string `json:"nodeID"`
-	UserID string `json:"userID"`
+	ServiceCode int32  `json:"serviceCode"`
+	NodeID      string `json:"nodeID"`
+	UserID      string `json:"userID"`
 }

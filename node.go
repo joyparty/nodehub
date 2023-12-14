@@ -30,7 +30,7 @@ type Component interface {
 
 // Node 节点，一个节点上可以运行多个网络服务
 type Node struct {
-	id         ulid.ULID
+	id         string
 	name       string
 	registry   *cluster.Registry
 	components []Component
@@ -39,7 +39,7 @@ type Node struct {
 // NewNode 构造函数
 func NewNode(name string, registry *cluster.Registry) *Node {
 	return &Node{
-		id:         ulid.Make(),
+		id:         ulid.Make().String(),
 		name:       name,
 		registry:   registry,
 		components: []Component{},

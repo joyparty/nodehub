@@ -7,7 +7,6 @@ import (
 	"runtime"
 
 	"github.com/joyparty/gokit"
-	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -15,7 +14,7 @@ import (
 
 // grpcResolver grpc服务发现
 type grpcResolver struct {
-	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
+	allNodes *gokit.MapOf[string, NodeEntry]
 
 	// 所有节点状态为ok的可用节点
 	// serviceCode => []NodeEntry
@@ -33,7 +32,7 @@ type grpcResolver struct {
 // newGRPCResolver 创建grpc服务发现
 func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 	return &grpcResolver{
-		allNodes: gokit.NewMapOf[ulid.ULID, NodeEntry](),
+		allNodes: gokit.NewMapOf[string, NodeEntry](),
 		okNodes:  gokit.NewMapOf[int32, []NodeEntry](),
 		services: gokit.NewMapOf[int32, GRPCServiceDesc](),
 		conns:    gokit.NewMapOf[string, *grpc.ClientConn](),
@@ -80,7 +79,7 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 func (r *grpcResolver) updateOKNodes(serviceCode int32) {
 	nodes := []NodeEntry{}
 
-	r.allNodes.Range(func(_ ulid.ULID, entry NodeEntry) bool {
+	r.allNodes.Range(func(_ string, entry NodeEntry) bool {
 		if entry.State == NodeOK {
 			for _, desc := range entry.GRPC.Services {
 				if desc.Code == serviceCode {
@@ -99,13 +98,13 @@ func (r *grpcResolver) updateOKNodes(serviceCode int32) {
 	}
 }
 
-// GetServiceDesc 获取服务描述
-func (r *grpcResolver) GetServiceDesc(serviceCode int32) (GRPCServiceDesc, bool) {
+// GetDesc 获取服务描述
+func (r *grpcResolver) GetDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 	return r.services.Load(serviceCode)
 }
 
-// GetServiceConn 获取服务连接，随机选择一个可用节点
-func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn, err error) {
+// PickNode 随机选择一个可用节点
+func (r *grpcResolver) PickNode(serviceCode int32) (nodeID string, err error) {
 	nodes, foundNodes := r.okNodes.Load(serviceCode)
 	if !foundNodes {
 		err = ErrNoNodeAvailable
@@ -118,12 +117,12 @@ func (r *grpcResolver) GetServiceConn(serviceCode int32) (conn *grpc.ClientConn,
 	} else {
 		node = nodes[rand.Intn(l)]
 	}
-	conn, err = r.getConn(node.GRPC.Endpoint)
+	nodeID = node.ID
 	return
 }
 
-// GetNodeConn 获取节点连接
-func (r *grpcResolver) GetNodeConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
+// GetConn 获取节点连接
+func (r *grpcResolver) GetConn(nodeID string) (conn *grpc.ClientConn, err error) {
 	node, foundNode := r.allNodes.Load(nodeID)
 	if !foundNode || node.State == NodeDown {
 		err = ErrNoNodeOrDown

@@ -7,7 +7,6 @@ import (
 	"path"
 
 	"github.com/joyparty/gokit"
-	"github.com/oklog/ulid/v2"
 	"github.com/reactivex/rxgo/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -29,7 +28,7 @@ type Registry struct {
 	grpcResolver *grpcResolver
 
 	leaseID  clientv3.LeaseID
-	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
+	allNodes *gokit.MapOf[string, NodeEntry]
 
 	observable rxgo.Observable
 }
@@ -40,7 +39,7 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		client:       client,
 		keyPrefix:    "/nodehub/node",
 		grpcResolver: newGRPCResolver(),
-		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
+		allNodes:     gokit.NewMapOf[string, NodeEntry](),
 	}
 
 	for _, fn := range opt {
@@ -70,7 +69,7 @@ func (r *Registry) Put(entry NodeEntry) error {
 		return fmt.Errorf("marshal entry, %w", err)
 	}
 
-	key := path.Join(r.keyPrefix, entry.ID.String())
+	key := path.Join(r.keyPrefix, entry.ID)
 	_, err = r.client.Put(r.client.Ctx(), key, string(value), clientv3.WithLease(r.leaseID))
 	return err
 }
@@ -170,26 +169,26 @@ func (r *Registry) runWatcher() <-chan rxgo.Item {
 	return events
 }
 
-// GetGRPCServiceDesc 获取grpc服务描述
-func (r *Registry) GetGRPCServiceDesc(serviceCode int32) (GRPCServiceDesc, bool) {
-	return r.grpcResolver.GetServiceDesc(serviceCode)
+// GetGRPCDesc 获取grpc服务描述
+func (r *Registry) GetGRPCDesc(serviceCode int32) (GRPCServiceDesc, bool) {
+	return r.grpcResolver.GetDesc(serviceCode)
 }
 
-// GetGRPCServiceConn 获取grpc服务连接
-func (r *Registry) GetGRPCServiceConn(serviceCode int32) (conn *grpc.ClientConn, err error) {
-	return r.grpcResolver.GetServiceConn(serviceCode)
+// PickGRPCNode 随机选择一个可用GRPC服务节点
+func (r *Registry) PickGRPCNode(serviceCode int32) (nodeID string, err error) {
+	return r.grpcResolver.PickNode(serviceCode)
 }
 
-// GetGRPCNodeConn 获取指定节点的grpc连接
-func (r *Registry) GetGRPCNodeConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
-	return r.grpcResolver.GetNodeConn(nodeID)
+// GetGRPCConn 获取指定节点的grpc连接
+func (r *Registry) GetGRPCConn(nodeID string) (conn *grpc.ClientConn, err error) {
+	return r.grpcResolver.GetConn(nodeID)
 }
 
 // ForeachNodes 遍历所有节点
 //
 // 如果f返回false，则停止遍历
 func (r *Registry) ForeachNodes(f func(NodeEntry) bool) {
-	r.allNodes.Range(func(_ ulid.ULID, v NodeEntry) bool {
+	r.allNodes.Range(func(_ string, v NodeEntry) bool {
 		return f(v)
 	})
 }
