@@ -200,21 +200,6 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 			ActiveTime time.Time
 		}
 
-		workerC := make(chan chan func())
-		defer close(workerC)
-
-		go func() {
-			// 接收到新的worker channel，启动goroutine处理
-			for v := range workerC {
-				taskC := v
-				go func() {
-					for fn := range taskC {
-						fn() // 错误会被打印到请求日志中，这里就不需要再处理
-					}
-				}()
-			}
-		}()
-
 		workers := map[int32]*worker{}
 		defer func() {
 			for _, w := range workers {
@@ -248,7 +233,12 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 						C: make(chan func(), 100),
 					}
 					workers[req.service] = w
-					workerC <- w.C
+
+					go func() {
+						for fn := range w.C {
+							fn() // 错误会被打印到请求日志中，这里就不需要再处理
+						}
+					}()
 				}
 
 				w.C <- req.fn
