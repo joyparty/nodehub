@@ -161,8 +161,14 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 			})
 		}
 
-		// FIXME: 延迟一段时间之后再清除，如果断线重连回来则放弃清除
-		wp.stateTable.Clean(sess.ID())
+		sessID := sess.ID()
+		ants.Submit(func() {
+			// 延迟5分钟之后，确认session不存在了，则清除相关数据
+			time.Sleep(5 * time.Minute)
+			if _, ok := wp.sessionHub.Load(sessID); !ok {
+				wp.stateTable.Clean(sessID)
+			}
+		})
 	}()
 
 	if wp.eventBus != nil && wp.authorize != nil {
