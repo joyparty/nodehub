@@ -117,10 +117,14 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 
 	// 有状态路由更新
 	wp.eventBus.Subscribe(ctx, func(ev event.NodeAssign) {
-		wp.stateTable.Store(ev.UserID, ev.ServiceCode, ev.NodeID)
+		if _, ok := wp.sessionHub.Load(ev.UserID); ok {
+			wp.stateTable.Store(ev.UserID, ev.ServiceCode, ev.NodeID)
+		}
 	})
 	wp.eventBus.Subscribe(ctx, func(ev event.NodeUnassign) {
-		wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
+		if _, ok := wp.sessionHub.Load(ev.UserID); ok {
+			wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
+		}
 	})
 
 	return nil
