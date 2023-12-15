@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"path"
 	"sync"
 	"time"
 
@@ -265,14 +266,14 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 		}
 
 		exec, unordered := wp.newUnaryRequest(context.Background(), req, sess)
-		exec = func() {
+		fn := func() {
 			exec()
 			requestPool.Put(req)
 		}
 
 		if unordered {
 			// 允许无序执行，并发处理
-			ants.Submit(exec)
+			ants.Submit(fn)
 		} else {
 			// 需要保证时序性，投递到worker处理
 			select {
@@ -280,7 +281,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 				return
 			case requestC <- request{
 				service: req.ServiceCode,
-				fn:      exec,
+				fn:      fn,
 			}:
 			}
 		}
@@ -348,8 +349,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 				wp.logRequest(ctx, conn, sess, req, startTime, err)
 			}()
 
-			var method string
-			conn, method, err = wp.getUpstream(sess, req, desc)
+			conn, err = wp.getUpstream(sess, req, desc)
 			if err != nil {
 				return
 			}
@@ -367,6 +367,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 			md.Set(rpc.MDTransactionID, ulid.Make().String()) // 事务ID
 			ctx = metadata.NewOutgoingContext(ctx, md)
 
+			method := path.Join(desc.Path, req.Method)
 			if err := grpc.Invoke(ctx, method, input, output, conn); err != nil {
 				return fmt.Errorf("call grpc, %w", err)
 			}
@@ -400,7 +401,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 	return
 }
 
-func (wp *WebsocketProxy) getUpstream(sess Session, req *clientpb.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, method string, err error) {
+func (wp *WebsocketProxy) getUpstream(sess Session, req *clientpb.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
 	var nodeID string
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
