@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Client websocket客户端，用于测试及演示
-type Client struct {
+// WSClient websocket客户端，用于测试及演示
+type WSClient struct {
 	conn   *websocket.Conn
 	wMutex *sync.Mutex
 	idSeq  *atomic.Uint32
@@ -25,14 +25,14 @@ type Client struct {
 	defaultHandler func(*clientpb.Response)
 }
 
-// NewClient 创建websocket客户端
-func NewClient(wsURL string) (*Client, error) {
+// NewWSClient 创建websocket客户端
+func NewWSClient(wsURL string) (*WSClient, error) {
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	c := &Client{
+	c := &WSClient{
 		conn:   conn,
 		wMutex: &sync.Mutex{},
 		idSeq:  &atomic.Uint32{},
@@ -45,7 +45,7 @@ func NewClient(wsURL string) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) run() {
+func (c *WSClient) run() {
 	ch := c.responseStream()
 	for {
 		select {
@@ -68,13 +68,13 @@ func (c *Client) run() {
 }
 
 // Close 关闭客户端
-func (c *Client) Close() {
+func (c *WSClient) Close() {
 	c.conn.Close()
 	close(c.done)
 }
 
 // Call 发起远程调用
-func (c *Client) Call(serviceCode int32, method string, arg proto.Message, options ...CallOption) error {
+func (c *WSClient) Call(serviceCode int32, method string, arg proto.Message, options ...CallOption) error {
 	req, err := c.newRequest(arg, options...)
 	if err != nil {
 		return fmt.Errorf("build request message, %w", err)
@@ -101,7 +101,7 @@ func (c *Client) Call(serviceCode int32, method string, arg proto.Message, optio
 //	client.OnReceive(gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(requestID uint32, msg *gatewaypb.RPCError) {
 //		// ...
 //	})
-func (c *Client) OnReceive(serviceCode int32, messageType int32, handler any) {
+func (c *WSClient) OnReceive(serviceCode int32, messageType int32, handler any) {
 	fn := reflect.ValueOf(handler)
 	fnType := fn.Type()
 
@@ -140,11 +140,11 @@ func (c *Client) OnReceive(serviceCode int32, messageType int32, handler any) {
 }
 
 // SetDefaultHandler 设置默认消息处理器
-func (c *Client) SetDefaultHandler(handler func(reply *clientpb.Response)) {
+func (c *WSClient) SetDefaultHandler(handler func(reply *clientpb.Response)) {
 	c.defaultHandler = handler
 }
 
-func (c *Client) responseStream() <-chan *clientpb.Response {
+func (c *WSClient) responseStream() <-chan *clientpb.Response {
 	ch := make(chan *clientpb.Response)
 
 	go func() {
@@ -183,7 +183,7 @@ func (c *Client) responseStream() <-chan *clientpb.Response {
 	return ch
 }
 
-func (c *Client) newRequest(msg proto.Message, options ...CallOption) (*clientpb.Request, error) {
+func (c *WSClient) newRequest(msg proto.Message, options ...CallOption) (*clientpb.Request, error) {
 	req := &clientpb.Request{
 		Id: c.idSeq.Add(1),
 	}

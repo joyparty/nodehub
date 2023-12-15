@@ -29,15 +29,15 @@ func init() {
 func main() {
 	endpoint := fmt.Sprintf("ws://%s/grpc", serverAddr)
 	client := &echoClient{
-		Client: gokit.MustReturn(gateway.NewClient(endpoint)),
+		WSClient: gokit.MustReturn(gateway.NewWSClient(endpoint)),
 	}
 	defer client.Close()
 
-	client.Client.SetDefaultHandler(func(resp *clientpb.Response) {
+	client.WSClient.SetDefaultHandler(func(resp *clientpb.Response) {
 		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
 	})
 
-	client.Client.OnReceive(gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(requestID uint32, reply *gatewaypb.RPCError) {
+	client.WSClient.OnReceive(gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(requestID uint32, reply *gatewaypb.RPCError) {
 		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
 			time.Now().Format(time.RFC3339),
 			requestID,
@@ -64,13 +64,13 @@ func main() {
 }
 
 type echoClient struct {
-	*gateway.Client
+	*gateway.WSClient
 }
 
 func (c *echoClient) Call(method string, arg proto.Message, options ...gateway.CallOption) error {
-	return c.Client.Call(echoServiceCode, method, arg, options...)
+	return c.WSClient.Call(echoServiceCode, method, arg, options...)
 }
 
 func (c *echoClient) OnReceive(messageType int32, handler any) {
-	c.Client.OnReceive(echoServiceCode, messageType, handler)
+	c.WSClient.OnReceive(echoServiceCode, messageType, handler)
 }
