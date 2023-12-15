@@ -155,6 +155,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 		logger.Error("initialize session", "error", err)
 		return
 	}
+	logger.Info("client connected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 
 	// 初始化
 	wp.sessionHub.Store(sess)
@@ -167,6 +168,8 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 
 	// 结束清理
 	defer func() {
+		logger.Info("client disconnected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+
 		wp.sessionHub.Delete(sess.ID())
 		sess.Close()
 
