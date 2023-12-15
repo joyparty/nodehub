@@ -335,10 +335,8 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 	if err != nil {
 		unordered = true // 乱序执行
 
-		doRequest = func() (err error) {
-			defer func() {
-				wp.logRequest(ctx, nil, sess, req, startTime, err)
-			}()
+		doRequest = func() error {
+			wp.logRequest(ctx, nil, sess, req, startTime, err)
 			return err
 		}
 	} else {
