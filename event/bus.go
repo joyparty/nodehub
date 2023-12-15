@@ -53,7 +53,7 @@ type redisBus struct {
 func (bus *redisBus) Publish(ctx context.Context, event any) error {
 	p, err := newPayload(event)
 	if err != nil {
-		return err
+		panic(fmt.Errorf("publish event, %w", err))
 	}
 
 	data, err := json.Marshal(p)
@@ -69,15 +69,18 @@ func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
 
 	fnType := fn.Type()
 	if fnType.Kind() != reflect.Func {
-		return errors.New("handler must be a function")
+		// 设置事件订阅handler一般是在启动阶段，如果这里出错了，很可能会导致关键的流程故障，
+		// 假设程序员忘记捕获错误，就会导致难以排查的故障
+		// 因此干脆panic中断进程，让程序员把代码改对了再执行
+		panic(errors.New("handler must be a function"))
 	} else if fnType.NumIn() != 1 {
-		return errors.New("handler must have one argument")
+		panic(errors.New("handler must have one argument"))
 	}
 
 	wantType := fnType.In(0)
 	eventType, ok := types[deref(wantType)]
 	if !ok {
-		return fmt.Errorf("unknown event %s.%s", wantType.PkgPath(), wantType.Name())
+		panic(fmt.Errorf("unknown event %s.%s", wantType.PkgPath(), wantType.Name()))
 	}
 
 	bus.mq.Subscribe(ctx, func(data []byte) {
