@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 
@@ -23,13 +22,7 @@ const (
 type GRPCServer struct {
 	endpoint string
 	server   *grpc.Server
-	services []grpcServiceDesc
-}
-
-type grpcServiceDesc struct {
-	Code   int32
-	Desc   *grpc.ServiceDesc
-	Public bool
+	services map[int32]cluster.GRPCServiceDesc
 }
 
 // NewGRPCServer 构造函数
@@ -37,40 +30,28 @@ func NewGRPCServer(endpoint string, opts ...grpc.ServerOption) *GRPCServer {
 	return &GRPCServer{
 		endpoint: endpoint,
 		server:   grpc.NewServer(opts...),
+		services: make(map[int32]cluster.GRPCServiceDesc),
 	}
 }
 
-// RegisterPublicService 注册服务
-func (gs *GRPCServer) RegisterPublicService(code int32, desc *grpc.ServiceDesc, impl any) error {
-	return gs.registerService(impl, grpcServiceDesc{
-		Code:   code,
-		Desc:   desc,
-		Public: true,
-	})
-}
-
-// RegisterPrivateService 注册内部服务
-func (gs *GRPCServer) RegisterPrivateService(code int32, desc *grpc.ServiceDesc, impl any) error {
-	return gs.registerService(impl, grpcServiceDesc{
-		Code:   code,
-		Desc:   desc,
-		Public: false,
-	})
-}
-
-func (gs *GRPCServer) registerService(impl any, service grpcServiceDesc) error {
-	if service.Code == 0 {
-		return errors.New("code must not be 0")
+// RegisterService 注册服务
+func (gs *GRPCServer) RegisterService(code int32, desc grpc.ServiceDesc, impl any, config ...Config) error {
+	sd := cluster.GRPCServiceDesc{
+		Code: code,
+		Path: fmt.Sprintf("/%s", desc.ServiceName),
+	}
+	for _, c := range config {
+		sd = c(sd)
 	}
 
-	for _, v := range gs.services {
-		if v.Code == service.Code {
-			return fmt.Errorf("code %d already registered", service.Code)
-		}
+	if err := sd.Validate(); err != nil {
+		return err
+	} else if _, ok := gs.services[sd.Code]; ok {
+		return fmt.Errorf("service code %d already registered", sd.Code)
 	}
 
-	gs.services = append(gs.services, service)
-	gs.server.RegisterService(service.Desc, impl)
+	gs.services[sd.Code] = sd
+	gs.server.RegisterService(&desc, impl)
 	return nil
 }
 
@@ -107,12 +88,42 @@ func (gs *GRPCServer) Stop(ctx context.Context) error {
 func (gs *GRPCServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.GRPC = cluster.GRPCEntry{
 		Endpoint: gs.endpoint,
-		Services: lo.Map(gs.services, func(s grpcServiceDesc, _ int) cluster.GRPCServiceDesc {
-			return cluster.GRPCServiceDesc{
-				Code:   s.Code,
-				Path:   fmt.Sprintf("/%s", s.Desc.ServiceName),
-				Public: s.Public,
-			}
-		}),
+		Services: lo.Values(gs.services),
+	}
+}
+
+// Config 配置
+type Config func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc
+
+// WithPublic 设置服务为公开
+func WithPublic() Config {
+	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
+		desc.Public = true
+		return desc
+	}
+}
+
+// WithStateful 设置服务为有状态
+func WithStateful() Config {
+	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
+		desc.Stateful = true
+		desc.Allocation = cluster.ExplicitAllocate
+		return desc
+	}
+}
+
+// WithAllocation 设置节点分配方式
+func WithAllocation(allocation string) Config {
+	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
+		desc.Allocation = allocation
+		return desc
+	}
+}
+
+// WithUnordered 设置请求执行允许无序
+func WithUnordered() Config {
+	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
+		desc.Unordered = true
+		return desc
 	}
 }

@@ -90,7 +90,14 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 	}
 
 	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
-	if err := server.RegisterPublicService(int32(servicepb.Services_ROOM), &roompb.Room_ServiceDesc, service); err != nil {
+	err := server.RegisterService(
+		int32(servicepb.Services_ROOM),
+		roompb.Room_ServiceDesc,
+		service,
+		rpc.WithPublic(),
+	)
+
+	if err != nil {
 		return nil, err
 	}
 

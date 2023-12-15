@@ -62,19 +62,21 @@ func main() {
 	}
 }
 
-type server struct {
-	*rpc.GRPCServer
-}
+func newGRPCServer() (*rpc.GRPCServer, error) {
+	gs := rpc.NewGRPCServer(addr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 
-func newGRPCServer() (*server, error) {
-	s := rpc.NewGRPCServer(addr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
-	if err := s.RegisterPublicService(int32(serverpb.Services_ECHO), &pb.Echo_ServiceDesc, &echoService{}); err != nil {
+	err := gs.RegisterService(
+		int32(serverpb.Services_ECHO),
+		pb.Echo_ServiceDesc,
+		&echoService{},
+		rpc.WithPublic(),
+		rpc.WithUnordered(),
+	)
+	if err != nil {
 		return nil, fmt.Errorf("register service, %w", err)
 	}
 
-	return &server{
-		GRPCServer: s,
-	}, nil
+	return gs, nil
 }
 
 type echoService struct {
