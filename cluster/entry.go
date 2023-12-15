@@ -102,8 +102,6 @@ type GRPCServiceDesc struct {
 	// 设置为true时，网关会把对这个服务的每个请求并发处理，这有可能导致后发先至的结果，但好处是处理能力能够得到提高
 	//
 	// 默认为false，效果是同一个客户端对这个服务的请求一定会被顺序发送
-	//
-	// 这个配置对有状态服务无效，有状态服务一定会保证请求的时序性
 	Unordered bool `json:"unordered"`
 
 	// Stateful 是否有状态服务
@@ -125,10 +123,6 @@ func (desc GRPCServiceDesc) Validate() error {
 	}
 
 	if desc.Stateful {
-		if desc.Unordered {
-			return errors.New("unordered is invalid for stateful service")
-		}
-
 		switch desc.Allocation {
 		case AutoAllocate, ExplicitAllocate:
 		case "":

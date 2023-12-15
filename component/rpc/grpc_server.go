@@ -120,7 +120,7 @@ func WithAllocation(allocation string) Config {
 	}
 }
 
-// WithUnordered 设置请求执行允许无序
+// WithUnordered 设置此服务的所有接口请求不需要保证时序性
 func WithUnordered() Config {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Unordered = true

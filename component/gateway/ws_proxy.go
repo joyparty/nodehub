@@ -334,7 +334,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 	var doRequest func() error
 	startTime := time.Now()
 	if err != nil {
-		unordered = true // 乱序执行
+		unordered = true // 不需要保证时序性
 
 		doRequest = func() error {
 			wp.logRequest(ctx, nil, sess, req, startTime, err)
