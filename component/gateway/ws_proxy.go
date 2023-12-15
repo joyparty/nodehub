@@ -252,6 +252,13 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 		}
 	}()
 
+	isUnorderedService := func(serviceCode int32) bool {
+		if desc, ok := wp.registry.GetGRPCDesc(serviceCode); ok {
+			return desc.Unordered
+		}
+		return false
+	}
+
 	for {
 		req := requestPool.Get().(*clientpb.Request)
 		clientpb.ResetRequest(req)
@@ -266,13 +273,18 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 		}
 
 		fn := wp.newUnaryRequest(context.Background(), req, sess)
-		select {
-		case <-wp.done:
-			return
-		case requestC <- request{
-			service: req.ServiceCode,
-			fn:      fn,
-		}:
+
+		if isUnorderedService(req.ServiceCode) {
+			ants.Submit(fn)
+		} else {
+			select {
+			case <-wp.done:
+				return
+			case requestC <- request{
+				service: req.ServiceCode,
+				fn:      fn,
+			}:
+			}
 		}
 	}
 }
