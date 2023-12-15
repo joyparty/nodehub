@@ -94,7 +94,7 @@ type GRPCServiceDesc struct {
 	Path string `json:"path"`
 
 	// 是否允许客户端访问
-	Public bool `json:"public"`
+	Public bool `json:"public,omitempty"`
 
 	// 接口之间是否不存在时序性要求，
 	// 这个配置会影响网关转发客户端请求的方式
@@ -102,16 +102,16 @@ type GRPCServiceDesc struct {
 	// 设置为true时，网关会把对这个服务的每个请求并发处理，这有可能导致后发先至的结果，但好处是处理能力能够得到提高
 	//
 	// 默认为false，效果是同一个客户端对这个服务的请求一定会被顺序发送
-	Unordered bool `json:"unordered"`
+	Unordered bool `json:"unordered,omitempty"`
 
 	// Stateful 是否有状态服务
-	Stateful bool
+	Stateful bool `json:"stateful,omitempty"`
 
 	// Allocation 有状态节点分配方式
 	//
 	//  - auto: 自动分配，第一次请求时，如果还没有分配，会根据负载均衡策略自动选择一个可用节点
 	//  - explicit: 显式分配，只有分配了节点之后，客户端才能够访问，没有分配就无法访问
-	Allocation string
+	Allocation string `json:"allocation,omitempty"`
 }
 
 // Validate 验证条目是否合法
