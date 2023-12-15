@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"path"
 	"sync"
 	"time"
 
@@ -252,13 +251,6 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 		}
 	}()
 
-	isUnorderedService := func(serviceCode int32) bool {
-		if desc, ok := wp.registry.GetGRPCDesc(serviceCode); ok {
-			return desc.Unordered
-		}
-		return false
-	}
-
 	for {
 		req := requestPool.Get().(*clientpb.Request)
 		clientpb.ResetRequest(req)
@@ -272,17 +264,23 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 			return
 		}
 
-		fn := wp.newUnaryRequest(context.Background(), req, sess)
+		exec, unordered := wp.newUnaryRequest(context.Background(), req, sess)
+		exec = func() {
+			exec()
+			requestPool.Put(req)
+		}
 
-		if isUnorderedService(req.ServiceCode) {
-			ants.Submit(fn)
+		if unordered {
+			// 允许无序执行，并发处理
+			ants.Submit(exec)
 		} else {
+			// 需要保证时序性，投递到worker处理
 			select {
 			case <-wp.done:
 				return
 			case requestC <- request{
 				service: req.ServiceCode,
-				fn:      fn,
+				fn:      exec,
 			}:
 			}
 		}
@@ -322,52 +320,71 @@ func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Se
 	return sess, nil
 }
 
-func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) func() {
-	startTime := time.Now()
-
+func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) (exec func(), unordered bool) {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
-	doRequest := func() (err error) {
-		var conn *grpc.ClientConn
-		defer func() {
-			wp.logRequest(ctx, conn, sess, req, startTime, err)
-
-			requestPool.Put(req)
-		}()
-
-		var method string
-		conn, method, err = wp.getUpstream(sess, req)
-		if err != nil {
-			return
-		}
-
-		input, err := newEmptyMessage(req.Data)
-		if err != nil {
-			return fmt.Errorf("unmarshal request data, %w", err)
-		}
-
-		output := responsePool.Get().(*clientpb.Response)
-		defer responsePool.Put(output)
-		clientpb.ResetResponse(output)
-
-		md := sess.MetadataCopy()
-		md.Set(rpc.MDTransactionID, ulid.Make().String()) // 事务ID
-		ctx = metadata.NewOutgoingContext(ctx, md)
-
-		if err := grpc.Invoke(ctx, method, input, output, conn); err != nil {
-			return fmt.Errorf("call grpc, %w", err)
-		}
-
-		// google.protobuf.Empty类型，不需要下行数据
-		if proto.Size(output) == 0 {
-			return nil
-		}
-		output.RequestId = req.Id
-		output.ServiceCode = req.ServiceCode
-
-		return sess.Send(output)
+	var err error
+	desc, ok := wp.registry.GetGRPCDesc(req.ServiceCode)
+	if !ok {
+		err = status.Errorf(codes.NotFound, "grpc service code(%d) not found", req.ServiceCode)
+	} else if !desc.Public {
+		err = status.Error(codes.PermissionDenied, "request private service")
 	}
 
-	return func() {
+	var doRequest func() error
+	startTime := time.Now()
+	if err != nil {
+		unordered = true // 乱序执行
+
+		doRequest = func() (err error) {
+			defer func() {
+				wp.logRequest(ctx, nil, sess, req, startTime, err)
+			}()
+			return err
+		}
+	} else {
+		unordered = desc.Unordered
+
+		doRequest = func() (err error) {
+			var conn *grpc.ClientConn
+			defer func() {
+				wp.logRequest(ctx, conn, sess, req, startTime, err)
+			}()
+
+			var method string
+			conn, method, err = wp.getUpstream(sess, req, desc)
+			if err != nil {
+				return
+			}
+
+			input, err := newEmptyMessage(req.Data)
+			if err != nil {
+				return fmt.Errorf("unmarshal request data, %w", err)
+			}
+
+			output := responsePool.Get().(*clientpb.Response)
+			defer responsePool.Put(output)
+			clientpb.ResetResponse(output)
+
+			md := sess.MetadataCopy()
+			md.Set(rpc.MDTransactionID, ulid.Make().String()) // 事务ID
+			ctx = metadata.NewOutgoingContext(ctx, md)
+
+			if err := grpc.Invoke(ctx, method, input, output, conn); err != nil {
+				return fmt.Errorf("call grpc, %w", err)
+			}
+
+			// google.protobuf.Empty类型，不需要下行数据
+			if proto.Size(output) == 0 {
+				return nil
+			}
+			output.RequestId = req.Id
+			output.ServiceCode = req.ServiceCode
+
+			return sess.Send(output)
+		}
+	}
+
+	exec = func() {
 		if err := doRequest(); err != nil {
 			if s, ok := status.FromError(err); ok {
 				resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
@@ -382,19 +399,10 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 			}
 		}
 	}
+	return
 }
 
-func (wp *WebsocketProxy) getUpstream(sess Session, req *clientpb.Request) (conn *grpc.ClientConn, method string, err error) {
-	desc, ok := wp.registry.GetGRPCDesc(req.ServiceCode)
-	if !ok {
-		err = status.Errorf(codes.NotFound, "grpc service code(%d) not found", req.ServiceCode)
-		return
-	} else if !desc.Public {
-		err = status.Error(codes.PermissionDenied, "request private service")
-		return
-	}
-	method = path.Join(desc.Path, req.Method)
-
+func (wp *WebsocketProxy) getUpstream(sess Session, req *clientpb.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, method string, err error) {
 	var nodeID string
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
