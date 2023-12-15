@@ -3,18 +3,22 @@ package main
 import (
 	"flag"
 	"fmt"
-	"sync/atomic"
+	"os"
+	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/joyparty/gokit"
+	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
 	serverpb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server"
 	pb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echo"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 )
 
 var (
-	requestID  = &atomic.Uint32{}
-	serverAddr string
+	serverAddr      string
+	echoServiceCode = int32(serverpb.Services_ECHO)
 )
 
 func init() {
@@ -24,53 +28,49 @@ func init() {
 
 func main() {
 	endpoint := fmt.Sprintf("ws://%s/grpc", serverAddr)
-	conn, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
-	if err != nil {
-		panic(err)
+	client := &echoClient{
+		Client: gokit.MustReturn(gateway.NewClient(endpoint)),
 	}
+	defer client.Close()
 
-	req, err := newRequest(&pb.Msg{
-		Message: "hello world!",
+	client.Client.SetDefaultHandler(func(resp *clientpb.Response) {
+		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
 	})
-	if err != nil {
-		panic(err)
-	}
-	req.ServiceCode = int32(serverpb.Services_ECHO)
-	req.Method = "Send"
 
-	data, err := proto.Marshal(req)
-	if err != nil {
-		panic(err)
-	}
+	client.Client.OnReceive(gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(requestID uint32, reply *gatewaypb.RPCError) {
+		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
+			time.Now().Format(time.RFC3339),
+			requestID,
+			reply.ServiceCode,
+			reply.Method,
+			codes.Code(reply.Status.Code),
+			reply.Status.Message,
+		)
+		os.Exit(1)
+	})
 
-	if err := conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-		panic(err)
-	}
+	client.OnReceive(int32(pb.Protocol_MSG), func(requestID uint32, reply *pb.Msg) {
+		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.Message)
+	})
 
-	messageType, data, err := conn.ReadMessage()
-	if err != nil {
-		panic(err)
+	for {
+		gokit.Must(
+			client.Call("Send", &pb.Msg{
+				Message: "hello world!",
+			}),
+		)
+		time.Sleep(1 * time.Second)
 	}
-
-	if messageType != websocket.BinaryMessage {
-		panic(fmt.Errorf("invalid message type, %d", messageType))
-	}
-
-	response := &clientpb.Response{}
-	if err := proto.Unmarshal(data, response); err != nil {
-		panic(err)
-	}
-	fmt.Println(response.String())
 }
 
-func newRequest(message proto.Message) (*clientpb.Request, error) {
-	data, err := proto.Marshal(message)
-	if err != nil {
-		return nil, fmt.Errorf("marshal message, %w", err)
-	}
+type echoClient struct {
+	*gateway.Client
+}
 
-	return &clientpb.Request{
-		Id:   requestID.Add(1),
-		Data: data,
-	}, nil
+func (c *echoClient) Call(method string, arg proto.Message, options ...gateway.CallOption) error {
+	return c.Client.Call(echoServiceCode, method, arg, options...)
+}
+
+func (c *echoClient) OnReceive(messageType int32, handler any) {
+	c.Client.OnReceive(echoServiceCode, messageType, handler)
 }
