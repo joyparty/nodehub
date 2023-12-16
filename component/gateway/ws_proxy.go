@@ -157,47 +157,9 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 		logger.Error("initialize session", "error", err)
 		return
 	}
-	logger.Info("client connected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 
-	// 初始化
-	wp.sessionHub.Store(sess)
-
-	// 放弃之前断线创造的清理任务
-	if timer, ok := wp.cleanJobs.Load(sess.ID()); ok {
-		if !timer.Stop() {
-			<-timer.C
-		}
-		wp.cleanJobs.Delete(sess.ID())
-	}
-
-	if wp.eventBus != nil && wp.authorize != nil {
-		wp.eventBus.Publish(context.Background(), event.UserConnected{
-			UserID: sess.ID(),
-		})
-	}
-
-	// 结束清理
-	defer func() {
-		logger.Info("client disconnected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
-
-		wp.sessionHub.Delete(sess.ID())
-		sess.Close()
-
-		if wp.eventBus != nil && wp.authorize != nil {
-			wp.eventBus.Publish(context.Background(), event.UserDisconnected{
-				UserID: sess.ID(),
-			})
-		}
-
-		// 延迟5分钟之后，确认session不存在了，则清除相关数据
-		sessID := sess.ID()
-		wp.cleanJobs.Store(sessID, time.AfterFunc(5*time.Minute, func() {
-			if _, ok := wp.sessionHub.Load(sessID); !ok {
-				wp.stateTable.Clean(sessID)
-			}
-			wp.cleanJobs.Delete(sessID)
-		}))
-	}()
+	wp.onConnect(sess)
+	defer wp.onDisconnect(sess)
 
 	type request struct {
 		service int32
@@ -329,6 +291,48 @@ func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Se
 		sess.SetMetadata(md)
 	}
 	return sess, nil
+}
+
+func (wp *WebsocketProxy) onConnect(sess Session) {
+	wp.sessionHub.Store(sess)
+
+	// 放弃之前断线创造的清理任务
+	if timer, ok := wp.cleanJobs.Load(sess.ID()); ok {
+		if !timer.Stop() {
+			<-timer.C
+		}
+		wp.cleanJobs.Delete(sess.ID())
+	}
+
+	if wp.eventBus != nil && wp.authorize != nil {
+		wp.eventBus.Publish(context.Background(), event.UserConnected{
+			UserID: sess.ID(),
+		})
+	}
+
+	logger.Info("client connected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+}
+
+func (wp *WebsocketProxy) onDisconnect(sess Session) {
+	sessID := sess.ID()
+	wp.sessionHub.Delete(sessID)
+	sess.Close()
+
+	if wp.eventBus != nil && wp.authorize != nil {
+		wp.eventBus.Publish(context.Background(), event.UserDisconnected{
+			UserID: sessID,
+		})
+	}
+
+	// 延迟5分钟之后，确认session不存在了，则清除相关数据
+	wp.cleanJobs.Store(sessID, time.AfterFunc(5*time.Minute, func() {
+		if _, ok := wp.sessionHub.Load(sessID); !ok {
+			wp.stateTable.Clean(sessID)
+		}
+		wp.cleanJobs.Delete(sessID)
+	}))
+
+	logger.Info("client disconnected", "sessionID", sessID, "remoteAddr", sess.RemoteAddr())
 }
 
 func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) (exec func(), unordered bool) {
