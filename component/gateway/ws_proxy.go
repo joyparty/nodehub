@@ -151,80 +151,30 @@ func (wp *WebsocketProxy) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { // revive:disable-line
+func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	sess, err := wp.newSession(w, r)
 	if err != nil {
 		logger.Error("initialize session", "error", err)
 		return
 	}
 
-	wp.onConnect(sess)
-	defer wp.onDisconnect(sess)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	type request struct {
-		service int32
-		fn      func()
-	}
+	wp.onConnect(ctx, sess)
+	defer wp.onDisconnect(ctx, sess)
 
-	requestC := make(chan request)
-	defer close(requestC)
-
-	// 把每个service的请求分发到不同的worker处理
-	// 确保对同一个service的请求是顺序处理的
-	go func() {
-		type worker struct {
-			C          chan func()
-			ActiveTime time.Time
-		}
-
-		workers := map[int32]*worker{}
-		defer func() {
-			for _, w := range workers {
-				close(w.C)
-			}
-		}()
-
-		ticker := time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-wp.done:
-				return
-			case <-ticker.C:
-				// 清除不活跃的worker
-				for key, w := range workers {
-					if time.Since(w.ActiveTime) > 5*time.Minute {
-						close(w.C)
-						delete(workers, key)
-					}
-				}
-			case req, ok := <-requestC:
-				if !ok {
-					return
-				}
-
-				w, ok := workers[req.service]
-				if !ok {
-					w = &worker{
-						C: make(chan func(), 100),
-					}
-					workers[req.service] = w
-
-					go func() {
-						for fn := range w.C {
-							fn() // 错误会被打印到请求日志中，这里就不需要再处理
-						}
-					}()
-				}
-
-				w.C <- req.fn
-				w.ActiveTime = time.Now()
-			}
-		}
-	}()
+	requestQueue := make(chan serviceReqeust)
+	defer close(requestQueue)
+	go wp.runRequestQueue(ctx, requestQueue)
 
 	for {
+		select {
+		case <-wp.done:
+			return
+		default:
+		}
+
 		req := requestPool.Get().(*clientpb.Request)
 		clientpb.ResetRequest(req)
 
@@ -237,7 +187,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 			return
 		}
 
-		exec, unordered := wp.newUnaryRequest(context.Background(), req, sess)
+		exec, unordered := wp.newUnaryRequest(ctx, req, sess)
 		fn := func() {
 			exec()
 			requestPool.Put(req)
@@ -247,13 +197,13 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 			// 允许无序执行，并发处理
 			ants.Submit(fn)
 		} else {
-			// 需要保证时序性，投递到worker处理
+			// 需要保证时序性，投递到队列处理
 			select {
 			case <-wp.done:
 				return
-			case requestC <- request{
-				service: req.ServiceCode,
-				fn:      fn,
+			case requestQueue <- serviceReqeust{
+				Service: req.ServiceCode,
+				Request: fn,
 			}:
 			}
 		}
@@ -293,7 +243,7 @@ func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Se
 	return sess, nil
 }
 
-func (wp *WebsocketProxy) onConnect(sess Session) {
+func (wp *WebsocketProxy) onConnect(ctx context.Context, sess Session) {
 	wp.sessionHub.Store(sess)
 
 	// 放弃之前断线创造的清理任务
@@ -305,7 +255,7 @@ func (wp *WebsocketProxy) onConnect(sess Session) {
 	}
 
 	if wp.eventBus != nil && wp.authorize != nil {
-		wp.eventBus.Publish(context.Background(), event.UserConnected{
+		wp.eventBus.Publish(ctx, event.UserConnected{
 			UserID: sess.ID(),
 		})
 	}
@@ -313,13 +263,13 @@ func (wp *WebsocketProxy) onConnect(sess Session) {
 	logger.Info("client connected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 }
 
-func (wp *WebsocketProxy) onDisconnect(sess Session) {
+func (wp *WebsocketProxy) onDisconnect(ctx context.Context, sess Session) {
 	sessID := sess.ID()
 	wp.sessionHub.Delete(sessID)
 	sess.Close()
 
 	if wp.eventBus != nil && wp.authorize != nil {
-		wp.eventBus.Publish(context.Background(), event.UserDisconnected{
+		wp.eventBus.Publish(ctx, event.UserDisconnected{
 			UserID: sessID,
 		})
 	}
@@ -508,6 +458,66 @@ func (wp *WebsocketProxy) logRequest(
 		}
 	} else {
 		wp.requestLogger.Info("handle request", logValues...)
+	}
+}
+
+type serviceReqeust struct {
+	Service int32
+	Request func()
+}
+
+// 把每个service的请求分发到不同的worker处理
+// 确保对同一个service的请求是顺序处理的
+func (wp *WebsocketProxy) runRequestQueue(ctx context.Context, queue <-chan serviceReqeust) {
+	type worker struct {
+		C          chan func()
+		ActiveTime time.Time
+	}
+
+	workers := map[int32]*worker{}
+	defer func() {
+		for _, w := range workers {
+			close(w.C)
+		}
+	}()
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// 清除不活跃的worker
+			for key, w := range workers {
+				if time.Since(w.ActiveTime) > 5*time.Minute {
+					close(w.C)
+					delete(workers, key)
+				}
+			}
+		case item, ok := <-queue:
+			if !ok {
+				return
+			}
+
+			w, ok := workers[item.Service]
+			if !ok {
+				w = &worker{
+					C: make(chan func(), 100),
+				}
+				workers[item.Service] = w
+
+				go func() {
+					for fn := range w.C {
+						fn() // 错误会被打印到请求日志中，这里就不需要再处理
+					}
+				}()
+			}
+
+			w.C <- item.Request
+			w.ActiveTime = time.Now()
+		}
 	}
 }
 
