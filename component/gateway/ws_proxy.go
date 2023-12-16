@@ -350,6 +350,11 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 	exec = func() {
 		if err := doRequest(); err != nil {
 			if s, ok := status.FromError(err); ok {
+				// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
+				if s.Code() == codes.Unknown {
+					s = status.New(codes.Unknown, "unknown error")
+				}
+
 				resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
 					ServiceCode: req.ServiceCode,
 					Method:      req.Method,
