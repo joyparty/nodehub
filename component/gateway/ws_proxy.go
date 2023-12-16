@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
 	"github.com/panjf2000/ants/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
@@ -60,6 +61,7 @@ type WebsocketProxy struct {
 	server        *http.Server
 	sessionHub    *sessionHub
 	stateTable    *stateTable
+	cleanJobs     *gokit.MapOf[string, *time.Timer]
 
 	done chan struct{}
 }
@@ -70,6 +72,7 @@ func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...Web
 		registry:   registry,
 		sessionHub: newSessionHub(),
 		stateTable: newStateTable(),
+		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
 		done:       make(chan struct{}),
 	}
 
@@ -123,9 +126,8 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 			}
 		})
 		wp.eventBus.Subscribe(ctx, func(ev event.NodeUnassign) {
-			if _, ok := wp.sessionHub.Load(ev.UserID); ok {
-				wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
-			}
+			// 即使离线，状态路由也会继续留存一段时间，所以仍然接受删除操作
+			wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
 		})
 	}
 
@@ -160,6 +162,14 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 	// 初始化
 	wp.sessionHub.Store(sess)
 
+	// 放弃之前断线创造的清理任务
+	if timer, ok := wp.cleanJobs.Load(sess.ID()); ok {
+		if !timer.Stop() {
+			<-timer.C
+		}
+		wp.cleanJobs.Delete(sess.ID())
+	}
+
 	if wp.eventBus != nil && wp.authorize != nil {
 		wp.eventBus.Publish(context.Background(), event.UserConnected{
 			UserID: sess.ID(),
@@ -179,14 +189,14 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) { //
 			})
 		}
 
+		// 延迟5分钟之后，确认session不存在了，则清除相关数据
 		sessID := sess.ID()
-		ants.Submit(func() {
-			// 延迟5分钟之后，确认session不存在了，则清除相关数据
-			time.Sleep(5 * time.Minute)
+		wp.cleanJobs.Store(sessID, time.AfterFunc(5*time.Minute, func() {
 			if _, ok := wp.sessionHub.Load(sessID); !ok {
 				wp.stateTable.Clean(sessID)
 			}
-		})
+			wp.cleanJobs.Delete(sessID)
+		}))
 	}()
 
 	type request struct {
