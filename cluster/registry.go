@@ -193,20 +193,24 @@ func (r *Registry) ForeachNodes(f func(NodeEntry) bool) {
 	})
 }
 
-// Subscribe 订阅节点变更
-func (r *Registry) Subscribe(onUpdate func(NodeEntry), onDelete func(NodeEntry)) {
-	r.observable.ForEach(
-		func(item any) {
-			switch event := item.(type) {
-			case eventUpdateNode:
-				onUpdate(event.Entry)
-			case eventDeleteNode:
-				onDelete(event.Entry)
+// SubscribeUpdate 订阅节点更新
+func (r *Registry) SubscribeUpdate(handler func(entry NodeEntry)) {
+	r.observable.
+		DoOnNext(func(item any) {
+			if ev, ok := item.(eventUpdateNode); ok {
+				handler(ev.Entry)
 			}
-		},
-		func(err error) {},
-		func() {},
-	)
+		})
+}
+
+// SubscribeDelete 订阅节点删除
+func (r *Registry) SubscribeDelete(handler func(entry NodeEntry)) {
+	r.observable.
+		DoOnNext(func(item any) {
+			if ev, ok := item.(eventDeleteNode); ok {
+				handler(ev.Entry)
+			}
+		})
 }
 
 // Close 关闭

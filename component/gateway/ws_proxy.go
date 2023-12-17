@@ -131,6 +131,10 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 		})
 	}
 
+	wp.registry.SubscribeDelete(func(entry cluster.NodeEntry) {
+		wp.stateTable.CleanNode(entry.ID)
+	})
+
 	return nil
 }
 
@@ -277,7 +281,7 @@ func (wp *WebsocketProxy) onDisconnect(ctx context.Context, sess Session) {
 	// 延迟5分钟之后，确认session不存在了，则清除相关数据
 	wp.cleanJobs.Store(sessID, time.AfterFunc(5*time.Minute, func() {
 		if _, ok := wp.sessionHub.Load(sessID); !ok {
-			wp.stateTable.Clean(sessID)
+			wp.stateTable.CleanSession(sessID)
 		}
 		wp.cleanJobs.Delete(sessID)
 	}))

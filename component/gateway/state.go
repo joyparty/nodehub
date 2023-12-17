@@ -41,6 +41,19 @@ func (sr *stateTable) Remove(sessID string, serviceCode int32) {
 	}
 }
 
-func (sr *stateTable) Clean(sessID string) {
+func (sr *stateTable) CleanNode(nodeID string) {
+	sr.routes.Range(func(sessID string, nodes *gokit.MapOf[int32, string]) bool {
+		nodes.Range(func(serviceCode int32, id string) bool {
+			if id == nodeID {
+				nodes.Delete(serviceCode)
+				return false
+			}
+			return true
+		})
+		return true
+	})
+}
+
+func (sr *stateTable) CleanSession(sessID string) {
 	sr.routes.Delete(sessID)
 }
