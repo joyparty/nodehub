@@ -387,19 +387,26 @@ func (wp *WebsocketProxy) getUpstream(sess Session, req *clientpb.Request, desc 
 		goto FINISH
 	}
 
-	// 从请求参数或者状态路由表内获取节点ID
-	if nodeID = req.GetNodeId(); nodeID == "" {
-		if v, ok := wp.stateTable.Find(sess.ID(), req.ServiceCode); ok {
-			nodeID = v
+	if desc.Allocation == cluster.ClientAllocate {
+		// 每次客户端指定了节点，记录下来，后续使用
+		if nodeID = req.GetNodeId(); nodeID != "" {
+			defer func() {
+				if err == nil {
+					wp.stateTable.Store(sess.ID(), req.ServiceCode, nodeID)
+				}
+			}()
+			goto FINISH
 		}
 	}
 
-	if nodeID != "" {
+	// 从状态路由表查询节点ID
+	if v, ok := wp.stateTable.Find(sess.ID(), req.ServiceCode); ok {
+		nodeID = v
 		goto FINISH
 	}
 
-	// 显式分配策略，如果没有找到节点就中止处理
-	if desc.Allocation == cluster.ExplicitAllocate {
+	// 非自动分配策略，没有找到节点就中断请求
+	if desc.Allocation != cluster.AutoAllocate && nodeID == "" {
 		err = status.Error(codes.PermissionDenied, "no node allocated")
 		return
 	}

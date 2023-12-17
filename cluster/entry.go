@@ -15,10 +15,12 @@ const (
 	// NodeDown 下线，不接受任何请求
 	NodeDown NodeState = "down"
 
-	// AutoAllocate 自动分配
+	// AutoAllocate 自动分配，第一次请求时，如果还没有分配，会根据负载均衡策略自动选择一个可用节点
 	AutoAllocate = "auto"
-	// ExplicitAllocate 显式分配
-	ExplicitAllocate = "explicit"
+	// ServerAllocate 服务端分配，只有服务器端分配好节点之后，客户端才能够访问
+	ServerAllocate = "server"
+	// ClientAllocate 客户端分配，客户端请求时附带的nodeID会被记录下来，后续即使不指定nodeID，也会被分配到同一个节点
+	ClientAllocate = "client"
 )
 
 // NodeEntry 节点服务发现条目
@@ -108,9 +110,6 @@ type GRPCServiceDesc struct {
 	Stateful bool `json:"stateful,omitempty"`
 
 	// Allocation 有状态节点分配方式
-	//
-	//  - auto: 自动分配，第一次请求时，如果还没有分配，会根据负载均衡策略自动选择一个可用节点
-	//  - explicit: 显式分配，只有分配了节点之后，客户端才能够访问，没有分配就无法访问
 	Allocation string `json:"allocation,omitempty"`
 }
 
@@ -124,7 +123,7 @@ func (desc GRPCServiceDesc) Validate() error {
 
 	if desc.Stateful {
 		switch desc.Allocation {
-		case AutoAllocate, ExplicitAllocate:
+		case AutoAllocate, ServerAllocate, ClientAllocate:
 		case "":
 			return errors.New("allocation is empty")
 		default:

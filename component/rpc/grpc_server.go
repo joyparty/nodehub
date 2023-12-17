@@ -107,7 +107,7 @@ func WithPublic() Config {
 func WithStateful() Config {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Stateful = true
-		desc.Allocation = cluster.ExplicitAllocate
+		desc.Allocation = cluster.ServerAllocate
 		return desc
 	}
 }
