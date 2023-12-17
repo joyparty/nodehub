@@ -545,12 +545,12 @@ func (wp *WebsocketProxy) notificationLoop() {
 	})
 }
 
-func newEmptyMessage(data []byte) (*emptypb.Empty, error) {
-	msg := &emptypb.Empty{}
-	if err := proto.Unmarshal(data, msg); err != nil {
-		return nil, err
+func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
+	msg = &emptypb.Empty{}
+	if len(data) > 0 {
+		err = proto.Unmarshal(data, msg)
 	}
-	return msg, nil
+	return
 }
 
 // WebsocketProxyOption 配置选项
