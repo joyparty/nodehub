@@ -451,6 +451,10 @@ func (wp *WebsocketProxy) logRequest(
 		"duration", time.Since(start).String(),
 	}
 
+	if nodeID := req.GetNodeId(); nodeID != "" {
+		logValues = append(logValues, "nodeID", nodeID)
+	}
+
 	if upstream != nil {
 		logValues = append(logValues, "upstream", upstream.Target())
 	}
