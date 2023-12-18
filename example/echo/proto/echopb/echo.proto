@@ -3,9 +3,9 @@ syntax = "proto3";
 
 package echo;
 
-option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echo";
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echopb";
 
-import "clientpb/response.proto";
+import "clientpb/client.proto";
 
 enum Protocol {
 	UNSPECIFIED = 0;

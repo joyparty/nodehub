@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package services;
+
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/servicepb";
+
+enum Services {
+	UNSPECIFIED = 0;
+	GATEWAY = 1;
+	ECHO = 2;
+}

@@ -11,8 +11,8 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
-	serverpb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server"
-	pb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echo"
+	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb"
+	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -66,8 +66,8 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 	gs := rpc.NewGRPCServer(addr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 
 	err := gs.RegisterService(
-		int32(serverpb.Services_ECHO),
-		pb.Echo_ServiceDesc,
+		int32(servicepb.Services_ECHO),
+		echopb.Echo_ServiceDesc,
 		&echoService{},
 		rpc.WithPublic(),
 		rpc.WithUnordered(),
@@ -80,11 +80,11 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 }
 
 type echoService struct {
-	pb.UnimplementedEchoServer
+	echopb.UnimplementedEchoServer
 }
 
-func (es *echoService) Send(ctx context.Context, msg *pb.Msg) (*clientpb.Response, error) {
+func (es *echoService) Send(ctx context.Context, msg *echopb.Msg) (*clientpb.Response, error) {
 	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), addr, msg.GetMessage())
 
-	return clientpb.NewResponse(int32(pb.Protocol_MSG), msg)
+	return clientpb.NewResponse(int32(echopb.Protocol_MSG), msg)
 }

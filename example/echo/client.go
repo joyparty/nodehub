@@ -8,8 +8,8 @@ import (
 
 	"github.com/joyparty/gokit"
 	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
-	serverpb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server"
-	pb "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echo"
+	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb"
+	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
 	"google.golang.org/grpc/codes"
@@ -18,7 +18,7 @@ import (
 
 var (
 	serverAddr      string
-	echoServiceCode = int32(serverpb.Services_ECHO)
+	echoServiceCode = int32(servicepb.Services_ECHO)
 )
 
 func init() {
@@ -49,13 +49,13 @@ func main() {
 		os.Exit(1)
 	})
 
-	client.OnReceive(int32(pb.Protocol_MSG), func(requestID uint32, reply *pb.Msg) {
+	client.OnReceive(int32(echopb.Protocol_MSG), func(requestID uint32, reply *echopb.Msg) {
 		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.Message)
 	})
 
 	for {
 		gokit.Must(
-			client.Call("Send", &pb.Msg{
+			client.Call("Send", &echopb.Msg{
 				Message: "hello world!",
 			}),
 		)
