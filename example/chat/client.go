@@ -4,140 +4,99 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
-	"sync/atomic"
+	"os"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/joyparty/gokit"
+	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
-	requestID  = &atomic.Uint32{}
 	serverAddr string
+	name       string
+	say        string
+	node       string
 
-	userName string
-	words    string
+	chatServiceCode = int32(servicepb.Services_ROOM)
 )
 
 func init() {
 	flag.StringVar(&serverAddr, "server", "127.0.0.1:9000", "server address")
-	flag.StringVar(&userName, "name", "no name", "user name")
-	flag.StringVar(&words, "say", "", "words send after join")
+	flag.StringVar(&name, "name", "", "user name")
+	flag.StringVar(&say, "say", "", "words send after join")
+	flag.StringVar(&node, "node", "", "node id")
 	flag.Parse()
-
-	logger.SetLogger(slog.Default())
 }
 
 func main() {
-	conn := mustReturn(newConn())
+	client := &chatClient{
+		WSClient: gokit.MustReturn(gateway.NewWSClient(fmt.Sprintf("ws://%s/grpc", serverAddr))),
+	}
+	// defer client.Close()
 
-	// show news
-	go func() {
-		for {
-			_, data, err := conn.ReadMessage()
-			if err != nil {
-				panic(fmt.Errorf("read message, %w", err))
-			}
+	client.WSClient.SetDefaultHandler(func(resp *clientpb.Response) {
+		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
+	})
 
-			response := &clientpb.Response{}
-			mustDo(proto.Unmarshal(data, response))
+	client.WSClient.OnReceive(gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(requestID uint32, reply *gatewaypb.RPCError) {
+		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
+			time.Now().Format(time.RFC3339),
+			requestID,
+			reply.ServiceCode,
+			reply.Method,
+			codes.Code(reply.Status.Code),
+			reply.Status.Message,
+		)
+		os.Exit(1)
+	})
 
-			switch response.ServiceCode {
-			case int32(servicepb.Services_ROOM):
-				switch response.Type {
-				case int32(roompb.Protocol_NEWS):
-					news := &roompb.News{}
-					mustDo(proto.Unmarshal(response.Data, news))
-
-					if news.FromId == "" {
-						fmt.Printf(">>> %s\n", news.Content)
-					} else {
-						fmt.Printf("%s: %s\n", news.FromName, news.Content)
-					}
-				default:
-					logger.Info("receive message", "serviceCode", response.ServiceCode, "type", response.Type)
-				}
-			default:
-				logger.Info("receive message", "serviceCode", response.ServiceCode, "type", response.Type)
-			}
+	client.OnReceive(int32(roompb.Protocol_NEWS), func(requestID uint32, reply *roompb.News) {
+		if reply.FromId == "" {
+			fmt.Printf(">>> %s\n", reply.Content)
+		} else {
+			fmt.Printf("%s: %s\n", reply.FromName, reply.Content)
 		}
-	}()
+	})
 
-	// join
-	req := mustReturn(newRequest(&roompb.JoinRequest{
-		Name: userName,
-	}))
-	req.ServiceCode = int32(servicepb.Services_ROOM)
-	req.Method = "Join"
-	mustDo(sendRequest(conn, req))
+	gokit.Must(
+		client.Call("Join", &roompb.JoinRequest{
+			Name: name,
+		}, gateway.WithNode(node)),
+	)
 
-	// leave
 	defer func() {
-		req := mustReturn(newRequest(&emptypb.Empty{}))
-		req.ServiceCode = int32(servicepb.Services_ROOM)
-		req.Method = "Leave"
-		sendRequest(conn, req)
-
+		client.Call("Leave", &emptypb.Empty{})
 		time.Sleep(1 * time.Second)
 	}()
 
-	if words != "" {
-		req = mustReturn(newRequest(&roompb.SayRequest{
-			Content: words,
-		}))
-		req.ServiceCode = int32(servicepb.Services_ROOM)
-		req.Method = "Say"
-		mustDo(sendRequest(conn, req))
-
+	if say != "" {
+		gokit.Must(
+			client.Call("Say", &roompb.SayRequest{
+				Content: say,
+			}),
+		)
 		time.Sleep(1 * time.Second)
 		return
 	}
 
-	// do nothing
 	<-context.Background().Done()
 }
 
-func newConn() (*websocket.Conn, error) {
-	endpoint := fmt.Sprintf("ws://%s/grpc", serverAddr)
-	conn, _, err := websocket.DefaultDialer.Dial(endpoint, nil)
-	return conn, err
+type chatClient struct {
+	*gateway.WSClient
 }
 
-func newRequest(msg proto.Message) (*clientpb.Request, error) {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	return &clientpb.Request{
-		Id:   requestID.Add(1),
-		Data: data,
-	}, nil
+func (c *chatClient) Call(method string, arg proto.Message, options ...gateway.CallOption) error {
+	return c.WSClient.Call(chatServiceCode, method, arg, options...)
 }
 
-func sendRequest(conn *websocket.Conn, req proto.Message) error {
-	data, err := proto.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshal request, %w", err)
-	}
-
-	return conn.WriteMessage(websocket.BinaryMessage, data)
-}
-
-func mustDo(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func mustReturn[T any](t T, er error) T {
-	if er != nil {
-		panic(er)
-	}
-	return t
+func (c *chatClient) OnReceive(messageType int32, handler any) {
+	c.WSClient.OnReceive(chatServiceCode, messageType, handler)
 }

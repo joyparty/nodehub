@@ -69,8 +69,8 @@ func (c *WSClient) run() {
 
 // Close 关闭客户端
 func (c *WSClient) Close() {
-	c.conn.Close()
 	close(c.done)
+	c.conn.Close()
 }
 
 // Call 发起远程调用
@@ -158,7 +158,7 @@ func (c *WSClient) responseStream() <-chan *clientpb.Response {
 			}
 
 			messageType, data, err := c.conn.ReadMessage()
-			if err != nil && !websocket.IsCloseError(err, websocket.CloseGoingAway) {
+			if err != nil && !websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 				panic(fmt.Errorf("read websocket, %w", err))
 			}
 

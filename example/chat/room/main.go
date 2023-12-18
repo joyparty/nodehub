@@ -35,11 +35,11 @@ func init() {
 	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
 	flag.Parse()
 
-	logger.SetLogger(slog.New(
-		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}),
-	))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
+
+	logger.SetLogger(slog.Default())
 
 	client := mustReturn(clientv3.New(clientv3.Config{
 		Endpoints: []string{"127.0.0.1:2379"},
@@ -73,7 +73,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 
 	if err := eventBus.Subscribe(context.Background(), func(ev event.UserConnected) {
 		service.boardcast(&roompb.News{
-			Content: fmt.Sprintf("event: user#%s connected", ev.UserID),
+			Content: fmt.Sprintf("EVENT: #%s connected", ev.UserID),
 		})
 	}); err != nil {
 		panic(err)
@@ -83,7 +83,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		service.members.Delete(ev.UserID)
 
 		service.boardcast(&roompb.News{
-			Content: fmt.Sprintf("event: user#%s disconnected", ev.UserID),
+			Content: fmt.Sprintf("EVENT: #%s disconnected", ev.UserID),
 		})
 	}); err != nil {
 		panic(err)
@@ -95,8 +95,9 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		roompb.Room_ServiceDesc,
 		service,
 		rpc.WithPublic(),
+		rpc.WithStateful(),
+		rpc.WithAllocation(cluster.ClientAllocate),
 	)
-
 	if err != nil {
 		return nil, err
 	}

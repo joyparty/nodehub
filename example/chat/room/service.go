@@ -27,24 +27,29 @@ type roomService struct {
 
 func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*emptypb.Empty, error) {
 	userID := mustUserID(ctx)
-	rs.members.Store(userID, req.Name)
+
+	userName := req.GetName()
+	if userName == "" {
+		userName = fmt.Sprintf("anonymous%s", userID)
+	}
+	rs.members.Store(userID, userName)
 
 	rs.boardcast(&roompb.News{
-		Content: fmt.Sprintf("%s#%s join", req.Name, userID),
+		Content: fmt.Sprintf("ROOM: #%s join", userID),
 	})
 
-	logger.Info("join", "name", req.Name, "id", userID)
+	logger.Info("join", "name", userName, "id", userID)
 	return emptyReply, nil
 }
 
 func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
 	userID := mustUserID(ctx)
 
-	if name, ok := rs.members.Load(userID); ok {
+	if _, ok := rs.members.Load(userID); ok {
 		rs.members.Delete(userID)
 
 		rs.boardcast(&roompb.News{
-			Content: fmt.Sprintf("%s#%s leave", name, userID),
+			Content: fmt.Sprintf("ROOM: #%s leave", userID),
 		})
 	}
 

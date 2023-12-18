@@ -34,11 +34,11 @@ func init() {
 	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
 	flag.Parse()
 
-	logger.SetLogger(slog.New(
-		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		}),
-	))
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
+
+	logger.SetLogger(slog.Default())
 
 	client := mustReturn(clientv3.New(clientv3.Config{
 		Endpoints: []string{"127.0.0.1:2379"},
@@ -59,13 +59,14 @@ func main() {
 
 	proxy := gateway.NewWebsocketProxy(registry, listenAddr,
 		gateway.WithNotifier(subscriber),
+		gateway.WithEventBus(eventBus),
+		gateway.WithRequestLog(slog.Default()),
 		gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
 			userID = fmt.Sprintf("%d", uid.Add(1))
 			md = metadata.MD{}
 			ok = true
 			return
 		}),
-		gateway.WithEventBus(eventBus),
 	)
 
 	node := nodehub.NewNode("gateway", registry)
