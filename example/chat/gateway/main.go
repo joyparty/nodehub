@@ -57,7 +57,7 @@ func init() {
 func main() {
 	uid := &atomic.Int32{}
 
-	proxy := gateway.NewWebsocketProxy(registry, listenAddr,
+	proxy := gateway.NewWSProxy(registry, listenAddr,
 		gateway.WithNotifier(subscriber),
 		gateway.WithEventBus(eventBus),
 		gateway.WithRequestLog(slog.Default()),
