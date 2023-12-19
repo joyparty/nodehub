@@ -340,13 +340,12 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, s
 				return fmt.Errorf("call grpc, %w", err)
 			}
 
-			// google.protobuf.Empty类型，不需要下行数据
-			if proto.Size(output) == 0 {
+			if req.GetNoReply() {
 				return nil
 			}
+
 			output.RequestId = req.Id
 			output.ServiceCode = req.ServiceCode
-
 			return sess.Send(output)
 		}
 	}

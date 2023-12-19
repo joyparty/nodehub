@@ -66,21 +66,27 @@ func main() {
 	})
 
 	gokit.Must(
-		client.Call("Join", &roompb.JoinRequest{
-			Name: name,
-		}, gateway.WithNode(node)),
+		client.Call("Join",
+			&roompb.JoinRequest{Name: name},
+			gateway.WithNoReply(),
+			gateway.WithNode(node),
+		),
 	)
 
 	defer func() {
-		client.Call("Leave", &emptypb.Empty{})
+		client.Call("Leave",
+			&emptypb.Empty{},
+			gateway.WithNoReply(),
+		)
 		time.Sleep(1 * time.Second)
 	}()
 
 	if say != "" {
 		gokit.Must(
-			client.Call("Say", &roompb.SayRequest{
-				Content: say,
-			}),
+			client.Call("Say",
+				&roompb.SayRequest{Content: say},
+				gateway.WithNoReply(),
+			),
 		)
 		time.Sleep(1 * time.Second)
 		return

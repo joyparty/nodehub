@@ -32,6 +32,9 @@ message Request {
 	// grpc方法对应的protobuf message序列化之后的数据
 	// 具体对应关系需要自行查看grpc服务的protobuf文件
 	bytes data = 5;
+
+	// 是否需要网关返回response
+	bool no_reply = 6;
 }
 
 message Response {

@@ -210,3 +210,10 @@ func WithNode(nodeID string) CallOption {
 		req.NodeId = nodeID
 	}
 }
+
+// WithNoReply 不需要回复
+func WithNoReply() CallOption {
+	return func(req *clientpb.Request) {
+		req.NoReply = true
+	}
+}
