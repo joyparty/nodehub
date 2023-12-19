@@ -67,7 +67,7 @@ type WSProxy struct {
 }
 
 // NewWSProxy 构造函数
-func NewWSProxy(registry *cluster.Registry, listenAddr string, opt ...WebsocketProxyOption) *WSProxy {
+func NewWSProxy(registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
 	wp := &WSProxy{
 		registry:   registry,
 		sessionHub: newSessionHub(),
@@ -567,11 +567,11 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 	return
 }
 
-// WebsocketProxyOption 配置选项
-type WebsocketProxyOption func(*WSProxy)
+// WSProxyOption 配置选项
+type WSProxyOption func(*WSProxy)
 
 // WithNotifier 设置主动下发消息订阅者
-func WithNotifier(n notification.Subscriber) WebsocketProxyOption {
+func WithNotifier(n notification.Subscriber) WSProxyOption {
 	return func(wp *WSProxy) {
 		wp.notifier = n
 	}
@@ -587,21 +587,21 @@ func WithNotifier(n notification.Subscriber) WebsocketProxyOption {
 type Authorize func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool)
 
 // WithAuthorize 设置身份验证逻辑
-func WithAuthorize(fn Authorize) WebsocketProxyOption {
+func WithAuthorize(fn Authorize) WSProxyOption {
 	return func(wp *WSProxy) {
 		wp.authorize = fn
 	}
 }
 
 // WithRequestLog 设置是否记录请求日志
-func WithRequestLog(l logger.Logger) WebsocketProxyOption {
+func WithRequestLog(l logger.Logger) WSProxyOption {
 	return func(wp *WSProxy) {
 		wp.requestLogger = l
 	}
 }
 
 // WithEventBus 设置事件总线
-func WithEventBus(bus event.Bus) WebsocketProxyOption {
+func WithEventBus(bus event.Bus) WSProxyOption {
 	return func(wp *WSProxy) {
 		wp.eventBus = bus
 	}
