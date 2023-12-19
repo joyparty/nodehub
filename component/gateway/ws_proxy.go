@@ -48,10 +48,10 @@ var (
 // ServiceCode gateway服务的service code默认为1
 const ServiceCode = 1
 
-// WebsocketProxy 网关服务器
+// WSProxy 网关服务器
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
-type WebsocketProxy struct {
+type WSProxy struct {
 	registry  *cluster.Registry
 	notifier  notification.Subscriber
 	authorize Authorize
@@ -66,9 +66,9 @@ type WebsocketProxy struct {
 	done chan struct{}
 }
 
-// NewWebsocketProxy 构造函数
-func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...WebsocketProxyOption) *WebsocketProxy {
-	wp := &WebsocketProxy{
+// NewWSProxy 构造函数
+func NewWSProxy(registry *cluster.Registry, listenAddr string, opt ...WebsocketProxyOption) *WSProxy {
+	wp := &WSProxy{
 		registry:   registry,
 		sessionHub: newSessionHub(),
 		stateTable: newStateTable(),
@@ -92,17 +92,17 @@ func NewWebsocketProxy(registry *cluster.Registry, listenAddr string, opt ...Web
 }
 
 // Name 服务名称
-func (wp *WebsocketProxy) Name() string {
-	return "gateway"
+func (wp *WSProxy) Name() string {
+	return "wsproxy"
 }
 
 // CompleteNodeEntry 补全节点信息
-func (wp *WebsocketProxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
+func (wp *WSProxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Websocket = fmt.Sprintf("ws://%s/grpc", wp.server.Addr)
 }
 
 // Start 启动websocket服务器
-func (wp *WebsocketProxy) Start(ctx context.Context) error {
+func (wp *WSProxy) Start(ctx context.Context) error {
 	l, err := net.Listen("tcp", wp.server.Addr)
 	if err != nil {
 		return fmt.Errorf("listen, %w", err)
@@ -139,7 +139,7 @@ func (wp *WebsocketProxy) Start(ctx context.Context) error {
 }
 
 // Stop 停止websocket服务器
-func (wp *WebsocketProxy) Stop(ctx context.Context) error {
+func (wp *WSProxy) Stop(ctx context.Context) error {
 	if wp.authorize != nil && wp.eventBus != nil {
 		wp.sessionHub.Range(func(s Session) bool {
 			wp.eventBus.Publish(context.Background(), event.UserDisconnected{
@@ -155,7 +155,7 @@ func (wp *WebsocketProxy) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
+func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	sess, err := wp.newSession(w, r)
 	if err != nil {
 		logger.Error("initialize session", "error", err)
@@ -214,7 +214,7 @@ func (wp *WebsocketProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
+func (wp *WSProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
 	var (
 		userID string
 		md     = metadata.MD{}
@@ -247,7 +247,7 @@ func (wp *WebsocketProxy) newSession(w http.ResponseWriter, r *http.Request) (Se
 	return sess, nil
 }
 
-func (wp *WebsocketProxy) onConnect(ctx context.Context, sess Session) {
+func (wp *WSProxy) onConnect(ctx context.Context, sess Session) {
 	wp.sessionHub.Store(sess)
 
 	// 放弃之前断线创造的清理任务
@@ -267,7 +267,7 @@ func (wp *WebsocketProxy) onConnect(ctx context.Context, sess Session) {
 	logger.Info("client connected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 }
 
-func (wp *WebsocketProxy) onDisconnect(ctx context.Context, sess Session) {
+func (wp *WSProxy) onDisconnect(ctx context.Context, sess Session) {
 	sessID := sess.ID()
 	wp.sessionHub.Delete(sessID)
 	sess.Close()
@@ -289,7 +289,7 @@ func (wp *WebsocketProxy) onDisconnect(ctx context.Context, sess Session) {
 	logger.Info("client disconnected", "sessionID", sessID, "remoteAddr", sess.RemoteAddr())
 }
 
-func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) (exec func(), unordered bool) {
+func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) (exec func(), unordered bool) {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	var err error
 	desc, ok := wp.registry.GetGRPCDesc(req.ServiceCode)
@@ -374,7 +374,7 @@ func (wp *WebsocketProxy) newUnaryRequest(ctx context.Context, req *clientpb.Req
 	return
 }
 
-func (wp *WebsocketProxy) getUpstream(sess Session, req *clientpb.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
+func (wp *WSProxy) getUpstream(sess Session, req *clientpb.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
 	var nodeID string
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
@@ -431,7 +431,7 @@ FINISH:
 	return
 }
 
-func (wp *WebsocketProxy) logRequest(
+func (wp *WSProxy) logRequest(
 	ctx context.Context,
 	upstream *grpc.ClientConn,
 	sess Session,
@@ -488,7 +488,7 @@ type serviceReqeust struct {
 
 // 把每个service的请求分发到不同的worker处理
 // 确保对同一个service的请求是顺序处理的
-func (wp *WebsocketProxy) runRequestQueue(ctx context.Context, queue <-chan serviceReqeust) {
+func (wp *WSProxy) runRequestQueue(ctx context.Context, queue <-chan serviceReqeust) {
 	type worker struct {
 		C          chan func()
 		ActiveTime time.Time
@@ -541,7 +541,7 @@ func (wp *WebsocketProxy) runRequestQueue(ctx context.Context, queue <-chan serv
 	}
 }
 
-func (wp *WebsocketProxy) notificationLoop() {
+func (wp *WSProxy) notificationLoop() {
 	if wp.notifier == nil {
 		return
 	}
@@ -569,11 +569,11 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 }
 
 // WebsocketProxyOption 配置选项
-type WebsocketProxyOption func(*WebsocketProxy)
+type WebsocketProxyOption func(*WSProxy)
 
 // WithNotifier 设置主动下发消息订阅者
 func WithNotifier(n notification.Subscriber) WebsocketProxyOption {
-	return func(wp *WebsocketProxy) {
+	return func(wp *WSProxy) {
 		wp.notifier = n
 	}
 }
@@ -589,21 +589,21 @@ type Authorize func(w http.ResponseWriter, r *http.Request) (userID string, md m
 
 // WithAuthorize 设置身份验证逻辑
 func WithAuthorize(fn Authorize) WebsocketProxyOption {
-	return func(wp *WebsocketProxy) {
+	return func(wp *WSProxy) {
 		wp.authorize = fn
 	}
 }
 
 // WithRequestLog 设置是否记录请求日志
 func WithRequestLog(l logger.Logger) WebsocketProxyOption {
-	return func(wp *WebsocketProxy) {
+	return func(wp *WSProxy) {
 		wp.requestLogger = l
 	}
 }
 
 // WithEventBus 设置事件总线
 func WithEventBus(bus event.Bus) WebsocketProxyOption {
-	return func(wp *WebsocketProxy) {
+	return func(wp *WSProxy) {
 		wp.eventBus = bus
 	}
 }

@@ -13,9 +13,9 @@ import (
 
 const (
 	// MDUserID grpc metadata中的user id key
-	MDUserID = "x-user-id"
+	MDUserID = "x-user"
 	// MDTransactionID grpc metadata中的transaction id key，用于跟踪请求
-	MDTransactionID = "x-trans-id"
+	MDTransactionID = "x-trans"
 )
 
 // GRPCServer grpc服务
