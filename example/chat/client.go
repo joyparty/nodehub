@@ -9,8 +9,8 @@ import (
 
 	"github.com/joyparty/gokit"
 	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
+	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
-	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
 	"google.golang.org/grpc/codes"
@@ -24,7 +24,7 @@ var (
 	say        string
 	node       string
 
-	chatServiceCode = int32(servicepb.Services_ROOM)
+	chatServiceCode = int32(clusterpb.Services_ROOM)
 )
 
 func init() {

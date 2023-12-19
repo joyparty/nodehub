@@ -4,17 +4,9 @@ package room;
 
 option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb";
 
-import "google/protobuf/empty.proto";
-
 enum Protocol {
 	UNSPECIFIED = 0;
 	NEWS = 1;
-}
-
-service Room {
-	rpc Join(JoinRequest) returns (google.protobuf.Empty) {}
-	rpc Leave(google.protobuf.Empty) returns (google.protobuf.Empty) {}
-	rpc Say(SayRequest) returns (google.protobuf.Empty) {}
 }
 
 message JoinRequest {

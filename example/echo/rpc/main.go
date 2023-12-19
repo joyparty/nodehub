@@ -11,8 +11,8 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
+	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb"
-	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -66,7 +66,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 	gs := rpc.NewGRPCServer(addr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 
 	err := gs.RegisterService(
-		int32(servicepb.Services_ECHO),
+		int32(clusterpb.Services_ECHO),
 		echopb.Echo_ServiceDesc,
 		&echoService{},
 		rpc.WithPublic(),

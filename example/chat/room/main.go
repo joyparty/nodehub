@@ -13,8 +13,8 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
 	"gitlab.haochang.tv/gopkg/nodehub/event"
+	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
-	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/notification"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -91,7 +91,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 
 	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 	err := server.RegisterService(
-		int32(servicepb.Services_ROOM),
+		int32(clusterpb.Services_ROOM),
 		roompb.Room_ServiceDesc,
 		service,
 		rpc.WithPublic(),

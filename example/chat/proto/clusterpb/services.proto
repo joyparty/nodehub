@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package cluster;
+
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/clusterpb";
+
+enum Services {
+	UNSPECIFIED = 0;
+	GATEWAY = 1;
+	ROOM = 2;
+}

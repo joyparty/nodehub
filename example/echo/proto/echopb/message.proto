@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package echo;
+
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echopb";
+
+enum Protocol {
+	UNSPECIFIED = 0;
+	MSG = 1;
+}
+
+message Msg {
+	string message = 1;
+}

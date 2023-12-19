@@ -8,8 +8,8 @@ import (
 
 	"github.com/joyparty/gokit"
 	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
+	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb"
-	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
 	"google.golang.org/grpc/codes"
@@ -18,7 +18,7 @@ import (
 
 var (
 	serverAddr      string
-	echoServiceCode = int32(servicepb.Services_ECHO)
+	echoServiceCode = int32(clusterpb.Services_ECHO)
 )
 
 func init() {

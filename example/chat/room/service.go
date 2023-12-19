@@ -7,8 +7,8 @@ import (
 
 	"github.com/joyparty/gokit"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
+	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
-	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/servicepb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/notification"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
@@ -79,7 +79,7 @@ func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptyp
 
 func (rs *roomService) boardcast(news *roompb.News) {
 	response, _ := clientpb.NewResponse(int32(roompb.Protocol_NEWS), news)
-	response.ServiceCode = int32(servicepb.Services_ROOM)
+	response.ServiceCode = int32(clusterpb.Services_ROOM)
 
 	receiver := []string{}
 	rs.members.Range(func(id, name string) bool {
@@ -95,7 +95,7 @@ func (rs *roomService) boardcast(news *roompb.News) {
 
 func (rs *roomService) unicast(toName string, news *roompb.News) {
 	response, _ := clientpb.NewResponse(int32(roompb.Protocol_NEWS), news)
-	response.ServiceCode = int32(servicepb.Services_ROOM)
+	response.ServiceCode = int32(clusterpb.Services_ROOM)
 
 	rs.members.Range(func(id, name string) bool {
 		if name == toName {
