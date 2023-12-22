@@ -44,9 +44,6 @@ var (
 	}
 )
 
-// ServiceCode gateway服务的service code默认为1
-const ServiceCode = 1
-
 // WSProxy 网关服务器
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
@@ -363,7 +360,6 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *nodehubpb.Request, 
 					Status:         s.Proto(),
 				})
 				resp.RequestId = req.Id
-				resp.FromService = ServiceCode
 
 				sess.Send(resp)
 			}

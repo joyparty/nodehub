@@ -44,7 +44,7 @@ func main() {
 		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
 	})
 
-	client.WSClient.OnReceive(gateway.ServiceCode, int32(nodehubpb.Protocol_RPC_ERROR), func(requestID uint32, reply *nodehubpb.RPCError) {
+	client.WSClient.OnReceive(0, int32(nodehubpb.Protocol_RPC_ERROR), func(requestID uint32, reply *nodehubpb.RPCError) {
 		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
 			time.Now().Format(time.RFC3339),
 			requestID,

@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"errors"
 
 	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
@@ -30,6 +31,10 @@ func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
 
 // Publish 把消息发布到消息队列
 func (rq *RedisMQ) Publish(ctx context.Context, message *nodehubpb.Notification) error {
+	if message.GetContent().GetFromService() == 0 {
+		return errors.New("invalid content, from_service is required")
+	}
+
 	payload, err := proto.Marshal(message)
 	if err != nil {
 		return err

@@ -6,6 +6,5 @@ option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/cluster
 
 enum Services {
 	UNSPECIFIED = 0;
-	GATEWAY = 1;
-	ECHO = 2;
+	ECHO = 1;
 }

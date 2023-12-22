@@ -6,6 +6,5 @@ option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/cluster
 
 enum Services {
 	UNSPECIFIED = 0;
-	GATEWAY = 1;
-	ROOM = 2;
+	ROOM = 1;
 }
