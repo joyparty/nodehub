@@ -49,8 +49,8 @@ func main() {
 		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
 			time.Now().Format(time.RFC3339),
 			requestID,
-			reply.ServiceCode,
-			reply.Method,
+			reply.GetRequestService(),
+			reply.GetRequestMethod(),
 			codes.Code(reply.Status.Code),
 			reply.Status.Message,
 		)

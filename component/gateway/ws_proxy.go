@@ -345,7 +345,7 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, s
 			}
 
 			output.RequestId = req.Id
-			output.ServiceCode = req.ServiceCode
+			output.FromService = req.ServiceCode
 			return sess.Send(output)
 		}
 	}
@@ -359,12 +359,12 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, s
 				}
 
 				resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
-					ServiceCode: req.ServiceCode,
-					Method:      req.Method,
-					Status:      s.Proto(),
+					RequestService: req.ServiceCode,
+					RequestMethod:  req.Method,
+					Status:         s.Proto(),
 				})
 				resp.RequestId = req.Id
-				resp.ServiceCode = ServiceCode
+				resp.FromService = ServiceCode
 
 				sess.Send(resp)
 			}

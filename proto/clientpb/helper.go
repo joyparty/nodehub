@@ -42,7 +42,7 @@ func ResetRequest(req *Request) {
 // ResetResponse 重置响应对象
 func ResetResponse(resp *Response) {
 	resp.RequestId = 0
-	resp.ServiceCode = 0
+	resp.FromService = 0
 	resp.Type = 0
 
 	if len(resp.Data) > 0 {

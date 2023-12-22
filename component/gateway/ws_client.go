@@ -56,7 +56,7 @@ func (c *WSClient) run() {
 				return
 			}
 
-			if handlers, ok := c.handlers.Load(resp.ServiceCode); ok {
+			if handlers, ok := c.handlers.Load(resp.FromService); ok {
 				if handler, ok := handlers.Load(resp.Type); ok {
 					handler(resp)
 				}

@@ -192,7 +192,7 @@ func (ws *wsSession) sendLoop() {
 					if err := proto.Unmarshal(payload.data, message); err == nil {
 						args = append(args,
 							"requestID", message.GetRequestId(),
-							"serviceCode", message.GetServiceCode(),
+							"fromService", message.GetFromService(),
 							"type", message.GetType(),
 						)
 					}

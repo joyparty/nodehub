@@ -14,10 +14,10 @@ enum Protocol {
 // 网关透传grpc请求后，返回的grpc错误
 message RPCError {
 	// request消息请求的服务
-	int32 service_code = 1;
+	int32 request_service = 1;
 
 	// request消息请求的方法
-	string method = 2;
+	string request_method = 2;
 
 	// 详细错误信息
 	google.rpc.Status status = 3;
