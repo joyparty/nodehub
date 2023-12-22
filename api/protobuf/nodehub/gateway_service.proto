@@ -4,18 +4,19 @@ package nodehub;
 
 option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb";
 
-import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
+// 网关功能接口，供内部服务调用
 service Gateway {
 	// 会话是否存在
 	rpc IsSessionExist (IsSessionExistRequest) returns (IsSessionExistResponse) {}
 	// 修改状态服务路由
-	rpc StoreServiceRoute (StoreServiceRouteRequest) returns (google.empty.Empty) {}
+	rpc SetServiceRoute (SetServiceRouteRequest) returns (google.protobuf.Empty) {}
 	// 删除状态服务路由
-	rpc RemoveServiceRoute (RemoveServiceRouteRequest) returns (google.empty.Empty) {}
+	rpc RemoveServiceRoute (RemoveServiceRouteRequest) returns (google.protobuf.Empty) {}
 }
 
-message StoreServiceRouteRequest {
+message SetServiceRouteRequest {
 	int32 service_code = 1;
 	string session_id = 2;
 	string node_id = 3;
@@ -31,5 +32,6 @@ message IsSessionExistRequest {
 }
 
 message IsSessionExistResponse {
-	bool exist = 1;
+	string session_id = 1;
+	bool exist = 2;
 }

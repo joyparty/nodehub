@@ -10,8 +10,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
 	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 )
@@ -33,11 +32,11 @@ func main() {
 	}
 	defer client.Close()
 
-	client.WSClient.SetDefaultHandler(func(resp *clientpb.Response) {
+	client.WSClient.SetDefaultHandler(func(resp *nodehubpb.Reply) {
 		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
 	})
 
-	client.WSClient.OnReceive(gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(requestID uint32, reply *gatewaypb.RPCError) {
+	client.WSClient.OnReceive(gateway.ServiceCode, int32(nodehubpb.Protocol_RPC_ERROR), func(requestID uint32, reply *nodehubpb.RPCError) {
 		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
 			time.Now().Format(time.RFC3339),
 			requestID,

@@ -19,8 +19,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/event"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/notification"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/gatewaypb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -34,13 +33,13 @@ var (
 
 	requestPool = &sync.Pool{
 		New: func() any {
-			return &clientpb.Request{}
+			return &nodehubpb.Request{}
 		},
 	}
 
-	responsePool = &sync.Pool{
+	replyPool = &sync.Pool{
 		New: func() any {
-			return &clientpb.Response{}
+			return &nodehubpb.Reply{}
 		},
 	}
 )
@@ -179,8 +178,8 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 
-		req := requestPool.Get().(*clientpb.Request)
-		clientpb.ResetRequest(req)
+		req := requestPool.Get().(*nodehubpb.Request)
+		nodehubpb.ResetRequest(req)
 
 		if err := sess.Recv(req); err != nil {
 			requestPool.Put(req)
@@ -289,7 +288,7 @@ func (wp *WSProxy) onDisconnect(ctx context.Context, sess Session) {
 	logger.Info("client disconnected", "sessionID", sessID, "remoteAddr", sess.RemoteAddr())
 }
 
-func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, sess Session) (exec func(), unordered bool) {
+func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *nodehubpb.Request, sess Session) (exec func(), unordered bool) {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	var err error
 	desc, ok := wp.registry.GetGRPCDesc(req.ServiceCode)
@@ -327,9 +326,9 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, s
 				return fmt.Errorf("unmarshal request data, %w", err)
 			}
 
-			output := responsePool.Get().(*clientpb.Response)
-			defer responsePool.Put(output)
-			clientpb.ResetResponse(output)
+			output := replyPool.Get().(*nodehubpb.Reply)
+			defer replyPool.Put(output)
+			nodehubpb.ResetReply(output)
 
 			md := sess.MetadataCopy()
 			md.Set(rpc.MDTransactionID, ulid.Make().String()) // 事务ID
@@ -358,7 +357,7 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, s
 					s = status.New(codes.Unknown, "unknown error")
 				}
 
-				resp, _ := clientpb.NewResponse(int32(gatewaypb.Protocol_RPC_ERROR), &gatewaypb.RPCError{
+				resp, _ := nodehubpb.NewReply(int32(nodehubpb.Protocol_RPC_ERROR), &nodehubpb.RPCError{
 					RequestService: req.ServiceCode,
 					RequestMethod:  req.Method,
 					Status:         s.Proto(),
@@ -373,7 +372,7 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *clientpb.Request, s
 	return
 }
 
-func (wp *WSProxy) getUpstream(sess Session, req *clientpb.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
+func (wp *WSProxy) getUpstream(sess Session, req *nodehubpb.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
 	var nodeID string
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
@@ -434,7 +433,7 @@ func (wp *WSProxy) logRequest(
 	ctx context.Context,
 	upstream *grpc.ClientConn,
 	sess Session,
-	req *clientpb.Request,
+	req *nodehubpb.Request,
 	start time.Time,
 	err error,
 ) {
@@ -545,7 +544,7 @@ func (wp *WSProxy) notificationLoop() {
 		return
 	}
 
-	wp.notifier.Subscribe(context.Background(), func(msg *clientpb.Notification) {
+	wp.notifier.Subscribe(context.Background(), func(msg *nodehubpb.Notification) {
 		// 只发送5分钟内的消息
 		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
 			for _, userID := range msg.GetReceiver() {

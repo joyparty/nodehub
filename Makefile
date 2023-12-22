@@ -6,4 +6,10 @@ ROOT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 # rules
 .PHONY: build_protobuf
 build_protobuf:
-	protoc --proto_path=$(ROOT_DIR)proto --go_out=$(ROOT_DIR)proto --go_opt=paths=source_relative $(ROOT_DIR)proto/**/*.proto
+	(cd $(ROOT_DIR) && protoc \
+		--proto_path=./api/protobuf \
+		--go_out=./proto \
+		--go_opt=module=gitlab.haochang.tv/gopkg/nodehub/proto \
+		--go-grpc_out=./proto \
+		--go-grpc_opt=module=gitlab.haochang.tv/gopkg/nodehub/proto \
+		./api/protobuf/nodehub/*.proto)

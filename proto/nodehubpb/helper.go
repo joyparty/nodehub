@@ -1,25 +1,25 @@
-package clientpb
+package nodehubpb
 
 import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// NewResponse 把proto message打包为client.Response
-func NewResponse(msgType int32, msg proto.Message) (*Response, error) {
+// NewReply 把proto message打包Reply
+func NewReply(msgType int32, msg proto.Message) (*Reply, error) {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Response{
-		Type: msgType,
-		Data: data,
+	return &Reply{
+		MessageType: msgType,
+		Data:        data,
 	}, nil
 }
 
 // NewNotification 创建push消息
-func NewNotification(receiver []string, content *Response) *Notification {
+func NewNotification(receiver []string, content *Reply) *Notification {
 	return &Notification{
 		Receiver: receiver,
 		Time:     timestamppb.Now(),
@@ -39,11 +39,11 @@ func ResetRequest(req *Request) {
 	}
 }
 
-// ResetResponse 重置响应对象
-func ResetResponse(resp *Response) {
+// ResetReply 重置响应对象
+func ResetReply(resp *Reply) {
 	resp.RequestId = 0
 	resp.FromService = 0
-	resp.Type = 0
+	resp.MessageType = 0
 
 	if len(resp.Data) > 0 {
 		resp.Data = resp.Data[:0]

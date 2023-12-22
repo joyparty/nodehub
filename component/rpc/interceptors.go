@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -40,8 +40,8 @@ func LogUnary(l logger.Logger) grpc.UnaryServerInterceptor {
 
 				l.Error("grpc request", vals...)
 			} else {
-				if v, ok := resp.(*clientpb.Response); ok && proto.Size(v) > 0 {
-					vals = append(vals, "respType", v.Type)
+				if v, ok := resp.(*nodehubpb.Reply); ok && proto.Size(v) > 0 {
+					vals = append(vals, "respType", v.GetMessageType())
 				}
 
 				l.Info("grpc request", vals...)

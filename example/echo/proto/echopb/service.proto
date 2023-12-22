@@ -4,9 +4,9 @@ package echo;
 
 option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echopb";
 
-import "clientpb/client.proto";
+import "nodehub/client.proto";
 import "echopb/message.proto";
 
 service Echo {
-	rpc Send(Msg) returns (client.Response);
+	rpc Send(Msg) returns (nodehub.Reply);
 }

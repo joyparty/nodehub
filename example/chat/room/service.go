@@ -11,7 +11,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/notification"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/clientpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -78,7 +78,7 @@ func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptyp
 }
 
 func (rs *roomService) boardcast(news *roompb.News) {
-	response, _ := clientpb.NewResponse(int32(roompb.Protocol_NEWS), news)
+	response, _ := nodehubpb.NewReply(int32(roompb.Protocol_NEWS), news)
 	response.FromService = int32(clusterpb.Services_ROOM)
 
 	receiver := []string{}
@@ -87,19 +87,19 @@ func (rs *roomService) boardcast(news *roompb.News) {
 		return true
 	})
 
-	notify := clientpb.NewNotification(receiver, response)
+	notify := nodehubpb.NewNotification(receiver, response)
 	if err := rs.publisher.Publish(context.Background(), notify); err != nil {
 		logger.Error("publish notification", "error", err)
 	}
 }
 
 func (rs *roomService) unicast(toName string, news *roompb.News) {
-	response, _ := clientpb.NewResponse(int32(roompb.Protocol_NEWS), news)
+	response, _ := nodehubpb.NewReply(int32(roompb.Protocol_NEWS), news)
 	response.FromService = int32(clusterpb.Services_ROOM)
 
 	rs.members.Range(func(id, name string) bool {
 		if name == toName {
-			notify := clientpb.NewNotification([]string{id}, response)
+			notify := nodehubpb.NewNotification([]string{id}, response)
 			if err := rs.publisher.Publish(context.Background(), notify); err != nil {
 				logger.Error("publish notification", "error", err)
 			}
