@@ -52,6 +52,11 @@ func (r *grpcResolver) Update(node NodeEntry) {
 	r.allNodes.Store(node.ID, node)
 
 	for _, desc := range node.GRPC.Services {
+		// code为负数的是框架内置服务，不需要服务发现
+		if desc.Code < 0 {
+			continue
+		}
+
 		if v, ok := r.services.Load(desc.Code); ok {
 			if !reflect.DeepEqual(v, desc) {
 				logger.Error("unexpected grpc service description", "old", v, "new", desc)

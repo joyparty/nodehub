@@ -99,6 +99,14 @@ func (wp *WSProxy) Name() string {
 	return "wsproxy"
 }
 
+// NewGRPCService 创建grpc服务
+func (wp *WSProxy) NewGRPCService() nodehubpb.GatewayServer {
+	return &gwService{
+		sessionHub: wp.sessionHub,
+		stateTable: wp.stateTable,
+	}
+}
+
 // CompleteNodeEntry 补全节点信息
 func (wp *WSProxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Websocket = fmt.Sprintf("ws://%s/grpc", wp.server.Addr)

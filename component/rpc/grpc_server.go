@@ -20,19 +20,26 @@ const (
 	MDGateway = "x-gw"
 )
 
+const (
+	// NodeService 节点管理服务，每个内部节点都会内置这个grpc服务
+	NodeService int32 = -1
+	// GatewayService 网关服务代码，每个网关节点都会内置这个grpc服务
+	GatewayService int32 = -2
+)
+
 // GRPCServer grpc服务
 type GRPCServer struct {
-	endpoint string
-	server   *grpc.Server
-	services map[int32]cluster.GRPCServiceDesc
+	listenAddr string
+	server     *grpc.Server
+	services   map[int32]cluster.GRPCServiceDesc
 }
 
 // NewGRPCServer 构造函数
-func NewGRPCServer(endpoint string, opts ...grpc.ServerOption) *GRPCServer {
+func NewGRPCServer(listenAddr string, opts ...grpc.ServerOption) *GRPCServer {
 	return &GRPCServer{
-		endpoint: endpoint,
-		server:   grpc.NewServer(opts...),
-		services: make(map[int32]cluster.GRPCServiceDesc),
+		listenAddr: listenAddr,
+		server:     grpc.NewServer(opts...),
+		services:   make(map[int32]cluster.GRPCServiceDesc),
 	}
 }
 
@@ -64,7 +71,7 @@ func (gs *GRPCServer) Name() string {
 
 // Start 启动服务
 func (gs *GRPCServer) Start(ctx context.Context) error {
-	l, err := net.Listen("tcp", gs.endpoint)
+	l, err := net.Listen("tcp", gs.listenAddr)
 	if err != nil {
 		return fmt.Errorf("listen tcp, %w", err)
 	}
@@ -89,7 +96,7 @@ func (gs *GRPCServer) Stop(ctx context.Context) error {
 // CompleteNodeEntry 设置条目中的grpc信息
 func (gs *GRPCServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.GRPC = cluster.GRPCEntry{
-		Endpoint: gs.endpoint,
+		Endpoint: gs.listenAddr,
 		Services: lo.Values(gs.services),
 	}
 }

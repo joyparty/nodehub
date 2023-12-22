@@ -8,7 +8,11 @@ import (
 
 	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
+	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
+	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	"google.golang.org/grpc"
 )
 
 // Component 组件
@@ -154,4 +158,26 @@ func (n *Node) Entry() cluster.NodeEntry {
 		}
 	}
 	return entry
+}
+
+// GatewayConfig 网关配置
+type GatewayConfig struct {
+	WSProxyListen string
+	WSProxyOption []gateway.WSProxyOption
+	GRPCListen    string
+	GRPCOption    []grpc.ServerOption
+}
+
+// NewGatewayNode 构造一个网关节点
+func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
+	node := NewNode("gateway", registry)
+
+	gw := gateway.NewWSProxy(node.ID(), registry, config.WSProxyListen, config.WSProxyOption...)
+	node.AddComponent(gw)
+
+	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCOption...)
+	gs.RegisterService(rpc.GatewayService, nodehubpb.Gateway_ServiceDesc, gw.NewGRPCService(), rpc.WithUnordered())
+	node.AddComponent(gs)
+
+	return node
 }

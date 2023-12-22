@@ -9,6 +9,7 @@ import (
 	"github.com/joyparty/gokit"
 	"github.com/reactivex/rxgo/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
@@ -182,6 +183,21 @@ func (r *Registry) PickGRPCNode(serviceCode int32) (nodeID string, err error) {
 // GetGRPCConn 获取指定节点的grpc连接
 func (r *Registry) GetGRPCConn(nodeID string) (conn *grpc.ClientConn, err error) {
 	return r.grpcResolver.GetConn(nodeID)
+}
+
+// GetGatewayClient 获取网关grpc服务客户端
+func (r *Registry) GetGatewayClient(nodeID string) (nodehubpb.GatewayClient, error) {
+	entry, ok := r.allNodes.Load(nodeID)
+	if !ok {
+		return nil, ErrNodeNotFoundOrDown
+	}
+
+	conn, err := r.grpcResolver.getConn(entry.GRPC.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	return nodehubpb.NewGatewayClient(conn), nil
 }
 
 // ForeachNodes 遍历所有节点

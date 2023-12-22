@@ -25,12 +25,14 @@ var (
 	subscriber notification.Subscriber
 	eventBus   event.Bus
 
-	listenAddr string
-	redisAddr  string
+	websocketListen string
+	grpcListen      string
+	redisAddr       string
 )
 
 func init() {
-	flag.StringVar(&listenAddr, "listen", "127.0.0.1:9000", "listen address")
+	flag.StringVar(&websocketListen, "websocket", "127.0.0.1:9000", "websocket listen address")
+	flag.StringVar(&grpcListen, "grpc", "127.0.0.1:10000", "grpc listen address")
 	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
 	flag.Parse()
 
@@ -55,23 +57,24 @@ func init() {
 }
 
 func main() {
-	node := nodehub.NewNode("gateway", registry)
-
 	uid := &atomic.Int32{}
-	proxy := gateway.NewWSProxy(node.ID(), registry, listenAddr,
-		gateway.WithNotifier(subscriber),
-		gateway.WithEventBus(eventBus),
-		gateway.WithRequestLog(slog.Default()),
-		gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-			userID = fmt.Sprintf("%d", uid.Add(1))
-			md = metadata.MD{}
-			ok = true
-			return
-		}),
-	)
-	node.AddComponent(proxy)
+	node := nodehub.NewGatewayNode(registry, nodehub.GatewayConfig{
+		WSProxyListen: websocketListen,
+		WSProxyOption: []gateway.WSProxyOption{
+			gateway.WithNotifier(subscriber),
+			gateway.WithEventBus(eventBus),
+			gateway.WithRequestLog(slog.Default()),
+			gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+				userID = fmt.Sprintf("%d", uid.Add(1))
+				md = metadata.MD{}
+				ok = true
+				return
+			}),
+		},
+		GRPCListen: grpcListen,
+	})
 
-	logger.Info("gateway server start", "listen", listenAddr)
+	logger.Info("gateway server start", "listen", websocketListen)
 	mustDo(node.Serve(context.Background()))
 }
 
