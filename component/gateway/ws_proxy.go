@@ -48,6 +48,7 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WSProxy struct {
+	nodeID    string
 	registry  *cluster.Registry
 	notifier  notification.Subscriber
 	authorize Authorize
@@ -63,8 +64,9 @@ type WSProxy struct {
 }
 
 // NewWSProxy 构造函数
-func NewWSProxy(registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
+func NewWSProxy(nodeID string, registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
 	wp := &WSProxy{
+		nodeID:     nodeID,
 		registry:   registry,
 		sessionHub: newSessionHub(),
 		stateTable: newStateTable(),
@@ -236,10 +238,9 @@ func (wp *WSProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, 
 		sess.SetID(userID)
 		md.Set(rpc.MDUserID, userID)
 	}
+	md.Set(rpc.MDGateway, wp.nodeID)
 
-	if len(md) > 0 {
-		sess.SetMetadata(md)
-	}
+	sess.SetMetadata(md)
 	return sess, nil
 }
 

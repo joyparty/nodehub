@@ -55,9 +55,10 @@ func init() {
 }
 
 func main() {
-	uid := &atomic.Int32{}
+	node := nodehub.NewNode("gateway", registry)
 
-	proxy := gateway.NewWSProxy(registry, listenAddr,
+	uid := &atomic.Int32{}
+	proxy := gateway.NewWSProxy(node.ID(), registry, listenAddr,
 		gateway.WithNotifier(subscriber),
 		gateway.WithEventBus(eventBus),
 		gateway.WithRequestLog(slog.Default()),
@@ -68,8 +69,6 @@ func main() {
 			return
 		}),
 	)
-
-	node := nodehub.NewNode("gateway", registry)
 	node.AddComponent(proxy)
 
 	logger.Info("gateway server start", "listen", listenAddr)

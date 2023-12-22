@@ -16,6 +16,8 @@ const (
 	MDUserID = "x-user"
 	// MDTransactionID grpc metadata中的transaction id key，用于跟踪请求
 	MDTransactionID = "x-trans"
+	// MDGateway grpc metadata中的gateway key，用于标识请求来自哪个网关
+	MDGateway = "x-gw"
 )
 
 // GRPCServer grpc服务

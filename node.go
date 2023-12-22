@@ -132,6 +132,11 @@ func (n *Node) stopAll(ctx context.Context) error {
 	return nil
 }
 
+// ID 获取节点ID
+func (n *Node) ID() string {
+	return n.id
+}
+
 // Entry 获取服务发现条目
 func (n *Node) Entry() cluster.NodeEntry {
 	entry := cluster.NodeEntry{
