@@ -66,8 +66,13 @@ type WSProxy struct {
 // NewWSProxy 构造函数
 func NewWSProxy(nodeID string, registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
 	wp := &WSProxy{
-		nodeID:     nodeID,
-		registry:   registry,
+		nodeID:   nodeID,
+		registry: registry,
+		authorize: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+			w.WriteHeader(http.StatusUnauthorized)
+
+			return "", nil, false
+		},
 		sessionHub: newSessionHub(),
 		stateTable: newStateTable(),
 		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
@@ -138,7 +143,7 @@ func (wp *WSProxy) Start(ctx context.Context) error {
 
 // Stop 停止websocket服务器
 func (wp *WSProxy) Stop(ctx context.Context) error {
-	if wp.authorize != nil && wp.eventBus != nil {
+	if wp.eventBus != nil {
 		wp.sessionHub.Range(func(s Session) bool {
 			wp.eventBus.Publish(context.Background(), event.UserDisconnected{
 				UserID: s.ID(),
@@ -213,19 +218,13 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (wp *WSProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
-	var (
-		userID string
-		md     = metadata.MD{}
-		ok     bool
-	)
-
-	if wp.authorize != nil {
-		userID, md, ok = wp.authorize(w, r)
-		if !ok {
-			return nil, errors.New("deny by authorize")
-		} else if md == nil {
-			md = metadata.MD{}
-		}
+	userID, md, ok := wp.authorize(w, r)
+	if !ok {
+		return nil, errors.New("deny by authorize")
+	} else if userID == "" {
+		return nil, errors.New("empty userID")
+	} else if md == nil {
+		md = metadata.MD{}
 	}
 
 	wsConn, err := upgrader.Upgrade(w, r, nil)
@@ -234,13 +233,12 @@ func (wp *WSProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, 
 	}
 
 	sess := newWsSession(wsConn)
-	if userID != "" {
-		sess.SetID(userID)
-		md.Set(rpc.MDUserID, userID)
-	}
-	md.Set(rpc.MDGateway, wp.nodeID)
+	sess.SetID(userID)
 
+	md.Set(rpc.MDUserID, userID)
+	md.Set(rpc.MDGateway, wp.nodeID)
 	sess.SetMetadata(md)
+
 	return sess, nil
 }
 
@@ -255,7 +253,7 @@ func (wp *WSProxy) onConnect(ctx context.Context, sess Session) {
 		wp.cleanJobs.Delete(sess.ID())
 	}
 
-	if wp.eventBus != nil && wp.authorize != nil {
+	if wp.eventBus != nil {
 		wp.eventBus.Publish(ctx, event.UserConnected{
 			UserID: sess.ID(),
 		})
@@ -269,7 +267,7 @@ func (wp *WSProxy) onDisconnect(ctx context.Context, sess Session) {
 	wp.sessionHub.Delete(sessID)
 	sess.Close()
 
-	if wp.eventBus != nil && wp.authorize != nil {
+	if wp.eventBus != nil {
 		wp.eventBus.Publish(ctx, event.UserDisconnected{
 			UserID: sessID,
 		})

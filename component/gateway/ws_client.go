@@ -27,9 +27,9 @@ type WSClient struct {
 
 // NewWSClient 创建websocket客户端
 func NewWSClient(wsURL string) (*WSClient, error) {
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("response %d, %w", resp.StatusCode, err)
 	}
 
 	c := &WSClient{
