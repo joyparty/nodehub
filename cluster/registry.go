@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	// ErrNoNodeOrDown 没有可用节点或节点已下线
-	ErrNoNodeOrDown = errors.New("no node or node is down")
+	// ErrNodeNotFoundOrDown 没有可用节点或节点已下线
+	ErrNodeNotFoundOrDown = errors.New("node not found or down")
 	// ErrNoNodeAvailable 没有可用节点
 	ErrNoNodeAvailable = errors.New("no node available")
 )

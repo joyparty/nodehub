@@ -125,7 +125,7 @@ func (r *grpcResolver) PickNode(serviceCode int32) (nodeID string, err error) {
 func (r *grpcResolver) GetConn(nodeID string) (conn *grpc.ClientConn, err error) {
 	node, foundNode := r.allNodes.Load(nodeID)
 	if !foundNode || node.State == NodeDown {
-		err = ErrNoNodeOrDown
+		err = ErrNodeNotFoundOrDown
 		return
 	}
 
