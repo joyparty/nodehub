@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package nodehub;
+
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb";
+
+import "google/protobuf/timestamp.proto";
+
+service Gateway {
+	// 会话是否存在
+	rpc IsSessionExist (IsSessionExistRequest) returns (IsSessionExistResponse) {}
+	// 修改状态服务路由
+	rpc StoreServiceRoute (StoreServiceRouteRequest) returns (google.empty.Empty) {}
+	// 删除状态服务路由
+	rpc RemoveServiceRoute (RemoveServiceRouteRequest) returns (google.empty.Empty) {}
+}
+
+message StoreServiceRouteRequest {
+	int32 service_code = 1;
+	string session_id = 2;
+	string node_id = 3;
+}
+
+message RemoveServiceRouteRequest {
+	int32 service_code = 1;
+	string session_id = 2;
+}
+
+message IsSessionExistRequest {
+	string session_id = 1;
+}
+
+message IsSessionExistResponse {
+	bool exist = 1;
+}
