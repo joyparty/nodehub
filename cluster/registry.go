@@ -9,7 +9,7 @@ import (
 	"github.com/joyparty/gokit"
 	"github.com/reactivex/rxgo/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
@@ -186,7 +186,7 @@ func (r *Registry) GetGRPCConn(nodeID string) (conn *grpc.ClientConn, err error)
 }
 
 // GetGatewayClient 获取网关grpc服务客户端
-func (r *Registry) GetGatewayClient(nodeID string) (nodehubpb.GatewayClient, error) {
+func (r *Registry) GetGatewayClient(nodeID string) (nh.GatewayClient, error) {
 	entry, ok := r.allNodes.Load(nodeID)
 	if !ok {
 		return nil, ErrNodeNotFoundOrDown
@@ -197,7 +197,7 @@ func (r *Registry) GetGatewayClient(nodeID string) (nodehubpb.GatewayClient, err
 		return nil, err
 	}
 
-	return nodehubpb.NewGatewayClient(conn), nil
+	return nh.NewGatewayClient(conn), nil
 }
 
 // ForeachNodes 遍历所有节点

@@ -10,7 +10,7 @@ import (
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
@@ -34,8 +34,8 @@ type Session interface {
 	SetID(string)
 	SetMetadata(metadata.MD)
 	MetadataCopy() metadata.MD
-	Recv(*nodehubpb.Request) error
-	Send(*nodehubpb.Reply) error
+	Recv(*nh.Request) error
+	Send(*nh.Reply) error
 	LocalAddr() string
 	RemoteAddr() string
 	LastRWTime() time.Time
@@ -132,7 +132,7 @@ func (ws *wsSession) MetadataCopy() metadata.MD {
 	return ws.md.Copy()
 }
 
-func (ws *wsSession) Recv(req *nodehubpb.Request) error {
+func (ws *wsSession) Recv(req *nh.Request) error {
 	for {
 		select {
 		case <-ws.done:
@@ -156,7 +156,7 @@ func (ws *wsSession) Recv(req *nodehubpb.Request) error {
 	}
 }
 
-func (ws *wsSession) Send(resp *nodehubpb.Reply) error {
+func (ws *wsSession) Send(resp *nh.Reply) error {
 	data, err := proto.Marshal(resp)
 	if err != nil {
 		return fmt.Errorf("marshal response, %w", err)
@@ -188,7 +188,7 @@ func (ws *wsSession) sendLoop() {
 				}
 
 				if payload.messageType == websocket.BinaryMessage {
-					message := &nodehubpb.Reply{}
+					message := &nh.Reply{}
 					if err := proto.Unmarshal(payload.data, message); err == nil {
 						args = append(args,
 							"requestID", message.GetRequestId(),

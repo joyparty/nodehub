@@ -4,7 +4,7 @@
 // - protoc             v3.21.12
 // source: nodehub/gateway_service.proto
 
-package nodehubpb
+package nh
 
 import (
 	context "context"

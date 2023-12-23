@@ -8,7 +8,7 @@ package echopb
 
 import (
 	context "context"
-	nodehubpb "gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	nh "gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -27,7 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type EchoClient interface {
-	Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*nodehubpb.Reply, error)
+	Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*nh.Reply, error)
 }
 
 type echoClient struct {
@@ -38,8 +38,8 @@ func NewEchoClient(cc grpc.ClientConnInterface) EchoClient {
 	return &echoClient{cc}
 }
 
-func (c *echoClient) Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*nodehubpb.Reply, error) {
-	out := new(nodehubpb.Reply)
+func (c *echoClient) Send(ctx context.Context, in *Msg, opts ...grpc.CallOption) (*nh.Reply, error) {
+	out := new(nh.Reply)
 	err := c.cc.Invoke(ctx, Echo_Send_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,7 @@ func (c *echoClient) Send(ctx context.Context, in *Msg, opts ...grpc.CallOption)
 // All implementations must embed UnimplementedEchoServer
 // for forward compatibility
 type EchoServer interface {
-	Send(context.Context, *Msg) (*nodehubpb.Reply, error)
+	Send(context.Context, *Msg) (*nh.Reply, error)
 	mustEmbedUnimplementedEchoServer()
 }
 
@@ -59,7 +59,7 @@ type EchoServer interface {
 type UnimplementedEchoServer struct {
 }
 
-func (UnimplementedEchoServer) Send(context.Context, *Msg) (*nodehubpb.Reply, error) {
+func (UnimplementedEchoServer) Send(context.Context, *Msg) (*nh.Reply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Send not implemented")
 }
 func (UnimplementedEchoServer) mustEmbedUnimplementedEchoServer() {}

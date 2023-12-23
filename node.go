@@ -11,7 +11,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/grpc"
 )
 
@@ -176,7 +176,7 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node.AddComponent(gw)
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCOption...)
-	gs.RegisterService(rpc.GatewayService, nodehubpb.Gateway_ServiceDesc, gw.NewGRPCService(), rpc.WithUnordered())
+	gs.RegisterService(rpc.GatewayService, nh.Gateway_ServiceDesc, gw.NewGRPCService(), rpc.WithUnordered())
 	node.AddComponent(gs)
 
 	return node

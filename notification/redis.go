@@ -6,7 +6,7 @@ import (
 
 	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -30,7 +30,7 @@ func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
 }
 
 // Publish 把消息发布到消息队列
-func (rq *RedisMQ) Publish(ctx context.Context, message *nodehubpb.Notification) error {
+func (rq *RedisMQ) Publish(ctx context.Context, message *nh.Notification) error {
 	if message.GetContent().GetFromService() == 0 {
 		return errors.New("invalid content, from_service is required")
 	}
@@ -43,9 +43,9 @@ func (rq *RedisMQ) Publish(ctx context.Context, message *nodehubpb.Notification)
 }
 
 // Subscribe 从消息队列订阅消息
-func (rq *RedisMQ) Subscribe(ctx context.Context, handler func(*nodehubpb.Notification)) error {
+func (rq *RedisMQ) Subscribe(ctx context.Context, handler func(*nh.Notification)) error {
 	rq.core.Subscribe(ctx, func(payload []byte) {
-		n := &nodehubpb.Notification{}
+		n := &nh.Notification{}
 		if err := proto.Unmarshal(payload, n); err != nil {
 			logger.Error("unmarshal notification", "error", err)
 			return

@@ -7,7 +7,7 @@
 package echopb
 
 import (
-	nodehubpb "gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	nh "gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -39,7 +39,7 @@ var file_echopb_service_proto_rawDesc = []byte{
 
 var file_echopb_service_proto_goTypes = []interface{}{
 	(*Msg)(nil),             // 0: echo.Msg
-	(*nodehubpb.Reply)(nil), // 1: nodehub.Reply
+	(*nh.Reply)(nil), // 1: nodehub.Reply
 }
 var file_echopb_service_proto_depIdxs = []int32{
 	0, // 0: echo.Echo.Send:input_type -> echo.Msg

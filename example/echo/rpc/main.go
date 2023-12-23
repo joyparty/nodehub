@@ -14,7 +14,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 )
@@ -83,8 +83,8 @@ type echoService struct {
 	echopb.UnimplementedEchoServer
 }
 
-func (es *echoService) Send(ctx context.Context, msg *echopb.Msg) (*nodehubpb.Reply, error) {
+func (es *echoService) Send(ctx context.Context, msg *echopb.Msg) (*nh.Reply, error) {
 	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), addr, msg.GetMessage())
 
-	return nodehubpb.NewReply(int32(echopb.Protocol_MSG), msg)
+	return nh.NewReply(int32(echopb.Protocol_MSG), msg)
 }

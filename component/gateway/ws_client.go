@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/joyparty/gokit"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nodehubpb"
+	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,8 +21,8 @@ type WSClient struct {
 	done   chan struct{}
 
 	// serviceCode => messageType => handler
-	handlers       *gokit.MapOf[int32, *gokit.MapOf[int32, func(*nodehubpb.Reply)]]
-	defaultHandler func(*nodehubpb.Reply)
+	handlers       *gokit.MapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]]
+	defaultHandler func(*nh.Reply)
 }
 
 // NewWSClient 创建websocket客户端
@@ -38,8 +38,8 @@ func NewWSClient(wsURL string) (*WSClient, error) {
 		idSeq:  &atomic.Uint32{},
 		done:   make(chan struct{}),
 
-		handlers:       gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nodehubpb.Reply)]](),
-		defaultHandler: func(reply *nodehubpb.Reply) {},
+		handlers:       gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
+		defaultHandler: func(reply *nh.Reply) {},
 	}
 	go c.run()
 	return c, nil
@@ -123,9 +123,9 @@ func (c *WSClient) OnReceive(serviceCode int32, messageType int32, handler any) 
 
 	serviceHandlers, ok := c.handlers.Load(serviceCode)
 	if !ok {
-		serviceHandlers, _ = c.handlers.LoadOrStore(serviceCode, gokit.NewMapOf[int32, func(*nodehubpb.Reply)]())
+		serviceHandlers, _ = c.handlers.LoadOrStore(serviceCode, gokit.NewMapOf[int32, func(*nh.Reply)]())
 	}
-	serviceHandlers.Store(messageType, func(resp *nodehubpb.Reply) {
+	serviceHandlers.Store(messageType, func(resp *nh.Reply) {
 		msg := reflect.New(secondArg.Elem())
 
 		if err := proto.Unmarshal(resp.Data, msg.Interface().(proto.Message)); err != nil {
@@ -140,12 +140,12 @@ func (c *WSClient) OnReceive(serviceCode int32, messageType int32, handler any) 
 }
 
 // SetDefaultHandler 设置默认消息处理器
-func (c *WSClient) SetDefaultHandler(handler func(reply *nodehubpb.Reply)) {
+func (c *WSClient) SetDefaultHandler(handler func(reply *nh.Reply)) {
 	c.defaultHandler = handler
 }
 
-func (c *WSClient) responseStream() <-chan *nodehubpb.Reply {
-	ch := make(chan *nodehubpb.Reply)
+func (c *WSClient) responseStream() <-chan *nh.Reply {
+	ch := make(chan *nh.Reply)
 
 	go func() {
 		defer close(ch)
@@ -164,7 +164,7 @@ func (c *WSClient) responseStream() <-chan *nodehubpb.Reply {
 
 			switch messageType {
 			case websocket.BinaryMessage:
-				resp := &nodehubpb.Reply{}
+				resp := &nh.Reply{}
 				if err := proto.Unmarshal(data, resp); err != nil {
 					panic(fmt.Errorf("unmarshal response message, %w", err))
 				}
@@ -183,8 +183,8 @@ func (c *WSClient) responseStream() <-chan *nodehubpb.Reply {
 	return ch
 }
 
-func (c *WSClient) newRequest(msg proto.Message, options ...CallOption) (*nodehubpb.Request, error) {
-	req := &nodehubpb.Request{
+func (c *WSClient) newRequest(msg proto.Message, options ...CallOption) (*nh.Request, error) {
+	req := &nh.Request{
 		Id: c.idSeq.Add(1),
 	}
 
@@ -202,18 +202,18 @@ func (c *WSClient) newRequest(msg proto.Message, options ...CallOption) (*nodehu
 }
 
 // CallOption 调用选项
-type CallOption func(req *nodehubpb.Request)
+type CallOption func(req *nh.Request)
 
 // WithNode 指定节点
 func WithNode(nodeID string) CallOption {
-	return func(req *nodehubpb.Request) {
+	return func(req *nh.Request) {
 		req.NodeId = nodeID
 	}
 }
 
 // WithNoReply 不需要回复
 func WithNoReply() CallOption {
-	return func(req *nodehubpb.Request) {
+	return func(req *nh.Request) {
 		req.NoReply = true
 	}
 }

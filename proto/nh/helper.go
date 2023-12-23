@@ -1,4 +1,4 @@
-package nodehubpb
+package nh
 
 import (
 	"google.golang.org/protobuf/proto"
