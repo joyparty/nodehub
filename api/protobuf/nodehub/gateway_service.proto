@@ -10,6 +10,8 @@ import "google/protobuf/empty.proto";
 service Gateway {
 	// 会话是否存在
 	rpc IsSessionExist (IsSessionExistRequest) returns (IsSessionExistResponse) {}
+	// 会话数量
+	rpc SessionCount (google.protobuf.Empty) returns (SessionCountResponse) {}
 	// 修改状态服务路由
 	rpc SetServiceRoute (SetServiceRouteRequest) returns (google.protobuf.Empty) {}
 	// 删除状态服务路由
@@ -34,4 +36,8 @@ message IsSessionExistRequest {
 message IsSessionExistResponse {
 	string session_id = 1;
 	bool exist = 2;
+}
+
+message SessionCountResponse {
+	int32 count = 1;
 }

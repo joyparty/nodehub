@@ -24,6 +24,13 @@ func (s *gwService) IsSessionExist(ctx context.Context, req *nh.IsSessionExistRe
 	}, nil
 }
 
+// 会话数量
+func (s *gwService) SessionCount(context.Context, *emptypb.Empty) (*nh.SessionCountResponse, error) {
+	return &nh.SessionCountResponse{
+		Count: s.sessionHub.Count(),
+	}, nil
+}
+
 func (s *gwService) SetServiceRoute(ctx context.Context, req *nh.SetServiceRouteRequest) (*emptypb.Empty, error) {
 	s.stateTable.Store(req.GetSessionId(), req.GetServiceCode(), req.GetNodeId())
 	return emptyReply, nil

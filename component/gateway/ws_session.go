@@ -232,6 +232,7 @@ func (ws *wsSession) Close() error {
 // sessionHub 会话集合
 type sessionHub struct {
 	clients *gokit.MapOf[string, Session]
+	count   *atomic.Int32
 	done    chan struct{}
 	closed  *atomic.Bool
 }
@@ -239,6 +240,7 @@ type sessionHub struct {
 func newSessionHub() *sessionHub {
 	hub := &sessionHub{
 		clients: gokit.NewMapOf[string, Session](),
+		count:   &atomic.Int32{},
 		done:    make(chan struct{}),
 		closed:  &atomic.Bool{},
 	}
@@ -247,8 +249,13 @@ func newSessionHub() *sessionHub {
 	return hub
 }
 
+func (h *sessionHub) Count() int32 {
+	return h.count.Load()
+}
+
 func (h *sessionHub) Store(c Session) {
 	h.clients.Store(c.ID(), c)
+	h.count.Add(1)
 }
 
 func (h *sessionHub) Load(id string) (Session, bool) {
@@ -260,6 +267,7 @@ func (h *sessionHub) Load(id string) (Session, bool) {
 
 func (h *sessionHub) Delete(id string) {
 	h.clients.Delete(id)
+	h.count.Add(-1)
 }
 
 func (h *sessionHub) Range(f func(s Session) bool) {
