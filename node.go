@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/oklog/ulid/v2"
@@ -36,8 +37,12 @@ type Component interface {
 type Node struct {
 	id         string
 	name       string
+	state      cluster.NodeState
 	registry   *cluster.Registry
 	components []Component
+
+	shutdownOnce sync.Once
+	done         chan struct{}
 }
 
 // NewNode 构造函数
@@ -45,8 +50,10 @@ func NewNode(name string, registry *cluster.Registry) *Node {
 	return &Node{
 		id:         ulid.Make().String(),
 		name:       name,
+		state:      cluster.NodeOK,
 		registry:   registry,
 		components: []Component{},
+		done:       make(chan struct{}),
 	}
 }
 
@@ -55,11 +62,38 @@ func NewNode(name string, registry *cluster.Registry) *Node {
 // 组件的启动顺序与添加顺序一致
 // 组件的停止顺序与添加顺序相反
 func (n *Node) AddComponent(c ...Component) {
+	type grpcServer interface {
+		RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...rpc.Option) error
+	}
+
+	for i := range c {
+		// 自动注入节点管理服务
+		if v, ok := c[i].(grpcServer); ok {
+			v.RegisterService(rpc.NodeServiceCode, nh.Node_ServiceDesc, n.NewGRPCService(), rpc.WithUnordered())
+			break
+		}
+	}
 	n.components = append(n.components, c...)
 }
 
 // Serve 启动所有组件
 func (n *Node) Serve(ctx context.Context) error {
+	// 确保node service一定被注册
+	entry := n.Entry()
+	if entry.GRPC.Endpoint != "" {
+		var found bool
+		for _, desc := range entry.GRPC.Services {
+			if desc.Code == rpc.NodeServiceCode {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("node grpc service not register")
+		}
+	}
+
 	if err := n.startAll(ctx); err != nil {
 		return fmt.Errorf("start all server, %w", err)
 	}
@@ -73,14 +107,20 @@ func (n *Node) Serve(ctx context.Context) error {
 	defer cancel()
 
 	select {
+	case <-n.done:
 	case <-ctx.Done():
-		if err := n.stopAll(ctx); err != nil {
-			return fmt.Errorf("stop all server, %w", err)
-		}
-
-		// 服务发现注销
-		n.registry.Close()
 	}
+
+	if err := n.ChangeState(cluster.NodeDown); err != nil {
+		return fmt.Errorf("cannot change node state, %w", err)
+	}
+
+	if err := n.stopAll(ctx); err != nil {
+		return fmt.Errorf("stop all server, %w", err)
+	}
+	// 服务发现注销
+	n.registry.Close()
+
 	return nil
 }
 
@@ -136,6 +176,35 @@ func (n *Node) stopAll(ctx context.Context) error {
 	return nil
 }
 
+// Shutdown 关闭节点
+func (n *Node) Shutdown() {
+	n.shutdownOnce.Do(func() {
+		close(n.done)
+	})
+}
+
+// State 获取节点状态
+func (n *Node) State() cluster.NodeState {
+	return n.state
+}
+
+// ChangeState 改变节点状态
+func (n *Node) ChangeState(state cluster.NodeState) (err error) {
+	if n.state == state {
+		return nil
+	}
+
+	old := n.state
+	defer func() {
+		if err != nil {
+			n.state = old
+		}
+	}()
+
+	n.state = state
+	return n.registry.Put(n.Entry())
+}
+
 // ID 获取节点ID
 func (n *Node) ID() string {
 	return n.id
@@ -145,7 +214,7 @@ func (n *Node) ID() string {
 func (n *Node) Entry() cluster.NodeEntry {
 	entry := cluster.NodeEntry{
 		ID:    n.id,
-		State: cluster.NodeOK,
+		State: n.state,
 		Name:  n.name,
 	}
 
@@ -158,6 +227,11 @@ func (n *Node) Entry() cluster.NodeEntry {
 		}
 	}
 	return entry
+}
+
+// NewGRPCService 构造节点管理服务，用于内部集群管理各个节点
+func (n *Node) NewGRPCService() nh.NodeServer {
+	return &nodeService{node: n}
 }
 
 // GatewayConfig 网关配置
@@ -176,7 +250,7 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node.AddComponent(gw)
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
-	gs.RegisterService(rpc.GatewayService, nh.Gateway_ServiceDesc, gw.NewGRPCService(), rpc.WithUnordered())
+	gs.RegisterService(rpc.GatewayServiceCode, nh.Gateway_ServiceDesc, gw.NewGRPCService(), rpc.WithUnordered())
 	node.AddComponent(gs)
 
 	return node

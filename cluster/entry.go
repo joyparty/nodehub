@@ -75,8 +75,8 @@ func (e GRPCEntry) Validate() error {
 		return errors.New("grpc endpoint is empty")
 	}
 
-	for _, service := range e.Services {
-		if err := service.Validate(); err != nil {
+	for _, desc := range e.Services {
+		if err := desc.Validate(); err != nil {
 			return err
 		}
 	}

@@ -200,6 +200,21 @@ func (r *Registry) GetGatewayClient(nodeID string) (nh.GatewayClient, error) {
 	return nh.NewGatewayClient(conn), nil
 }
 
+// GetNodeClient 获取节点grpc服务客户端
+func (r *Registry) GetNodeClient(nodeID string) (nh.NodeClient, error) {
+	entry, ok := r.allNodes.Load(nodeID)
+	if !ok {
+		return nil, ErrNodeNotFoundOrDown
+	}
+
+	conn, err := r.grpcResolver.getConn(entry.GRPC.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	return nh.NewNodeClient(conn), nil
+}
+
 // ForeachNodes 遍历所有节点
 //
 // 如果f返回false，则停止遍历

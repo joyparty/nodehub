@@ -65,6 +65,27 @@ func main() {
 		panic(err)
 	}
 
+	// 自动关闭新上线节点
+	// registry.SubscribeUpdate(func(entry cluster.NodeEntry) {
+	// 	if entry.ID == node.ID() {
+	// 		return
+	// 	}
+
+	// 	time.Sleep(5 * time.Second)
+
+	// 	client, err := registry.GetNodeClient(entry.ID)
+	// 	if errors.Is(err, cluster.ErrNodeNotFoundOrDown) {
+	// 		return
+	// 	} else if err != nil {
+	// 		panic(err)
+	// 	}
+
+	// 	logger.Info("send shutdown command", "nodeID", entry.ID)
+	// 	if _, err := client.Shutdown(context.Background(), &emptypb.Empty{}); err != nil {
+	// 		panic(err)
+	// 	}
+	// })
+
 	if err := node.Serve(context.Background()); err != nil {
 		panic(err)
 	}

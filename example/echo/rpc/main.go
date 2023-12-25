@@ -49,12 +49,12 @@ func init() {
 }
 
 func main() {
-	grpcServer, err := newGRPCServer()
+	node := nodehub.NewNode("echo", registry)
+
+	grpcServer, err := newGRPCServer(node)
 	if err != nil {
 		panic(err)
 	}
-
-	node := nodehub.NewNode("echo", registry)
 	node.AddComponent(grpcServer)
 
 	if err := node.Serve(context.Background()); err != nil {
@@ -62,7 +62,7 @@ func main() {
 	}
 }
 
-func newGRPCServer() (*rpc.GRPCServer, error) {
+func newGRPCServer(node *nodehub.Node) (*rpc.GRPCServer, error) {
 	gs := rpc.NewGRPCServer(addr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 
 	err := gs.RegisterService(

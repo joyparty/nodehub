@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package nodehub;
+
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/nh";
+
+import "google/protobuf/empty.proto";
+
+// 节点管理接口，供内部服务调用
+service Node {
+	// 改变节点状态
+	rpc ChangeState (ChangeStateRequest) returns (google.protobuf.Empty) {}
+
+	// 关闭服务
+	rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+message ChangeStateRequest {
+	string state = 1;
+}

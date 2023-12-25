@@ -21,10 +21,10 @@ const (
 )
 
 const (
-	// NodeService 节点管理服务，每个内部节点都会内置这个grpc服务
-	NodeService int32 = -1
-	// GatewayService 网关服务代码，每个网关节点都会内置这个grpc服务
-	GatewayService int32 = -2
+	// NodeServiceCode 节点管理服务，每个内部节点都会内置这个grpc服务
+	NodeServiceCode int32 = -1
+	// GatewayServiceCode 网关服务代码，每个网关节点都会内置这个grpc服务
+	GatewayServiceCode int32 = -2
 )
 
 // GRPCServer grpc服务
