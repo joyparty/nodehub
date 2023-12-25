@@ -11,6 +11,7 @@ var emptyReply = &emptypb.Empty{}
 
 type gwService struct {
 	nh.UnimplementedGatewayServer
+
 	sessionHub *sessionHub
 	stateTable *stateTable
 }

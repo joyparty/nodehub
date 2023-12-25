@@ -69,7 +69,7 @@ func (n *Node) AddComponent(c ...Component) {
 	for i := range c {
 		// 自动注入节点管理服务
 		if v, ok := c[i].(grpcServer); ok {
-			v.RegisterService(rpc.NodeServiceCode, nh.Node_ServiceDesc, n.NewGRPCService(), rpc.WithUnordered())
+			v.RegisterService(rpc.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n}, rpc.WithUnordered())
 			break
 		}
 	}
@@ -227,11 +227,6 @@ func (n *Node) Entry() cluster.NodeEntry {
 		}
 	}
 	return entry
-}
-
-// NewGRPCService 构造节点管理服务，用于内部集群管理各个节点
-func (n *Node) NewGRPCService() nh.NodeServer {
-	return &nodeService{node: n}
 }
 
 // GatewayConfig 网关配置

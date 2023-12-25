@@ -13,6 +13,7 @@ import (
 
 var emptyReply = &emptypb.Empty{}
 
+// 节点管理服务，每个节点都会自动注册
 type nodeService struct {
 	nh.UnimplementedNodeServer
 
