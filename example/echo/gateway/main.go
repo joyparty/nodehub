@@ -67,11 +67,31 @@ func main() {
 
 	// 自动关闭新上线节点
 	// registry.SubscribeUpdate(func(entry cluster.NodeEntry) {
-	// 	if entry.ID == node.ID() {
+	// 	if entry.ID == node.ID() || entry.State != cluster.NodeOK {
 	// 		return
 	// 	}
+	// 	time.Sleep(3 * time.Second)
 
-	// 	time.Sleep(5 * time.Second)
+	// 	client, err := registry.GetNodeClient(entry.ID)
+	// 	if errors.Is(err, cluster.ErrNodeNotFoundOrDown) {
+	// 		return
+	// 	} else if err != nil {
+	// 		panic(err)
+	// 	}
+
+	// 	logger.Info("send ChangeState command", "nodeID", entry.ID)
+	// 	if _, err := client.ChangeState(context.Background(), &nh.ChangeStateRequest{
+	// 		State: string(cluster.NodeLazy),
+	// 	}); err != nil {
+	// 		panic(err)
+	// 	}
+	// })
+
+	// registry.SubscribeUpdate(func(entry cluster.NodeEntry) {
+	// 	if entry.ID == node.ID() || entry.State != cluster.NodeLazy {
+	// 		return
+	// 	}
+	// 	time.Sleep(3 * time.Second)
 
 	// 	client, err := registry.GetNodeClient(entry.ID)
 	// 	if errors.Is(err, cluster.ErrNodeNotFoundOrDown) {
