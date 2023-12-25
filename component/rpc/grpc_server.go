@@ -44,13 +44,13 @@ func NewGRPCServer(listenAddr string, opts ...grpc.ServerOption) *GRPCServer {
 }
 
 // RegisterService 注册服务
-func (gs *GRPCServer) RegisterService(code int32, desc grpc.ServiceDesc, impl any, config ...Config) error {
+func (gs *GRPCServer) RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...Option) error {
 	sd := cluster.GRPCServiceDesc{
 		Code: code,
 		Path: fmt.Sprintf("/%s", desc.ServiceName),
 	}
-	for _, c := range config {
-		sd = c(sd)
+	for _, opt := range options {
+		sd = opt(sd)
 	}
 
 	if err := sd.Validate(); err != nil {
@@ -101,11 +101,11 @@ func (gs *GRPCServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	}
 }
 
-// Config 配置
-type Config func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc
+// Option 配置
+type Option func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc
 
 // WithPublic 设置服务为公开
-func WithPublic() Config {
+func WithPublic() Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Public = true
 		return desc
@@ -113,7 +113,7 @@ func WithPublic() Config {
 }
 
 // WithStateful 设置服务为有状态
-func WithStateful() Config {
+func WithStateful() Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Stateful = true
 		desc.Allocation = cluster.ServerAllocate
@@ -122,7 +122,7 @@ func WithStateful() Config {
 }
 
 // WithAllocation 设置节点分配方式
-func WithAllocation(allocation string) Config {
+func WithAllocation(allocation string) Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Allocation = allocation
 		return desc
@@ -130,7 +130,7 @@ func WithAllocation(allocation string) Config {
 }
 
 // WithUnordered 设置此服务的所有接口请求不需要保证时序性
-func WithUnordered() Config {
+func WithUnordered() Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Unordered = true
 		return desc
