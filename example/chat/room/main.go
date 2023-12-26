@@ -97,7 +97,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		service,
 		rpc.WithPublic(),
 		rpc.WithStateful(),
-		rpc.WithAllocation(cluster.ClientAllocate),
+		rpc.WithAllocation(cluster.AutoAllocate),
 	)
 	if err != nil {
 		return nil, err
