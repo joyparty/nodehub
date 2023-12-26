@@ -24,6 +24,7 @@ const (
 	Gateway_SessionCount_FullMethodName       = "/nodehub.Gateway/SessionCount"
 	Gateway_SetServiceRoute_FullMethodName    = "/nodehub.Gateway/SetServiceRoute"
 	Gateway_RemoveServiceRoute_FullMethodName = "/nodehub.Gateway/RemoveServiceRoute"
+	Gateway_PushMessage_FullMethodName        = "/nodehub.Gateway/PushMessage"
 )
 
 // GatewayClient is the client API for Gateway service.
@@ -38,6 +39,8 @@ type GatewayClient interface {
 	SetServiceRoute(ctx context.Context, in *SetServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 删除状态服务路由
 	RemoveServiceRoute(ctx context.Context, in *RemoveServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 向指定会话推送消息
+	PushMessage(ctx context.Context, in *PushMessageRequest, opts ...grpc.CallOption) (*PushMessageResponse, error)
 }
 
 type gatewayClient struct {
@@ -84,6 +87,15 @@ func (c *gatewayClient) RemoveServiceRoute(ctx context.Context, in *RemoveServic
 	return out, nil
 }
 
+func (c *gatewayClient) PushMessage(ctx context.Context, in *PushMessageRequest, opts ...grpc.CallOption) (*PushMessageResponse, error) {
+	out := new(PushMessageResponse)
+	err := c.cc.Invoke(ctx, Gateway_PushMessage_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GatewayServer is the server API for Gateway service.
 // All implementations must embed UnimplementedGatewayServer
 // for forward compatibility
@@ -96,6 +108,8 @@ type GatewayServer interface {
 	SetServiceRoute(context.Context, *SetServiceRouteRequest) (*emptypb.Empty, error)
 	// 删除状态服务路由
 	RemoveServiceRoute(context.Context, *RemoveServiceRouteRequest) (*emptypb.Empty, error)
+	// 向指定会话推送消息
+	PushMessage(context.Context, *PushMessageRequest) (*PushMessageResponse, error)
 	mustEmbedUnimplementedGatewayServer()
 }
 
@@ -114,6 +128,9 @@ func (UnimplementedGatewayServer) SetServiceRoute(context.Context, *SetServiceRo
 }
 func (UnimplementedGatewayServer) RemoveServiceRoute(context.Context, *RemoveServiceRouteRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveServiceRoute not implemented")
+}
+func (UnimplementedGatewayServer) PushMessage(context.Context, *PushMessageRequest) (*PushMessageResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PushMessage not implemented")
 }
 func (UnimplementedGatewayServer) mustEmbedUnimplementedGatewayServer() {}
 
@@ -200,6 +217,24 @@ func _Gateway_RemoveServiceRoute_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gateway_PushMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PushMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GatewayServer).PushMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gateway_PushMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GatewayServer).PushMessage(ctx, req.(*PushMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Gateway_ServiceDesc is the grpc.ServiceDesc for Gateway service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -222,6 +257,10 @@ var Gateway_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveServiceRoute",
 			Handler:    _Gateway_RemoveServiceRoute_Handler,
+		},
+		{
+			MethodName: "PushMessage",
+			Handler:    _Gateway_PushMessage_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

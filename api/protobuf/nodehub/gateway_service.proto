@@ -5,6 +5,7 @@ package nodehub;
 option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/nh";
 
 import "google/protobuf/empty.proto";
+import "nodehub/client.proto";
 
 // 网关功能接口，供内部服务调用
 service Gateway {
@@ -16,6 +17,8 @@ service Gateway {
 	rpc SetServiceRoute (SetServiceRouteRequest) returns (google.protobuf.Empty) {}
 	// 删除状态服务路由
 	rpc RemoveServiceRoute (RemoveServiceRouteRequest) returns (google.protobuf.Empty) {}
+	// 向指定会话推送消息
+	rpc PushMessage (PushMessageRequest) returns (PushMessageResponse) {}
 }
 
 message SetServiceRouteRequest {
@@ -40,4 +43,15 @@ message IsSessionExistResponse {
 
 message SessionCountResponse {
 	int32 count = 1;
+}
+
+message PushMessageRequest {
+	string session_id = 1;
+	Reply reply = 2;
+}
+
+message PushMessageResponse {
+	string session_id = 1;
+	// success 为 false 时，表示会话不存在
+	bool success = 2;
 }

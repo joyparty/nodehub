@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -40,4 +42,27 @@ func (s *gwService) SetServiceRoute(ctx context.Context, req *nh.SetServiceRoute
 func (s *gwService) RemoveServiceRoute(ctx context.Context, req *nh.RemoveServiceRouteRequest) (*emptypb.Empty, error) {
 	s.stateTable.Remove(req.GetSessionId(), req.GetServiceCode())
 	return emptyReply, nil
+}
+
+func (s *gwService) PushMessage(ctx context.Context, req *nh.PushMessageRequest) (*nh.PushMessageResponse, error) {
+	sess, ok := s.sessionHub.Load(req.GetSessionId())
+	if !ok {
+		return &nh.PushMessageResponse{
+			SessionId: req.GetSessionId(),
+		}, nil
+	}
+
+	if req.GetReply().GetFromService() == 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid content, from_service is required")
+	} else if req.GetReply().GetMessageType() == 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid content, message_type is required")
+	}
+
+	if err := sess.Send(req.GetReply()); err != nil {
+		return nil, err
+	}
+	return &nh.PushMessageResponse{
+		SessionId: req.GetSessionId(),
+		Success:   true,
+	}, nil
 }
