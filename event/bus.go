@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
@@ -26,11 +27,11 @@ type Bus interface {
 	//
 	// Example:
 	//
-	//	 bus.Subscribe(ctx, func(ev event.UserConnected) {
+	//	 bus.Subscribe(ctx, func(ev event.UserConnected, t time.Time) {
 	//			// ...
 	//	 })
 	//
-	//	 bus.Subscribe(ctx, func(ev event.UserDisconnected) {
+	//	 bus.Subscribe(ctx, func(ev event.UserDisconnected, t time.Time) {
 	//			// ...
 	//	 })
 	Subscribe(ctx context.Context, handler any) error
@@ -73,14 +74,19 @@ func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
 		// 假设程序员忘记捕获错误，就会导致难以排查的故障
 		// 因此干脆panic中断进程，让程序员把代码改对了再执行
 		panic(errors.New("handler must be a function"))
-	} else if fnType.NumIn() != 1 {
-		panic(errors.New("handler must have one argument"))
+	} else if fnType.NumIn() != 2 {
+		panic(errors.New("handler must have two argument"))
 	}
 
-	wantType := fnType.In(0)
-	eventType, ok := types[deref(wantType)]
+	firstArg := fnType.In(0)
+	eventType, ok := types[deref(firstArg)]
 	if !ok {
-		panic(fmt.Errorf("unknown event %s.%s", wantType.PkgPath(), wantType.Name()))
+		panic(fmt.Errorf("first argument(%s.%s) must be registered event", firstArg.PkgPath(), firstArg.Name()))
+	}
+
+	secondArg := fnType.In(1)
+	if _, ok := reflect.New(secondArg).Elem().Interface().(time.Time); !ok {
+		panic(errors.New("second argument must be time.Time"))
 	}
 
 	bus.mq.Subscribe(ctx, func(data []byte) {
@@ -91,13 +97,16 @@ func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
 		}
 
 		if p.Type == eventType {
-			ev := reflect.New(wantType)
+			ev := reflect.New(firstArg)
 			if err := json.Unmarshal(p.Detail, ev.Interface()); err != nil {
 				logger.Error("unmarshal event", "error", err)
 				return
 			}
 
-			fn.Call([]reflect.Value{ev.Elem()})
+			fn.Call([]reflect.Value{
+				ev.Elem(),
+				reflect.ValueOf(p.GetTime()),
+			})
 		}
 	})
 

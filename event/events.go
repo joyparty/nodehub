@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"time"
 )
 
 var (
@@ -33,8 +34,13 @@ func Register(eventType string, ev any) {
 }
 
 type payload struct {
-	Type   string `json:"t"`
+	Time   int64  `json:"t"`
+	Type   string `json:"ty"`
 	Detail []byte `json:"d"`
+}
+
+func (p payload) GetTime() time.Time {
+	return time.UnixMilli(p.Time)
 }
 
 func newPayload(ev any) (p payload, err error) {
@@ -44,6 +50,7 @@ func newPayload(ev any) (p payload, err error) {
 		return
 	}
 
+	p.Time = time.Now().UnixMilli()
 	p.Type = eventType
 	p.Detail, err = json.Marshal(ev)
 	return

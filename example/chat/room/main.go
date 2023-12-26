@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/joyparty/gokit"
 	"github.com/redis/go-redis/v9"
@@ -71,7 +72,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		members:   gokit.NewMapOf[string, string](),
 	}
 
-	if err := eventBus.Subscribe(context.Background(), func(ev event.UserConnected) {
+	if err := eventBus.Subscribe(context.Background(), func(ev event.UserConnected, _ time.Time) {
 		service.boardcast(&roompb.News{
 			Content: fmt.Sprintf("EVENT: #%s connected", ev.UserID),
 		})
@@ -79,7 +80,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		panic(err)
 	}
 
-	if err := eventBus.Subscribe(context.Background(), func(ev event.UserDisconnected) {
+	if err := eventBus.Subscribe(context.Background(), func(ev event.UserDisconnected, _ time.Time) {
 		service.members.Delete(ev.UserID)
 
 		service.boardcast(&roompb.News{

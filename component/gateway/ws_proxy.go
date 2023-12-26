@@ -131,12 +131,12 @@ func (wp *WSProxy) Start(ctx context.Context) error {
 
 	// 有状态路由更新
 	if wp.eventBus != nil {
-		wp.eventBus.Subscribe(ctx, func(ev event.NodeAssign) {
+		wp.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
 			if _, ok := wp.sessionHub.Load(ev.UserID); ok {
 				wp.stateTable.Store(ev.UserID, ev.ServiceCode, ev.NodeID)
 			}
 		})
-		wp.eventBus.Subscribe(ctx, func(ev event.NodeUnassign) {
+		wp.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
 			// 即使离线，状态路由也会继续留存一段时间，所以仍然接受删除操作
 			wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
 		})
