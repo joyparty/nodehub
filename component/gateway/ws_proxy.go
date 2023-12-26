@@ -18,7 +18,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
 	"gitlab.haochang.tv/gopkg/nodehub/event"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/notification"
+	"gitlab.haochang.tv/gopkg/nodehub/multicast"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -50,7 +50,7 @@ var (
 type WSProxy struct {
 	nodeID    string
 	registry  *cluster.Registry
-	notifier  notification.Subscriber
+	multicast multicast.Subscriber
 	authorize Authorize
 	eventBus  event.Bus
 
@@ -543,11 +543,11 @@ func (wp *WSProxy) runRequestQueue(ctx context.Context, queue <-chan serviceReqe
 }
 
 func (wp *WSProxy) notificationLoop() {
-	if wp.notifier == nil {
+	if wp.multicast == nil {
 		return
 	}
 
-	wp.notifier.Subscribe(context.Background(), func(msg *nh.Notification) {
+	wp.multicast.Subscribe(context.Background(), func(msg *nh.Multicast) {
 		// 只发送5分钟内的消息
 		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
 			for _, userID := range msg.GetReceiver() {
@@ -572,10 +572,10 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 // WSProxyOption 配置选项
 type WSProxyOption func(*WSProxy)
 
-// WithNotifier 设置主动下发消息订阅者
-func WithNotifier(n notification.Subscriber) WSProxyOption {
+// WithMulticastSubscribe 设置主动下发消息订阅者
+func WithMulticastSubscribe(n multicast.Subscriber) WSProxyOption {
 	return func(wp *WSProxy) {
-		wp.notifier = n
+		wp.multicast = n
 	}
 }
 

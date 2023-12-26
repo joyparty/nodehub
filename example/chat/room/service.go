@@ -10,7 +10,7 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/notification"
+	"gitlab.haochang.tv/gopkg/nodehub/multicast"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -21,7 +21,7 @@ var emptyReply = &emptypb.Empty{}
 type roomService struct {
 	roompb.UnimplementedRoomServer
 
-	publisher notification.Publisher
+	publisher multicast.Publisher
 	members   *gokit.MapOf[string, string] // id => name
 }
 
@@ -87,7 +87,7 @@ func (rs *roomService) boardcast(news *roompb.News) {
 		return true
 	})
 
-	notify := nh.NewNotification(receiver, response)
+	notify := nh.NewMulticast(receiver, response)
 	if err := rs.publisher.Publish(context.Background(), notify); err != nil {
 		logger.Error("publish notification", "error", err)
 	}
@@ -99,7 +99,7 @@ func (rs *roomService) unicast(toName string, news *roompb.News) {
 
 	rs.members.Range(func(id, name string) bool {
 		if name == toName {
-			notify := nh.NewNotification([]string{id}, response)
+			notify := nh.NewMulticast([]string{id}, response)
 			if err := rs.publisher.Publish(context.Background(), notify); err != nil {
 				logger.Error("publish notification", "error", err)
 			}

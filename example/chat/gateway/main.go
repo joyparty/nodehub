@@ -15,14 +15,14 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
 	"gitlab.haochang.tv/gopkg/nodehub/event"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/notification"
+	"gitlab.haochang.tv/gopkg/nodehub/multicast"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/metadata"
 )
 
 var (
 	registry   *cluster.Registry
-	subscriber notification.Subscriber
+	subscriber multicast.Subscriber
 	eventBus   event.Bus
 
 	websocketListen string
@@ -52,7 +52,7 @@ func init() {
 		Network: "tcp",
 		Addr:    redisAddr,
 	})
-	subscriber = notification.NewRedisMQ(redisClient, "chat")
+	subscriber = multicast.NewRedisMQ(redisClient, "chat")
 	eventBus = event.NewBus(redisClient)
 }
 
@@ -61,7 +61,7 @@ func main() {
 	node := nodehub.NewGatewayNode(registry, nodehub.GatewayConfig{
 		WSProxyListen: websocketListen,
 		WSProxyOption: []gateway.WSProxyOption{
-			gateway.WithNotifier(subscriber),
+			gateway.WithMulticastSubscribe(subscriber),
 			gateway.WithEventBus(eventBus),
 			gateway.WithRequestLog(slog.Default()),
 			gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {

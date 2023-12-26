@@ -16,14 +16,14 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/clusterpb"
 	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/notification"
+	"gitlab.haochang.tv/gopkg/nodehub/multicast"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 )
 
 var (
 	registry  *cluster.Registry
-	publisher notification.Publisher
+	publisher multicast.Publisher
 	eventBus  event.Bus
 
 	listenAddr string
@@ -51,7 +51,7 @@ func init() {
 		Network: "tcp",
 		Addr:    redisAddr,
 	})
-	publisher = notification.NewRedisMQ(redisClient, "chat")
+	publisher = multicast.NewRedisMQ(redisClient, "chat")
 	eventBus = event.NewBus(redisClient)
 }
 

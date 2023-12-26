@@ -1,4 +1,4 @@
-package notification
+package multicast
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
 }
 
 // Publish 把消息发布到消息队列
-func (rq *RedisMQ) Publish(ctx context.Context, message *nh.Notification) error {
+func (rq *RedisMQ) Publish(ctx context.Context, message *nh.Multicast) error {
 	if message.GetContent().GetFromService() == 0 {
 		return errors.New("invalid content, from_service is required")
 	}
@@ -43,9 +43,9 @@ func (rq *RedisMQ) Publish(ctx context.Context, message *nh.Notification) error 
 }
 
 // Subscribe 从消息队列订阅消息
-func (rq *RedisMQ) Subscribe(ctx context.Context, handler func(*nh.Notification)) error {
+func (rq *RedisMQ) Subscribe(ctx context.Context, handler func(*nh.Multicast)) error {
 	rq.core.Subscribe(ctx, func(payload []byte) {
-		n := &nh.Notification{}
+		n := &nh.Multicast{}
 		if err := proto.Unmarshal(payload, n); err != nil {
 			logger.Error("unmarshal notification", "error", err)
 			return

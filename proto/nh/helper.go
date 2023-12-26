@@ -18,9 +18,9 @@ func NewReply(msgType int32, msg proto.Message) (*Reply, error) {
 	}, nil
 }
 
-// NewNotification 创建push消息
-func NewNotification(receiver []string, content *Reply) *Notification {
-	return &Notification{
+// NewMulticast 创建push消息
+func NewMulticast(receiver []string, content *Reply) *Multicast {
+	return &Multicast{
 		Receiver: receiver,
 		Time:     timestamppb.Now(),
 		Content:  content,
