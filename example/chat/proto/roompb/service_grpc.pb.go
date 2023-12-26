@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             v3.21.12
-// source: roompb/service.proto
+// source: room/service.proto
 
 package roompb
 
@@ -180,5 +180,5 @@ var Room_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "roompb/service.proto",
+	Metadata: "room/service.proto",
 }

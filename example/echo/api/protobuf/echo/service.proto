@@ -2,10 +2,10 @@ syntax = "proto3";
 
 package echo;
 
-option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/server/echopb";
+option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb";
 
 import "nodehub/client.proto";
-import "echopb/message.proto";
+import "echo/message.proto";
 
 service Echo {
 	rpc Send(Msg) returns (nodehub.Reply);
