@@ -29,7 +29,7 @@ var (
 func init() {
 	flag.StringVar(&listen, "listen", "127.0.0.1:9001", "listen address")
 	flag.StringVar(&balancer, "balancer", "random", "balancer policy")
-	flag.IntVar(&weight, "weight", 1, "weight")
+	flag.IntVar(&weight, "weight", 0, "weight")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -53,13 +53,7 @@ func init() {
 }
 
 func main() {
-	options := []nodehub.NodeOption{
-		nodehub.WithBalancer(balancer),
-	}
-	if balancer == cluster.BalancerRoundRobin {
-		options = append(options, nodehub.WithWeight(weight))
-	}
-	node := nodehub.NewNode("echo", registry, options...)
+	node := nodehub.NewNode("echo", registry)
 
 	grpcServer, err := newGRPCServer(node)
 	if err != nil {
@@ -75,12 +69,20 @@ func main() {
 func newGRPCServer(node *nodehub.Node) (*rpc.GRPCServer, error) {
 	gs := rpc.NewGRPCServer(listen, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 
+	options := []rpc.Option{
+		rpc.WithPublic(),
+		rpc.WithUnordered(),
+		rpc.WithBalancer(balancer),
+	}
+	if weight > 0 {
+		options = append(options, rpc.WithWeight(weight))
+	}
+
 	err := gs.RegisterService(
 		int32(clusterpb.Services_ECHO),
 		echopb.Echo_ServiceDesc,
 		&echoService{},
-		rpc.WithPublic(),
-		rpc.WithUnordered(),
+		options...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("register service, %w", err)

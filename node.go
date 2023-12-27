@@ -47,10 +47,9 @@ type Node struct {
 func NewNode(name string, registry *cluster.Registry, option ...NodeOption) *Node {
 	node := &Node{
 		entry: &cluster.NodeEntry{
-			ID:       ulid.Make().String(),
-			Name:     name,
-			State:    cluster.NodeOK,
-			Balancer: cluster.BalancerRandom,
+			ID:    ulid.Make().String(),
+			Name:  name,
+			State: cluster.NodeOK,
 		},
 		registry:   registry,
 		components: []Component{},
@@ -241,7 +240,7 @@ type GatewayConfig struct {
 
 // NewGatewayNode 构造一个网关节点
 func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
-	node := NewNode("gateway", registry, WithBalancer(cluster.BalancerRandom))
+	node := NewNode("gateway", registry)
 
 	gw := gateway.NewWSProxy(node.ID(), registry, config.WSProxyListen, config.WSProxyOption...)
 	node.AddComponent(gw)
@@ -255,20 +254,6 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 
 // NodeOption 节点选项
 type NodeOption func(*Node)
-
-// WithBalancer 设置负载均衡策略
-func WithBalancer(balancer string) NodeOption {
-	return func(n *Node) {
-		n.entry.Balancer = balancer
-	}
-}
-
-// WithWeight 设置节点权重
-func WithWeight(weight int) NodeOption {
-	return func(n *Node) {
-		n.entry.Weight = weight
-	}
-}
 
 // WithGitVersion 设置git版本
 func WithGitVersion(version string) NodeOption {

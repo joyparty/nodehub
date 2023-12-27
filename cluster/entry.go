@@ -34,12 +34,6 @@ type NodeEntry struct {
 	// 节点状态
 	State NodeState `json:"state"`
 
-	// 负载均衡策略
-	Balancer string `json:"balancer"`
-
-	// Weight 节点权重，用于负载均衡
-	Weight int `json:"weight,omitempty"`
-
 	// websocket连接地址
 	Websocket string `json:"websocket,omitempty"`
 
@@ -58,10 +52,6 @@ func (e NodeEntry) Validate() error {
 		return errors.New("name is empty")
 	} else if e.State == "" {
 		return errors.New("state is empty")
-	} else if e.Balancer == "" {
-		return errors.New("balancer is empty")
-	} else if e.Balancer == BalancerRoundRobin && e.Weight == 0 {
-		return errors.New("weight is empty")
 	} else if err := e.GRPC.Validate(); err != nil {
 		return err
 	}
@@ -109,6 +99,12 @@ type GRPCServiceDesc struct {
 	// 是否允许客户端访问
 	Public bool `json:"public,omitempty"`
 
+	// 负载均衡策略
+	Balancer string `json:"balancer"`
+
+	// Weight 节点权重，用于负载均衡
+	Weight int `json:"weight,omitempty"`
+
 	// 接口之间是否不存在时序性要求，
 	// 这个配置会影响网关转发客户端请求的方式
 	//
@@ -130,6 +126,8 @@ func (desc GRPCServiceDesc) Validate() error {
 		return errors.New("code is empty")
 	} else if desc.Path == "" {
 		return errors.New("path is empty")
+	} else if desc.Balancer == "" {
+		return errors.New("balancer is empty")
 	}
 
 	if desc.Stateful {

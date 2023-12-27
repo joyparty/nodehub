@@ -2,11 +2,9 @@ package cluster
 
 import (
 	"fmt"
-	"reflect"
 	"runtime"
 
 	"github.com/joyparty/gokit"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -56,11 +54,7 @@ func (r *grpcResolver) Update(node NodeEntry) {
 			continue
 		}
 
-		if v, ok := r.services.Load(desc.Code); ok {
-			if !reflect.DeepEqual(v, desc) {
-				logger.Error("unexpected grpc service description", "old", v, "new", desc)
-			}
-		} else {
+		if _, ok := r.services.Load(desc.Code); !ok {
 			r.services.Store(desc.Code, desc)
 		}
 
@@ -99,8 +93,7 @@ func (r *grpcResolver) resetBalancer(serviceCode int32) {
 	if len(nodes) == 0 {
 		r.balancer.Delete(serviceCode)
 	} else {
-		balancer := NewBalancer(nodes[0].Balancer, nodes)
-		r.balancer.Store(serviceCode, balancer)
+		r.balancer.Store(serviceCode, NewBalancer(serviceCode, nodes))
 	}
 }
 
@@ -117,7 +110,7 @@ func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID string,
 		return
 	}
 
-	node, err := balancer.Pick(serviceCode, sess)
+	node, err := balancer.Pick(sess)
 	if err != nil {
 		return
 	}

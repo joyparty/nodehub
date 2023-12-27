@@ -46,8 +46,9 @@ func NewGRPCServer(listenAddr string, opts ...grpc.ServerOption) *GRPCServer {
 // RegisterService 注册服务
 func (gs *GRPCServer) RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...Option) error {
 	sd := cluster.GRPCServiceDesc{
-		Code: code,
-		Path: fmt.Sprintf("/%s", desc.ServiceName),
+		Code:     code,
+		Path:     fmt.Sprintf("/%s", desc.ServiceName),
+		Balancer: cluster.BalancerRandom,
 	}
 	for _, opt := range options {
 		sd = opt(sd)
@@ -133,6 +134,22 @@ func WithAllocation(allocation string) Option {
 func WithUnordered() Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Unordered = true
+		return desc
+	}
+}
+
+// WithBalancer 设置负载均衡策略
+func WithBalancer(balancer string) Option {
+	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
+		desc.Balancer = balancer
+		return desc
+	}
+}
+
+// WithWeight 设置节点权重
+func WithWeight(weight int) Option {
+	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
+		desc.Weight = weight
 		return desc
 	}
 }
