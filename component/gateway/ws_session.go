@@ -266,8 +266,10 @@ func (h *sessionHub) Load(id string) (Session, bool) {
 }
 
 func (h *sessionHub) Delete(id string) {
-	h.clients.Delete(id)
-	h.count.Add(-1)
+	if _, ok := h.clients.Load(id); ok {
+		h.clients.Delete(id)
+		h.count.Add(-1)
+	}
 }
 
 func (h *sessionHub) Range(f func(s Session) bool) {
