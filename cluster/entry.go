@@ -10,7 +10,7 @@ type NodeState string
 const (
 	// NodeOK 正常
 	NodeOK NodeState = "ok"
-	// NodeLazy 只接收指定了节点ID的请求
+	// NodeLazy 不接受新的请求
 	NodeLazy NodeState = "lazy"
 	// NodeDown 下线，不接受任何请求
 	NodeDown NodeState = "down"
