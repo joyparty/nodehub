@@ -60,7 +60,7 @@ func (e NodeEntry) Validate() error {
 		return errors.New("state is empty")
 	} else if e.Balancer == "" {
 		return errors.New("balancer is empty")
-	} else if e.Balancer == BalancerWeighted && e.Weight == 0 {
+	} else if e.Balancer == BalancerRoundRobin && e.Weight == 0 {
 		return errors.New("weight is empty")
 	} else if err := e.GRPC.Validate(); err != nil {
 		return err

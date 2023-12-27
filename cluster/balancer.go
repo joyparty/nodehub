@@ -7,14 +7,13 @@ import (
 	"math/rand"
 	"net/netip"
 	"strings"
-	"sync/atomic"
 )
 
 const (
-	// BalancerRoundRobin 轮询
+	// BalancerRandom 随机
+	BalancerRandom = "random"
+	// BalancerRoundRobin 加权轮询
 	BalancerRoundRobin = "roundRobin"
-	// BalancerWeighted 加权轮询
-	BalancerWeighted = "weighted"
 	// BalancerIPHash 根据客户端IP地址哈希
 	BalancerIPHash = "ipHash"
 	// BalancerIDHash 根据客户端ID哈希
@@ -26,8 +25,8 @@ var (
 )
 
 func init() {
+	RegisterBalancer(BalancerRandom, newRandomBalancer)
 	RegisterBalancer(BalancerRoundRobin, newRoundRobinBalancer)
-	RegisterBalancer(BalancerWeighted, newWeightedBalancer)
 	RegisterBalancer(BalancerIPHash, newIPHashBalancer)
 	RegisterBalancer(BalancerIDHash, newIDHashBalancer)
 }
@@ -93,54 +92,46 @@ func (eb *errorBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error
 	return NodeEntry{}, eb.err
 }
 
-type roundRobinBalancer struct {
+type randomBalancer struct {
 	nodes []NodeEntry
-	index *atomic.Int32
 }
 
-func newRoundRobinBalancer(nodes []NodeEntry) Balancer {
-	return &roundRobinBalancer{
-		index: &atomic.Int32{},
+func newRandomBalancer(nodes []NodeEntry) Balancer {
+	return &randomBalancer{
 		nodes: nodes,
 	}
 }
 
-func (rr *roundRobinBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
-	// 数组内顺序获取，如果到达数组末尾，从头重新开始
-	index := rr.index.Add(1) % int32(len(rr.nodes))
-	return rr.nodes[index], nil
+func (b *randomBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
+	return b.nodes[rand.Intn(len(b.nodes))], nil
 }
 
 // 加权轮询
-type weightedBalancer struct {
+type roundRobinBalancer struct {
 	nodes []NodeEntry
 	sum   int
 }
 
-func newWeightedBalancer(nodes []NodeEntry) Balancer {
+func newRoundRobinBalancer(nodes []NodeEntry) Balancer {
 	sum := 0
-	for _, node := range nodes {
-		weight := node.Weight
-		if weight == 0 {
-			weight = 1
+	for i, node := range nodes {
+		if node.Weight == 0 {
+			node.Weight = 1
+			nodes[i] = node
 		}
-		sum += weight * 100
+		sum += node.Weight * 10
 	}
 
-	return &weightedBalancer{
+	return &roundRobinBalancer{
 		sum:   sum,
 		nodes: nodes,
 	}
 }
 
-func (wb *weightedBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
-	r := rand.Intn(wb.sum)
-	for _, node := range wb.nodes {
-		weight := node.Weight
-		if weight == 0 {
-			weight = 1
-		}
-		r -= weight * 100
+func (b *roundRobinBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
+	r := rand.Intn(b.sum)
+	for _, node := range b.nodes {
+		r -= node.Weight * 10
 		if r < 0 {
 			return node, nil
 		}
@@ -159,13 +150,13 @@ func newIPHashBalancer(nodes []NodeEntry) Balancer {
 	}
 }
 
-func (ih *ipHashBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
+func (b *ipHashBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
 	ipInt, err := addrToint64(sess.RemoteAddr())
 	if err != nil {
 		return NodeEntry{}, err
 	}
-	index := int(ipInt) % len(ih.nodes)
-	return ih.nodes[index], nil
+	index := int(ipInt) % len(b.nodes)
+	return b.nodes[index], nil
 }
 
 func addrToint64(remoteAddr string) (int64, error) {
@@ -189,12 +180,11 @@ func newIDHashBalancer(nodes []NodeEntry) Balancer {
 	}
 }
 
-func (ih *idHashBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
+func (b *idHashBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
 	h := fnv.New64a()
 	h.Write([]byte(sess.ID()))
 	hash := h.Sum64()
 
-	index := int(hash) % len(ih.nodes)
-
-	return ih.nodes[index], nil
+	index := int(hash) % len(b.nodes)
+	return b.nodes[index], nil
 }

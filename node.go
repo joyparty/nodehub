@@ -50,7 +50,7 @@ func NewNode(name string, registry *cluster.Registry, option ...NodeOption) *Nod
 			ID:       ulid.Make().String(),
 			Name:     name,
 			State:    cluster.NodeOK,
-			Balancer: cluster.BalancerRoundRobin,
+			Balancer: cluster.BalancerRandom,
 		},
 		registry:   registry,
 		components: []Component{},
@@ -241,7 +241,7 @@ type GatewayConfig struct {
 
 // NewGatewayNode 构造一个网关节点
 func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
-	node := NewNode("gateway", registry, WithBalancer(cluster.BalancerRoundRobin))
+	node := NewNode("gateway", registry, WithBalancer(cluster.BalancerRandom))
 
 	gw := gateway.NewWSProxy(node.ID(), registry, config.WSProxyListen, config.WSProxyOption...)
 	node.AddComponent(gw)
