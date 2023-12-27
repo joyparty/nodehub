@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/joyparty/gokit"
@@ -12,7 +11,6 @@ import (
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/multicast"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -26,7 +24,7 @@ type roomService struct {
 }
 
 func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*emptypb.Empty, error) {
-	userID := mustUserID(ctx)
+	userID := rpc.UserIDInContext(ctx)
 
 	userName := req.GetName()
 	if userName == "" {
@@ -43,7 +41,7 @@ func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*empt
 }
 
 func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
-	userID := mustUserID(ctx)
+	userID := rpc.UserIDInContext(ctx)
 
 	if _, ok := rs.members.Load(userID); ok {
 		rs.members.Delete(userID)
@@ -58,7 +56,7 @@ func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 }
 
 func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptypb.Empty, error) {
-	userID := mustUserID(ctx)
+	userID := rpc.UserIDInContext(ctx)
 	if name, ok := rs.members.Load(userID); ok {
 		news := &roompb.News{
 			FromId:   userID,
@@ -108,18 +106,4 @@ func (rs *roomService) unicast(toName string, news *roompb.News) {
 
 		return true
 	})
-}
-
-func mustUserID(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		panic(errors.New("no metadata"))
-	}
-
-	vals := md.Get(rpc.MDUserID)
-	if len(vals) == 0 {
-		panic(errors.New("no user id"))
-	}
-
-	return vals[0]
 }
