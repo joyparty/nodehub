@@ -99,11 +99,7 @@ func (r *grpcResolver) updateOKNodes(serviceCode int32) {
 	if len(nodes) == 0 {
 		r.balancer.Delete(serviceCode)
 	} else {
-		balancer, known := NewBalancer(nodes[0].Balancer, nodes)
-		if !known {
-			logger.Error("unknown balancer policy", "balancer", nodes[0].Balancer)
-		}
-
+		balancer := NewBalancer(nodes[0].Balancer, nodes)
 		r.balancer.Store(serviceCode, balancer)
 	}
 }

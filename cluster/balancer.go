@@ -57,15 +57,21 @@ func RegisterBalancer(policy string, factory func([]NodeEntry) Balancer) {
 // NewBalancer 创建负载均衡器
 //
 // return false 表示策略不存在，使用默认策略替代了
-func NewBalancer(policy string, nodes []NodeEntry) (Balancer, bool) {
+func NewBalancer(policy string, nodes []NodeEntry) Balancer {
 	if len(nodes) <= 1 {
-		return &noBalancer{nodes}, true
+		return &noBalancer{nodes}
 	}
 
 	if factory, ok := registeredBalancer[policy]; ok {
-		return factory(nodes), true
+		return factory(nodes)
 	}
-	return newRoundRobinBalancer(nodes), false
+
+	// 如果返回某个默认的balancer，可能会导致非预期的结果
+	// 如果不返回balancer，resolver那边最终会导致获取节点时返回无节点可用错误，误导排查方向
+	// 返回指定错误的balancer，可以在获取节点时得知真正的错误
+	return &errorBalancer{
+		err: fmt.Errorf("balancer %s not implemented", policy),
+	}
 }
 
 type noBalancer struct {
@@ -77,6 +83,14 @@ func (nb *noBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
 		return NodeEntry{}, ErrNoNodeAvailable
 	}
 	return nb.nodes[0], nil
+}
+
+type errorBalancer struct {
+	err error
+}
+
+func (eb *errorBalancer) Pick(serviceCode int32, sess Session) (NodeEntry, error) {
+	return NodeEntry{}, eb.err
 }
 
 type roundRobinBalancer struct {
