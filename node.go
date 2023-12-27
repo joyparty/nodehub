@@ -269,3 +269,10 @@ func WithWeight(weight int) NodeOption {
 		n.entry.Weight = weight
 	}
 }
+
+// WithGitVersion 设置git版本
+func WithGitVersion(version string) NodeOption {
+	return func(n *Node) {
+		n.entry.GitVersion = version
+	}
+}
