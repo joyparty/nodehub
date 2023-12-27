@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"fmt"
-	"math/rand"
 	"reflect"
 	"runtime"
 
@@ -16,9 +15,9 @@ import (
 type grpcResolver struct {
 	allNodes *gokit.MapOf[string, NodeEntry]
 
-	// 所有节点状态为ok的可用节点
-	// serviceCode => []NodeEntry
-	okNodes *gokit.MapOf[int32, []NodeEntry]
+	// 每个服务的负载均衡器
+	// serviceCode => Balancer
+	balancer *gokit.MapOf[int32, Balancer]
 
 	// serviceCode => GRPCServiceDesc
 	services *gokit.MapOf[int32, GRPCServiceDesc]
@@ -33,7 +32,7 @@ type grpcResolver struct {
 func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 	return &grpcResolver{
 		allNodes: gokit.NewMapOf[string, NodeEntry](),
-		okNodes:  gokit.NewMapOf[int32, []NodeEntry](),
+		balancer: gokit.NewMapOf[int32, Balancer](),
 		services: gokit.NewMapOf[int32, GRPCServiceDesc](),
 		conns:    gokit.NewMapOf[string, *grpc.ClientConn](),
 		dialOptions: append([]grpc.DialOption{
@@ -82,8 +81,8 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 }
 
 func (r *grpcResolver) updateOKNodes(serviceCode int32) {
+	// 找出所有状态为OK的节点
 	nodes := []NodeEntry{}
-
 	r.allNodes.Range(func(_ string, entry NodeEntry) bool {
 		if entry.State == NodeOK {
 			for _, desc := range entry.GRPC.Services {
@@ -96,10 +95,16 @@ func (r *grpcResolver) updateOKNodes(serviceCode int32) {
 		return true
 	})
 
+	// balancer不考虑在使用过程中增减节点，每次节点变更都重新生成相关服务的负载均衡器
 	if len(nodes) == 0 {
-		r.okNodes.Delete(serviceCode)
+		r.balancer.Delete(serviceCode)
 	} else {
-		r.okNodes.Store(serviceCode, nodes)
+		balancer, known := NewBalancer(nodes[0].Balancer, nodes)
+		if !known {
+			logger.Error("unknown balancer policy", "balancer", nodes[0].Balancer)
+		}
+
+		r.balancer.Store(serviceCode, balancer)
 	}
 }
 
@@ -109,21 +114,18 @@ func (r *grpcResolver) GetDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 }
 
 // PickNode 随机选择一个可用节点
-func (r *grpcResolver) PickNode(serviceCode int32) (nodeID string, err error) {
-	nodes, foundNodes := r.okNodes.Load(serviceCode)
-	if !foundNodes {
+func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID string, err error) {
+	balancer, foundBalancer := r.balancer.Load(serviceCode)
+	if !foundBalancer {
 		err = ErrNoNodeAvailable
 		return
 	}
 
-	var node NodeEntry
-	if l := len(nodes); l == 1 {
-		node = nodes[0]
-	} else {
-		node = nodes[rand.Intn(l)]
+	node, err := balancer.Pick(serviceCode, sess)
+	if err != nil {
+		return
 	}
-	nodeID = node.ID
-	return
+	return node.ID, nil
 }
 
 // GetConn 获取节点连接

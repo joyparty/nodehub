@@ -34,6 +34,12 @@ type NodeEntry struct {
 	// 节点状态
 	State NodeState `json:"state"`
 
+	// 负载均衡策略
+	Balancer string `json:"balancer"`
+
+	// Weight 节点权重，用于负载均衡
+	Weight int `json:"weight,omitempty"`
+
 	// websocket连接地址
 	Websocket string `json:"websocket,omitempty"`
 
@@ -52,9 +58,14 @@ func (e NodeEntry) Validate() error {
 		return errors.New("name is empty")
 	} else if e.State == "" {
 		return errors.New("state is empty")
+	} else if e.Balancer == "" {
+		return errors.New("balancer is empty")
+	} else if e.Balancer == BalancerWeighted && e.Weight == 0 {
+		return errors.New("weight is empty")
 	} else if err := e.GRPC.Validate(); err != nil {
 		return err
 	}
+
 	return nil
 }
 

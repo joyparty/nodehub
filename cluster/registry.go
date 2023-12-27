@@ -176,8 +176,8 @@ func (r *Registry) GetGRPCDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 }
 
 // PickGRPCNode 随机选择一个可用GRPC服务节点
-func (r *Registry) PickGRPCNode(serviceCode int32) (nodeID string, err error) {
-	return r.grpcResolver.PickNode(serviceCode)
+func (r *Registry) PickGRPCNode(serviceCode int32, sess Session) (nodeID string, err error) {
+	return r.grpcResolver.PickNode(serviceCode, sess)
 }
 
 // GetGRPCConn 获取指定节点的grpc连接

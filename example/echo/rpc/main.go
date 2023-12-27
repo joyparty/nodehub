@@ -49,7 +49,10 @@ func init() {
 }
 
 func main() {
-	node := nodehub.NewNode("echo", registry)
+	node := nodehub.NewNode("echo", registry,
+		nodehub.WithBalancer(cluster.BalancerWeighted),
+		nodehub.WithWeight(1),
+	)
 
 	grpcServer, err := newGRPCServer(node)
 	if err != nil {

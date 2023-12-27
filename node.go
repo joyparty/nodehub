@@ -35,9 +35,7 @@ type Component interface {
 
 // Node 节点，一个节点上可以运行多个网络服务
 type Node struct {
-	id         string
-	name       string
-	state      cluster.NodeState
+	entry      *cluster.NodeEntry
 	registry   *cluster.Registry
 	components []Component
 
@@ -46,15 +44,23 @@ type Node struct {
 }
 
 // NewNode 构造函数
-func NewNode(name string, registry *cluster.Registry) *Node {
-	return &Node{
-		id:         ulid.Make().String(),
-		name:       name,
-		state:      cluster.NodeOK,
+func NewNode(name string, registry *cluster.Registry, option ...NodeOption) *Node {
+	node := &Node{
+		entry: &cluster.NodeEntry{
+			ID:       ulid.Make().String(),
+			Name:     name,
+			State:    cluster.NodeOK,
+			Balancer: cluster.BalancerRoundRobin,
+		},
 		registry:   registry,
 		components: []Component{},
 		done:       make(chan struct{}),
 	}
+
+	for _, opt := range option {
+		opt(node)
+	}
+	return node
 }
 
 // AddComponent 添加组件
@@ -185,38 +191,34 @@ func (n *Node) Shutdown() {
 
 // State 获取节点状态
 func (n *Node) State() cluster.NodeState {
-	return n.state
+	return n.entry.State
 }
 
 // ChangeState 改变节点状态
 func (n *Node) ChangeState(state cluster.NodeState) (err error) {
-	if n.state == state {
+	if n.entry.State == state {
 		return nil
 	}
 
-	old := n.state
+	old := n.entry.State
 	defer func() {
 		if err != nil {
-			n.state = old
+			n.entry.State = old
 		}
 	}()
 
-	n.state = state
+	n.entry.State = state
 	return n.registry.Put(n.Entry())
 }
 
 // ID 获取节点ID
 func (n *Node) ID() string {
-	return n.id
+	return n.entry.ID
 }
 
 // Entry 获取服务发现条目
 func (n *Node) Entry() cluster.NodeEntry {
-	entry := cluster.NodeEntry{
-		ID:    n.id,
-		State: n.state,
-		Name:  n.name,
-	}
+	entry := *n.entry
 
 	// 把条目信息交给实现了这个接口的组件修改
 	for i := range n.components {
@@ -239,7 +241,7 @@ type GatewayConfig struct {
 
 // NewGatewayNode 构造一个网关节点
 func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
-	node := NewNode("gateway", registry)
+	node := NewNode("gateway", registry, WithBalancer(cluster.BalancerRoundRobin))
 
 	gw := gateway.NewWSProxy(node.ID(), registry, config.WSProxyListen, config.WSProxyOption...)
 	node.AddComponent(gw)
@@ -249,4 +251,21 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node.AddComponent(gs)
 
 	return node
+}
+
+// NodeOption 节点选项
+type NodeOption func(*Node)
+
+// WithBalancer 设置负载均衡策略
+func WithBalancer(balancer string) NodeOption {
+	return func(n *Node) {
+		n.entry.Balancer = balancer
+	}
+}
+
+// WithWeight 设置节点权重
+func WithWeight(weight int) NodeOption {
+	return func(n *Node) {
+		n.entry.Weight = weight
+	}
 }
