@@ -64,7 +64,7 @@ func (r *grpcResolver) Update(node NodeEntry) {
 			r.services.Store(desc.Code, desc)
 		}
 
-		r.updateOKNodes(desc.Code)
+		r.resetBalancer(desc.Code)
 	}
 }
 
@@ -76,11 +76,11 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 
 	r.allNodes.Delete(node.ID)
 	for _, desc := range node.GRPC.Services {
-		r.updateOKNodes(desc.Code)
+		r.resetBalancer(desc.Code)
 	}
 }
 
-func (r *grpcResolver) updateOKNodes(serviceCode int32) {
+func (r *grpcResolver) resetBalancer(serviceCode int32) {
 	// 找出所有状态为OK的节点
 	nodes := []NodeEntry{}
 	r.allNodes.Range(func(_ string, entry NodeEntry) bool {
