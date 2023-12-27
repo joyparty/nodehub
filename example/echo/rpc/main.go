@@ -21,11 +21,15 @@ import (
 
 var (
 	registry *cluster.Registry
-	addr     string
+	listen   string
+	balancer string
+	weight   int
 )
 
 func init() {
-	flag.StringVar(&addr, "addr", "127.0.0.1:9001", "listen address")
+	flag.StringVar(&listen, "listen", "127.0.0.1:9001", "listen address")
+	flag.StringVar(&balancer, "balancer", "roundRobin", "balancer policy")
+	flag.IntVar(&weight, "weight", 1, "weight")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -49,10 +53,13 @@ func init() {
 }
 
 func main() {
-	node := nodehub.NewNode("echo", registry,
-		nodehub.WithBalancer(cluster.BalancerWeighted),
-		nodehub.WithWeight(1),
-	)
+	options := []nodehub.NodeOption{
+		nodehub.WithBalancer(balancer),
+	}
+	if balancer == cluster.BalancerWeighted {
+		options = append(options, nodehub.WithWeight(weight))
+	}
+	node := nodehub.NewNode("echo", registry, options...)
 
 	grpcServer, err := newGRPCServer(node)
 	if err != nil {
@@ -66,7 +73,7 @@ func main() {
 }
 
 func newGRPCServer(node *nodehub.Node) (*rpc.GRPCServer, error) {
-	gs := rpc.NewGRPCServer(addr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
+	gs := rpc.NewGRPCServer(listen, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 
 	err := gs.RegisterService(
 		int32(clusterpb.Services_ECHO),
@@ -87,7 +94,7 @@ type echoService struct {
 }
 
 func (es *echoService) Send(ctx context.Context, msg *echopb.Msg) (*nh.Reply, error) {
-	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), addr, msg.GetMessage())
+	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), listen, msg.GetMessage())
 
 	return nh.NewReply(int32(echopb.Protocol_MSG), msg)
 }

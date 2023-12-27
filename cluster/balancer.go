@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"math/rand"
 	"net/netip"
+	"strings"
 	"sync/atomic"
 )
 
@@ -44,6 +45,8 @@ type Balancer interface {
 
 // RegisterBalancer 注册负载均衡器
 func RegisterBalancer(policy string, factory func([]NodeEntry) Balancer) {
+	policy = strings.ToLower(policy)
+
 	if _, ok := registeredBalancer[policy]; ok {
 		panic(fmt.Errorf("balancer: balancer %s already registered", policy))
 	}
