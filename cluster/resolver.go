@@ -54,7 +54,9 @@ func (r *grpcResolver) Update(node NodeEntry) {
 			continue
 		}
 
-		r.services.Store(desc.Code, desc)
+		if _, ok := r.balancer.Load(desc.Code); !ok {
+			r.services.Store(desc.Code, desc)
+		}
 		r.resetBalancer(desc.Code)
 	}
 }
