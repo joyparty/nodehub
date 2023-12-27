@@ -4,6 +4,7 @@ go 1.21.4
 
 require (
 	github.com/joyparty/gokit v0.0.0-20231215030552-11b001634aa3
+	github.com/oklog/ulid/v2 v2.1.0
 	github.com/redis/go-redis/v9 v9.3.0
 	gitlab.haochang.tv/gopkg/nodehub v0.0.0-20231214095413-449034d6bda2
 	go.etcd.io/etcd/client/v3 v3.5.11
@@ -22,7 +23,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
-	github.com/oklog/ulid/v2 v2.1.0 // indirect
 	github.com/panjf2000/ants/v2 v2.9.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/reactivex/rxgo/v2 v2.5.0 // indirect
