@@ -56,8 +56,6 @@ func RegisterBalancer(policy string, factory BalancerFactory) {
 }
 
 // NewBalancer 创建负载均衡器
-//
-// return false 表示策略不存在，使用默认策略替代了
 func NewBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 	if len(nodes) <= 1 {
 		return &noBalancer{nodes}
