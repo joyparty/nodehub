@@ -48,11 +48,12 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WSProxy struct {
-	nodeID    string
-	registry  *cluster.Registry
-	multicast multicast.Subscriber
-	authorize Authorize
-	eventBus  event.Bus
+	nodeID      string
+	registry    *cluster.Registry
+	eventBus    event.Bus
+	multicast   multicast.Subscriber
+	authorize   Authorize
+	interceptor Interceptor
 
 	requestLogger logger.Logger
 	server        *http.Server
@@ -66,17 +67,14 @@ type WSProxy struct {
 // NewWSProxy 构造函数
 func NewWSProxy(nodeID string, registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
 	wp := &WSProxy{
-		nodeID:   nodeID,
-		registry: registry,
-		authorize: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-			w.WriteHeader(http.StatusUnauthorized)
-
-			return "", nil, false
-		},
-		sessionHub: newSessionHub(),
-		stateTable: newStateTable(),
-		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
-		done:       make(chan struct{}),
+		nodeID:      nodeID,
+		registry:    registry,
+		authorize:   defaultAuthorizer,
+		interceptor: defaultInterceptor,
+		sessionHub:  newSessionHub(),
+		stateTable:  newStateTable(),
+		cleanJobs:   gokit.NewMapOf[string, *time.Timer](),
+		done:        make(chan struct{}),
 	}
 
 	mux := http.NewServeMux()
@@ -183,25 +181,7 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	defer close(requestQueue)
 	go wp.runRequestQueue(ctx, requestQueue)
 
-	for {
-		select {
-		case <-wp.done:
-			return
-		default:
-		}
-
-		req := requestPool.Get().(*nh.Request)
-		nh.ResetRequest(req)
-
-		if err := sess.Recv(req); err != nil {
-			requestPool.Put(req)
-
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Error("recv request", "error", err)
-			}
-			return
-		}
-
+	requestHandler := func(ctx context.Context, req *nh.Request, sess Session) {
 		exec, unordered := wp.newUnaryRequest(ctx, req, sess)
 		fn := func() {
 			exec()
@@ -222,6 +202,28 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			}:
 			}
 		}
+	}
+
+	for {
+		select {
+		case <-wp.done:
+			return
+		default:
+		}
+
+		req := requestPool.Get().(*nh.Request)
+		nh.ResetRequest(req)
+
+		if err := sess.Recv(req); err != nil {
+			requestPool.Put(req)
+
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				logger.Error("recv request", "error", err)
+			}
+			return
+		}
+
+		wp.interceptor(ctx, req, sess, requestHandler)
 	}
 }
 
@@ -589,6 +591,11 @@ func WithMulticastSubscribe(n multicast.Subscriber) WSProxyOption {
 // 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
 type Authorize func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool)
 
+var defaultAuthorizer = func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+	w.WriteHeader(http.StatusUnauthorized)
+	return "", nil, false
+}
+
 // WithAuthorize 设置身份验证逻辑
 func WithAuthorize(fn Authorize) WSProxyOption {
 	return func(wp *WSProxy) {
@@ -607,5 +614,32 @@ func WithRequestLog(l logger.Logger) WSProxyOption {
 func WithEventBus(bus event.Bus) WSProxyOption {
 	return func(wp *WSProxy) {
 		wp.eventBus = bus
+	}
+}
+
+// RequestHandler 请求处理函数
+type RequestHandler func(ctx context.Context, req *nh.Request, sess Session)
+
+// Interceptor 拦截器
+//
+// 拦截器提供了请求过程中注入自定义钩子的机制，拦截器需要在调用过程中执行handler函数来完成请求流程
+type Interceptor func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler)
+
+var defaultInterceptor = func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler) {
+	handler(ctx, req, sess)
+}
+
+// WithInterceptor 设置拦截器
+//
+// Example:
+//
+//	myInterceptor := func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler) {
+//		// do something before request
+//		handler(ctx, req, sess)
+//		// do something after request
+//	}
+func WithInterceptor(i Interceptor) WSProxyOption {
+	return func(wp *WSProxy) {
+		wp.interceptor = i
 	}
 }
