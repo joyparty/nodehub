@@ -2,11 +2,12 @@ package cluster
 
 import (
 	"fmt"
-	"hash/fnv"
 	"math/big"
 	"math/rand"
 	"net/netip"
 	"strings"
+
+	"github.com/cespare/xxhash/v2"
 )
 
 const (
@@ -204,10 +205,7 @@ func newIDHashBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 }
 
 func (b *idHashBalancer) Pick(sess Session) (NodeEntry, error) {
-	h := fnv.New64a()
-	h.Write([]byte(sess.ID()))
-	hash := h.Sum64()
-
+	hash := xxhash.Sum64String(sess.ID())
 	index := int(hash) % len(b.nodes)
 	return b.nodes[index], nil
 }
