@@ -176,7 +176,7 @@ func (r *Registry) GetGRPCDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 	return r.grpcResolver.GetDesc(serviceCode)
 }
 
-// PickGRPCNode 随机选择一个可用GRPC服务节点
+// PickGRPCNode 根据负载均衡策略获取一个可用节点
 func (r *Registry) PickGRPCNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
 	return r.grpcResolver.PickNode(serviceCode, sess)
 }

@@ -101,7 +101,7 @@ func (r *grpcResolver) GetDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 	return r.services.Load(serviceCode)
 }
 
-// PickNode 随机选择一个可用节点
+// PickNode 根据负载均衡策略获取一个可用节点
 func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
 	balancer, foundBalancer := r.balancer.Load(serviceCode)
 	if !foundBalancer {
