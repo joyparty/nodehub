@@ -7,6 +7,7 @@ import (
 	"path"
 
 	"github.com/joyparty/gokit"
+	"github.com/oklog/ulid/v2"
 	"github.com/reactivex/rxgo/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
@@ -29,7 +30,7 @@ type Registry struct {
 	grpcResolver *grpcResolver
 
 	leaseID  clientv3.LeaseID
-	allNodes *gokit.MapOf[string, NodeEntry]
+	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
 	observable rxgo.Observable
 }
@@ -40,7 +41,7 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		client:       client,
 		keyPrefix:    "/nodehub/node",
 		grpcResolver: newGRPCResolver(),
-		allNodes:     gokit.NewMapOf[string, NodeEntry](),
+		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
 	}
 
 	for _, fn := range opt {
@@ -70,7 +71,7 @@ func (r *Registry) Put(entry NodeEntry) error {
 		return fmt.Errorf("marshal entry, %w", err)
 	}
 
-	key := path.Join(r.keyPrefix, entry.ID)
+	key := path.Join(r.keyPrefix, entry.ID.String())
 	_, err = r.client.Put(r.client.Ctx(), key, string(value), clientv3.WithLease(r.leaseID))
 	return err
 }
@@ -176,17 +177,17 @@ func (r *Registry) GetGRPCDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 }
 
 // PickGRPCNode 随机选择一个可用GRPC服务节点
-func (r *Registry) PickGRPCNode(serviceCode int32, sess Session) (nodeID string, err error) {
+func (r *Registry) PickGRPCNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
 	return r.grpcResolver.PickNode(serviceCode, sess)
 }
 
 // GetGRPCConn 获取指定节点的grpc连接
-func (r *Registry) GetGRPCConn(nodeID string) (conn *grpc.ClientConn, err error) {
+func (r *Registry) GetGRPCConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
 	return r.grpcResolver.GetConn(nodeID)
 }
 
 // GetGatewayClient 获取网关grpc服务客户端
-func (r *Registry) GetGatewayClient(nodeID string) (nh.GatewayClient, error) {
+func (r *Registry) GetGatewayClient(nodeID ulid.ULID) (nh.GatewayClient, error) {
 	entry, ok := r.allNodes.Load(nodeID)
 	if !ok {
 		return nil, ErrNodeNotFoundOrDown
@@ -201,7 +202,7 @@ func (r *Registry) GetGatewayClient(nodeID string) (nh.GatewayClient, error) {
 }
 
 // GetNodeClient 获取节点grpc服务客户端
-func (r *Registry) GetNodeClient(nodeID string) (nh.NodeClient, error) {
+func (r *Registry) GetNodeClient(nodeID ulid.ULID) (nh.NodeClient, error) {
 	entry, ok := r.allNodes.Load(nodeID)
 	if !ok {
 		return nil, ErrNodeNotFoundOrDown
@@ -219,7 +220,7 @@ func (r *Registry) GetNodeClient(nodeID string) (nh.NodeClient, error) {
 //
 // 如果f返回false，则停止遍历
 func (r *Registry) ForeachNodes(f func(NodeEntry) bool) {
-	r.allNodes.Range(func(_ string, v NodeEntry) bool {
+	r.allNodes.Range(func(_ ulid.ULID, v NodeEntry) bool {
 		return f(v)
 	})
 }

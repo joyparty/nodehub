@@ -48,7 +48,7 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WSProxy struct {
-	nodeID      string
+	nodeID      ulid.ULID
 	registry    *cluster.Registry
 	eventBus    event.Bus
 	multicast   multicast.Subscriber
@@ -65,7 +65,7 @@ type WSProxy struct {
 }
 
 // NewWSProxy 构造函数
-func NewWSProxy(nodeID string, registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
+func NewWSProxy(nodeID ulid.ULID, registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
 	wp := &WSProxy{
 		nodeID:      nodeID,
 		registry:    registry,
@@ -246,7 +246,7 @@ func (wp *WSProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, 
 	sess.SetID(userID)
 
 	md.Set(rpc.MDUserID, userID)
-	md.Set(rpc.MDGateway, wp.nodeID)
+	md.Set(rpc.MDGateway, wp.nodeID.String())
 	sess.SetMetadata(md)
 
 	return sess, nil
@@ -378,7 +378,7 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *nh.Request, sess Se
 }
 
 func (wp *WSProxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
-	var nodeID string
+	var nodeID ulid.ULID
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
 		nodeID, err = wp.registry.PickGRPCNode(req.ServiceCode, sess)
@@ -392,7 +392,8 @@ func (wp *WSProxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCS
 
 	if desc.Allocation == cluster.ClientAllocate {
 		// 每次客户端指定了节点，记录下来，后续使用
-		if nodeID = req.GetNodeId(); nodeID != "" {
+		if v := req.GetNodeId(); v != "" {
+			nodeID, _ = ulid.Parse(v)
 			defer func() {
 				if err == nil {
 					wp.stateTable.Store(sess.ID(), req.ServiceCode, nodeID)
@@ -409,7 +410,7 @@ func (wp *WSProxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCS
 	}
 
 	// 非自动分配策略，没有找到节点就中断请求
-	if desc.Allocation != cluster.AutoAllocate && nodeID == "" {
+	if desc.Allocation != cluster.AutoAllocate && nodeID.Time() == 0 {
 		err = status.Error(codes.PermissionDenied, "no node allocated")
 		return
 	}

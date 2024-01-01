@@ -5,13 +5,14 @@ import (
 	"runtime"
 
 	"github.com/joyparty/gokit"
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 // grpcResolver grpc服务发现
 type grpcResolver struct {
-	allNodes *gokit.MapOf[string, NodeEntry]
+	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
 	// 每个服务的负载均衡器
 	// serviceCode => Balancer
@@ -29,7 +30,7 @@ type grpcResolver struct {
 // newGRPCResolver 创建grpc服务发现
 func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 	return &grpcResolver{
-		allNodes: gokit.NewMapOf[string, NodeEntry](),
+		allNodes: gokit.NewMapOf[ulid.ULID, NodeEntry](),
 		balancer: gokit.NewMapOf[int32, Balancer](),
 		services: gokit.NewMapOf[int32, GRPCServiceDesc](),
 		conns:    gokit.NewMapOf[string, *grpc.ClientConn](),
@@ -76,7 +77,7 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 func (r *grpcResolver) resetBalancer(serviceCode int32) {
 	// 找出所有状态为OK的节点
 	nodes := []NodeEntry{}
-	r.allNodes.Range(func(_ string, entry NodeEntry) bool {
+	r.allNodes.Range(func(_ ulid.ULID, entry NodeEntry) bool {
 		if entry.State == NodeOK {
 			for _, desc := range entry.GRPC.Services {
 				if desc.Code == serviceCode {
@@ -102,7 +103,7 @@ func (r *grpcResolver) GetDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 }
 
 // PickNode 随机选择一个可用节点
-func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID string, err error) {
+func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
 	balancer, foundBalancer := r.balancer.Load(serviceCode)
 	if !foundBalancer {
 		err = ErrNoNodeAvailable
@@ -117,7 +118,7 @@ func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID string,
 }
 
 // GetConn 获取节点连接
-func (r *grpcResolver) GetConn(nodeID string) (conn *grpc.ClientConn, err error) {
+func (r *grpcResolver) GetConn(nodeID ulid.ULID) (conn *grpc.ClientConn, err error) {
 	node, foundNode := r.allNodes.Load(nodeID)
 	if !foundNode || node.State == NodeDown {
 		err = ErrNodeNotFoundOrDown

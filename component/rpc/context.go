@@ -4,17 +4,19 @@ import (
 	"context"
 	"errors"
 
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc/metadata"
 )
 
 // GatewayIDInContext 从context中获取gateway id
-func GatewayIDInContext(ctx context.Context) string {
+func GatewayIDInContext(ctx context.Context) ulid.ULID {
 	value := metadata.ValueFromIncomingContext(ctx, MDGateway)
 	if len(value) == 0 {
 		panic(errors.New("gateway id not found in incoming context"))
 	}
 
-	return value[0]
+	gwID, _ := ulid.Parse(value[0])
+	return gwID
 }
 
 // UserIDInContext 从context中获取user id

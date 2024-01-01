@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 
+	"github.com/oklog/ulid/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,7 +36,8 @@ func (s *gwService) SessionCount(context.Context, *emptypb.Empty) (*nh.SessionCo
 }
 
 func (s *gwService) SetServiceRoute(ctx context.Context, req *nh.SetServiceRouteRequest) (*emptypb.Empty, error) {
-	s.stateTable.Store(req.GetSessionId(), req.GetServiceCode(), req.GetNodeId())
+	nodeID, _ := ulid.Parse(req.GetNodeId())
+	s.stateTable.Store(req.GetSessionId(), req.GetServiceCode(), nodeID)
 	return emptyReply, nil
 }
 

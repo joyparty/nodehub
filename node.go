@@ -47,7 +47,7 @@ type Node struct {
 func NewNode(name string, registry *cluster.Registry, option ...NodeOption) *Node {
 	node := &Node{
 		entry: &cluster.NodeEntry{
-			ID:    ulid.Make().String(),
+			ID:    ulid.Make(),
 			Name:  name,
 			State: cluster.NodeOK,
 		},
@@ -211,7 +211,7 @@ func (n *Node) ChangeState(state cluster.NodeState) (err error) {
 }
 
 // ID 获取节点ID
-func (n *Node) ID() string {
+func (n *Node) ID() ulid.ULID {
 	return n.entry.ID
 }
 
