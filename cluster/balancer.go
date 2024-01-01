@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"math/rand"
 	"net/netip"
+	"sort"
 	"strings"
 )
 
@@ -61,10 +62,17 @@ func NewBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 		return &noBalancer{nodes}
 	}
 
+	// 倒序，最新的在前面，以最新的节点配置为准
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].ID.Compare(nodes[j].ID) > 0
+	})
+
 	var policy string
 	for _, desc := range nodes[0].GRPC.Services {
-		policy = desc.Balancer
-		break
+		if desc.Code == serviceCode {
+			policy = desc.Balancer
+			break
+		}
 	}
 
 	if factory, ok := registeredBalancer[strings.ToLower(policy)]; ok {

@@ -55,9 +55,8 @@ func (r *grpcResolver) Update(node NodeEntry) {
 			continue
 		}
 
-		if _, ok := r.balancer.Load(desc.Code); !ok {
-			r.services.Store(desc.Code, desc)
-		}
+		// 网关可以一直开启不重启，所以允许新的节点配置覆盖已有配置
+		r.services.Store(desc.Code, desc)
 		r.resetBalancer(desc.Code)
 	}
 }
