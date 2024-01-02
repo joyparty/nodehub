@@ -23,7 +23,7 @@ import (
 var (
 	registry   *cluster.Registry
 	subscriber multicast.Subscriber
-	eventBus   event.Bus
+	eventBus   *event.Bus
 
 	websocketListen string
 	grpcListen      string
@@ -52,8 +52,8 @@ func init() {
 		Network: "tcp",
 		Addr:    redisAddr,
 	})
-	subscriber = multicast.NewRedisMQ(redisClient, "chat")
-	eventBus = event.NewBus(redisClient)
+	subscriber = multicast.NewRedisBus(redisClient, "chat")
+	eventBus = event.NewRedisBus(redisClient)
 }
 
 func main() {
@@ -61,7 +61,7 @@ func main() {
 	node := nodehub.NewGatewayNode(registry, nodehub.GatewayConfig{
 		WSProxyListen: websocketListen,
 		WSProxyOption: []gateway.WSProxyOption{
-			gateway.WithMulticastSubscribe(subscriber),
+			gateway.WithMulticastSubscriber(subscriber),
 			gateway.WithEventBus(eventBus),
 			gateway.WithRequestLog(slog.Default()),
 			gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {

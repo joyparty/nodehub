@@ -15,43 +15,34 @@ import (
 // RedisClient 客户端
 type RedisClient = mq.RedisClient
 
-// Bus 事件总线
-type Bus interface {
-	// Publish 发布事件
-	//
-	// Example:
-	//   bus.Publish(ctx, event.UserConnected{...})
-	Publish(ctx context.Context, event any) error
-
-	// Subscribe 订阅事件
-	//
-	// Example:
-	//
-	//	 bus.Subscribe(ctx, func(ev event.UserConnected, t time.Time) {
-	//			// ...
-	//	 })
-	//
-	//	 bus.Subscribe(ctx, func(ev event.UserDisconnected, t time.Time) {
-	//			// ...
-	//	 })
-	Subscribe(ctx context.Context, handler any) error
-
-	// Close 关闭事件总线连接
-	Close()
-}
+// Queue 消息队列
+type Queue = mq.Queue
 
 // NewBus 构造函数
-func NewBus(client RedisClient) Bus {
-	return &redisBus{
-		mq: mq.NewRedisMQ(client, "cluster:events"),
+func NewBus(queue Queue) *Bus {
+	return &Bus{
+		queue: queue,
 	}
 }
 
-type redisBus struct {
-	mq *mq.RedisMQ
+// NewRedisBus 构造函数
+func NewRedisBus(client RedisClient) *Bus {
+	return &Bus{
+		queue: mq.NewRedisMQ(client, "cluster:events"),
+	}
 }
 
-func (bus *redisBus) Publish(ctx context.Context, event any) error {
+// Bus 事件总线
+type Bus struct {
+	queue mq.Queue
+}
+
+// Publish 发布事件
+//
+// Example:
+//
+//	bus.Publish(ctx, event.UserConnected{...})
+func (bus *Bus) Publish(ctx context.Context, event any) error {
 	p, err := newPayload(event)
 	if err != nil {
 		panic(fmt.Errorf("publish event, %w", err))
@@ -62,10 +53,21 @@ func (bus *redisBus) Publish(ctx context.Context, event any) error {
 		return err
 	}
 
-	return bus.mq.Publish(ctx, data)
+	return bus.queue.Publish(ctx, data)
 }
 
-func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
+// Subscribe 订阅事件
+//
+// Example:
+//
+//	 bus.Subscribe(ctx, func(ev event.UserConnected, t time.Time) {
+//			// ...
+//	 })
+//
+//	 bus.Subscribe(ctx, func(ev event.UserDisconnected, t time.Time) {
+//			// ...
+//	 })
+func (bus *Bus) Subscribe(ctx context.Context, handler any) error {
 	fn := reflect.ValueOf(handler)
 
 	fnType := fn.Type()
@@ -89,7 +91,7 @@ func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
 		panic(errors.New("second argument must be time.Time"))
 	}
 
-	bus.mq.Subscribe(ctx, func(data []byte) {
+	bus.queue.Subscribe(ctx, func(data []byte) {
 		p := payload{}
 		if err := json.Unmarshal(data, &p); err != nil {
 			logger.Error("unmarshal event payload", "error", err)
@@ -113,6 +115,7 @@ func (bus *redisBus) Subscribe(ctx context.Context, handler any) error {
 	return nil
 }
 
-func (bus *redisBus) Close() {
-	bus.mq.Close()
+// Close 关闭事件总线连接
+func (bus *Bus) Close() {
+	bus.queue.Close()
 }

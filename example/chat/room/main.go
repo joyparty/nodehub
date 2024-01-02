@@ -25,7 +25,7 @@ import (
 var (
 	registry  *cluster.Registry
 	publisher multicast.Publisher
-	eventBus  event.Bus
+	eventBus  *event.Bus
 
 	listenAddr string
 	redisAddr  string
@@ -52,8 +52,8 @@ func init() {
 		Network: "tcp",
 		Addr:    redisAddr,
 	})
-	publisher = multicast.NewRedisMQ(redisClient, "chat")
-	eventBus = event.NewBus(redisClient)
+	publisher = multicast.NewRedisBus(redisClient, "chat")
+	eventBus = event.NewRedisBus(redisClient)
 }
 
 func main() {

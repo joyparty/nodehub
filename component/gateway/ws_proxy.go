@@ -50,7 +50,7 @@ var (
 type WSProxy struct {
 	nodeID      ulid.ULID
 	registry    *cluster.Registry
-	eventBus    event.Bus
+	eventBus    *event.Bus
 	multicast   multicast.Subscriber
 	authorize   Authorize
 	interceptor Interceptor
@@ -576,8 +576,8 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 // WSProxyOption 配置选项
 type WSProxyOption func(*WSProxy)
 
-// WithMulticastSubscribe 设置主动下发消息订阅者
-func WithMulticastSubscribe(n multicast.Subscriber) WSProxyOption {
+// WithMulticastSubscriber 设置主动下发消息订阅者
+func WithMulticastSubscriber(n multicast.Subscriber) WSProxyOption {
 	return func(wp *WSProxy) {
 		wp.multicast = n
 	}
@@ -612,7 +612,7 @@ func WithRequestLog(l logger.Logger) WSProxyOption {
 }
 
 // WithEventBus 设置事件总线
-func WithEventBus(bus event.Bus) WSProxyOption {
+func WithEventBus(bus *event.Bus) WSProxyOption {
 	return func(wp *WSProxy) {
 		wp.eventBus = bus
 	}

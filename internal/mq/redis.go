@@ -17,8 +17,8 @@ type RedisClient interface {
 	SSubscribe(ctx context.Context, channels ...string) *redis.PubSub
 }
 
-// RedisMQ 是基于 Redis 的消息队列
-type RedisMQ struct {
+// redisMQ 是基于 Redis 的消息队列
+type redisMQ struct {
 	client  RedisClient
 	channel string
 	sharded bool
@@ -33,11 +33,11 @@ type RedisMQ struct {
 // client 可以使用 *redis.Client 或者 *redis.ClusterClient
 //
 // 当使用ClusterClient时，会采用sharded channel
-func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
+func NewRedisMQ(client RedisClient, channel string) Queue {
 	// 如果是集群客户端，使用shared pubsub
 	_, shared := client.(*redis.ClusterClient)
 
-	return &RedisMQ{
+	return &redisMQ{
 		client:        client,
 		channel:       channel,
 		sharded:       shared,
@@ -47,7 +47,7 @@ func NewRedisMQ(client RedisClient, channel string) *RedisMQ {
 }
 
 // Publish 把消息发布到消息队列
-func (mq *RedisMQ) Publish(ctx context.Context, payload []byte) error {
+func (mq *redisMQ) Publish(ctx context.Context, payload []byte) error {
 	var result *redis.IntCmd
 	if mq.sharded {
 		result = mq.client.SPublish(ctx, mq.channel, payload)
@@ -58,7 +58,7 @@ func (mq *RedisMQ) Publish(ctx context.Context, payload []byte) error {
 }
 
 // Subscribe 从消息队列订阅消息
-func (mq *RedisMQ) Subscribe(ctx context.Context, handler func([]byte)) {
+func (mq *redisMQ) Subscribe(ctx context.Context, handler func([]byte)) {
 	mq.subscribe()
 
 	mq.observer.ForEach(
@@ -72,7 +72,7 @@ func (mq *RedisMQ) Subscribe(ctx context.Context, handler func([]byte)) {
 	)
 }
 
-func (mq *RedisMQ) subscribe() {
+func (mq *redisMQ) subscribe() {
 	mq.subscribeOnce.Do(func() {
 		var (
 			pubsub *redis.PubSub
@@ -123,6 +123,6 @@ func (mq *RedisMQ) subscribe() {
 }
 
 // Close 关闭消息队列
-func (mq *RedisMQ) Close() {
+func (mq *redisMQ) Close() {
 	close(mq.done)
 }
