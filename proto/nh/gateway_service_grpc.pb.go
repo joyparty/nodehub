@@ -22,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	Gateway_IsSessionExist_FullMethodName     = "/nodehub.Gateway/IsSessionExist"
 	Gateway_SessionCount_FullMethodName       = "/nodehub.Gateway/SessionCount"
+	Gateway_CloseSession_FullMethodName       = "/nodehub.Gateway/CloseSession"
 	Gateway_SetServiceRoute_FullMethodName    = "/nodehub.Gateway/SetServiceRoute"
 	Gateway_RemoveServiceRoute_FullMethodName = "/nodehub.Gateway/RemoveServiceRoute"
 	Gateway_PushMessage_FullMethodName        = "/nodehub.Gateway/PushMessage"
@@ -35,6 +36,8 @@ type GatewayClient interface {
 	IsSessionExist(ctx context.Context, in *IsSessionExistRequest, opts ...grpc.CallOption) (*IsSessionExistResponse, error)
 	// 会话数量
 	SessionCount(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*SessionCountResponse, error)
+	// 关闭会话连接，踢下线
+	CloseSession(ctx context.Context, in *CloseSessionRequest, opts ...grpc.CallOption) (*CloseSessionResponse, error)
 	// 修改状态服务路由
 	SetServiceRoute(ctx context.Context, in *SetServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 删除状态服务路由
@@ -63,6 +66,15 @@ func (c *gatewayClient) IsSessionExist(ctx context.Context, in *IsSessionExistRe
 func (c *gatewayClient) SessionCount(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*SessionCountResponse, error) {
 	out := new(SessionCountResponse)
 	err := c.cc.Invoke(ctx, Gateway_SessionCount_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gatewayClient) CloseSession(ctx context.Context, in *CloseSessionRequest, opts ...grpc.CallOption) (*CloseSessionResponse, error) {
+	out := new(CloseSessionResponse)
+	err := c.cc.Invoke(ctx, Gateway_CloseSession_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +116,8 @@ type GatewayServer interface {
 	IsSessionExist(context.Context, *IsSessionExistRequest) (*IsSessionExistResponse, error)
 	// 会话数量
 	SessionCount(context.Context, *emptypb.Empty) (*SessionCountResponse, error)
+	// 关闭会话连接，踢下线
+	CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error)
 	// 修改状态服务路由
 	SetServiceRoute(context.Context, *SetServiceRouteRequest) (*emptypb.Empty, error)
 	// 删除状态服务路由
@@ -122,6 +136,9 @@ func (UnimplementedGatewayServer) IsSessionExist(context.Context, *IsSessionExis
 }
 func (UnimplementedGatewayServer) SessionCount(context.Context, *emptypb.Empty) (*SessionCountResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SessionCount not implemented")
+}
+func (UnimplementedGatewayServer) CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseSession not implemented")
 }
 func (UnimplementedGatewayServer) SetServiceRoute(context.Context, *SetServiceRouteRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetServiceRoute not implemented")
@@ -177,6 +194,24 @@ func _Gateway_SessionCount_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GatewayServer).SessionCount(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gateway_CloseSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GatewayServer).CloseSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gateway_CloseSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GatewayServer).CloseSession(ctx, req.(*CloseSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -249,6 +284,10 @@ var Gateway_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SessionCount",
 			Handler:    _Gateway_SessionCount_Handler,
+		},
+		{
+			MethodName: "CloseSession",
+			Handler:    _Gateway_CloseSession_Handler,
 		},
 		{
 			MethodName: "SetServiceRoute",

@@ -35,6 +35,24 @@ func (s *gwService) SessionCount(context.Context, *emptypb.Empty) (*nh.SessionCo
 	}, nil
 }
 
+func (s *gwService) CloseSession(ctx context.Context, req *nh.CloseSessionRequest) (*nh.CloseSessionResponse, error) {
+	if sess, ok := s.sessionHub.Load(req.GetSessionId()); ok {
+		if err := sess.Close(); err != nil {
+			return nil, err
+		}
+		s.sessionHub.Delete(sess.ID())
+
+		return &nh.CloseSessionResponse{
+			SessionId: req.GetSessionId(),
+			Success:   true,
+		}, nil
+	}
+
+	return &nh.CloseSessionResponse{
+		SessionId: req.GetSessionId(),
+	}, nil
+}
+
 func (s *gwService) SetServiceRoute(ctx context.Context, req *nh.SetServiceRouteRequest) (*emptypb.Empty, error) {
 	nodeID, _ := ulid.Parse(req.GetNodeId())
 	s.stateTable.Store(req.GetSessionId(), req.GetServiceCode(), nodeID)

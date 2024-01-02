@@ -13,6 +13,8 @@ service Gateway {
 	rpc IsSessionExist (IsSessionExistRequest) returns (IsSessionExistResponse) {}
 	// 会话数量
 	rpc SessionCount (google.protobuf.Empty) returns (SessionCountResponse) {}
+	// 关闭会话连接，踢下线
+	rpc CloseSession (CloseSessionRequest) returns (CloseSessionResponse) {}
 	// 修改状态服务路由
 	rpc SetServiceRoute (SetServiceRouteRequest) returns (google.protobuf.Empty) {}
 	// 删除状态服务路由
@@ -51,6 +53,16 @@ message PushMessageRequest {
 }
 
 message PushMessageResponse {
+	string session_id = 1;
+	// success 为 false 时，表示会话不存在
+	bool success = 2;
+}
+
+message CloseSessionRequest {
+	string session_id = 1;
+}
+
+message CloseSessionResponse {
 	string session_id = 1;
 	// success 为 false 时，表示会话不存在
 	bool success = 2;
