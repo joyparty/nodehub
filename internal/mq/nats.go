@@ -48,12 +48,8 @@ func (mq *natsMQ) Subscribe(ctx context.Context, handler func([]byte)) {
 
 func (mq *natsMQ) subscribe() {
 	mq.subscribeOnce.Do(func() {
-		items := make(chan rxgo.Item)
-		mq.observer = rxgo.FromEventSource(items, rxgo.WithErrorStrategy(rxgo.ContinueOnError))
-
-		sub, err := mq.conn.Subscribe(mq.subject, func(msg *nats.Msg) {
-			items <- rxgo.Of(msg.Data)
-		})
+		msgC := make(chan *nats.Msg, 64)
+		sub, err := mq.conn.ChanSubscribe(mq.subject, msgC)
 
 		if err != nil {
 			mq.observer = rxgo.Defer([]rxgo.Producer{func(ctx context.Context, next chan<- rxgo.Item) {
@@ -62,11 +58,27 @@ func (mq *natsMQ) subscribe() {
 			return
 		}
 
+		items := make(chan rxgo.Item)
+		mq.observer = rxgo.FromEventSource(items, rxgo.WithErrorStrategy(rxgo.ContinueOnError))
+
 		go func() {
-			select {
-			case <-mq.done:
-				sub.Unsubscribe()
-				close(items)
+			defer sub.Unsubscribe()
+			defer close(items)
+
+			for {
+				select {
+				case <-mq.done:
+					return
+				case msg, ok := <-msgC:
+					if !ok {
+						return
+					}
+
+					select {
+					case <-mq.done:
+					case items <- rxgo.Of(msg.Data):
+					}
+				}
 			}
 		}()
 	})
