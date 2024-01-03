@@ -63,8 +63,11 @@ func (mq *natsMQ) subscribe() {
 		}
 
 		go func() {
-			<-mq.done
-			sub.Unsubscribe()
+			select {
+			case <-mq.done:
+				sub.Unsubscribe()
+				close(items)
+			}
 		}()
 	})
 }
