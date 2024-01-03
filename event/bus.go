@@ -8,9 +8,13 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 )
+
+// Channel 通道名称
+var Channel = "nodehub:events"
 
 // RedisClient 客户端
 type RedisClient = mq.RedisClient
@@ -25,10 +29,17 @@ func NewBus(queue Queue) *Bus {
 	}
 }
 
+// NewNatsBus 使用nats构造事件总线
+func NewNatsBus(conn *nats.Conn) *Bus {
+	return &Bus{
+		queue: mq.NewNatsMQ(conn, Channel),
+	}
+}
+
 // NewRedisBus 构造函数
 func NewRedisBus(client RedisClient) *Bus {
 	return &Bus{
-		queue: mq.NewRedisMQ(client, "cluster:events"),
+		queue: mq.NewRedisMQ(client, Channel),
 	}
 }
 

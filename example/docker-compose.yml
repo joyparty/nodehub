@@ -13,3 +13,9 @@ services:
     image: 'redis:latest'
     ports:
       - 127.0.0.1:6379:6379
+  nats:
+    image: 'nats:latest'
+    ports:
+      - '127.0.0.1:4222:4222'
+      - '127.0.0.1:6222:6222'
+      - '127.0.0.1:8222:8222'

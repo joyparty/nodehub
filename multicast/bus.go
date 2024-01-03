@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 
+	"github.com/nats-io/nats.go"
 	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/protobuf/proto"
 )
+
+// Channel 通道名称
+var Channel = "nodehub:multicast"
 
 // RedisClient 实现了PubSub方法的客户端接口
 type RedisClient = mq.RedisClient
@@ -28,14 +32,21 @@ func NewBus(queue Queue) *Bus {
 	}
 }
 
+// NewNatsBus 使用nats构造总线
+func NewNatsBus(conn *nats.Conn) *Bus {
+	return &Bus{
+		queue: mq.NewNatsMQ(conn, Channel),
+	}
+}
+
 // NewRedisBus 构造函数
 //
 // client 可以使用 *redis.Client 或者 *redis.ClusterClient
 //
 // 当使用ClusterClient时，会采用sharded channel
-func NewRedisBus(client RedisClient, channel string) *Bus {
+func NewRedisBus(client RedisClient) *Bus {
 	return &Bus{
-		queue: mq.NewRedisMQ(client, channel),
+		queue: mq.NewRedisMQ(client, Channel),
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
+	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 	"gitlab.haochang.tv/gopkg/nodehub"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
@@ -23,17 +24,17 @@ import (
 )
 
 var (
-	registry  *cluster.Registry
-	publisher multicast.Publisher
-	eventBus  *event.Bus
+	registry *cluster.Registry
 
 	listenAddr string
 	redisAddr  string
+	natsAddr   string
 )
 
 func init() {
 	flag.StringVar(&listenAddr, "listen", "127.0.0.1:9100", "listen address")
 	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
+	flag.StringVar(&natsAddr, "nats", "127.0.0.1:4222", "nats address")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -47,13 +48,6 @@ func init() {
 	}))
 
 	registry = mustReturn(cluster.NewRegistry(client))
-
-	redisClient := redis.NewClient(&redis.Options{
-		Network: "tcp",
-		Addr:    redisAddr,
-	})
-	publisher = multicast.NewRedisBus(redisClient, "chat")
-	eventBus = event.NewRedisBus(redisClient)
 }
 
 func main() {
@@ -67,12 +61,15 @@ func main() {
 }
 
 func newGRPCServer() (*rpc.GRPCServer, error) {
+	// evBus, muBus := newRedisBus()
+	evBus, muBus := newNatsBus()
+
 	service := &roomService{
-		publisher: publisher,
+		publisher: muBus,
 		members:   gokit.NewMapOf[string, string](),
 	}
 
-	if err := eventBus.Subscribe(context.Background(), func(ev event.UserConnected, _ time.Time) {
+	if err := evBus.Subscribe(context.Background(), func(ev event.UserConnected, _ time.Time) {
 		service.boardcast(&roompb.News{
 			Content: fmt.Sprintf("EVENT: #%s connected", ev.UserID),
 		})
@@ -80,7 +77,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		panic(err)
 	}
 
-	if err := eventBus.Subscribe(context.Background(), func(ev event.UserDisconnected, _ time.Time) {
+	if err := evBus.Subscribe(context.Background(), func(ev event.UserDisconnected, _ time.Time) {
 		service.members.Delete(ev.UserID)
 
 		service.boardcast(&roompb.News{
@@ -117,4 +114,18 @@ func mustReturn[T any](t T, er error) T {
 		panic(er)
 	}
 	return t
+}
+
+func newRedisBus() (*event.Bus, *multicast.Bus) {
+	client := redis.NewClient(&redis.Options{
+		Network: "tcp",
+		Addr:    redisAddr,
+	})
+	return event.NewRedisBus(client), multicast.NewRedisBus(client)
+}
+
+func newNatsBus() (*event.Bus, *multicast.Bus) {
+	dsn := fmt.Sprintf("nats://%s", natsAddr)
+	conn := gokit.MustReturn(nats.Connect(dsn))
+	return event.NewNatsBus(conn), multicast.NewNatsBus(conn)
 }

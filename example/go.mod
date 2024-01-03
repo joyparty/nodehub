@@ -4,6 +4,7 @@ go 1.21.4
 
 require (
 	github.com/joyparty/gokit v0.0.0-20231215030552-11b001634aa3
+	github.com/nats-io/nats.go v1.31.0
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/redis/go-redis/v9 v9.3.0
 	gitlab.haochang.tv/gopkg/nodehub v0.0.0-20231214095413-449034d6bda2
@@ -23,6 +24,9 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
+	github.com/klauspost/compress v1.17.0 // indirect
+	github.com/nats-io/nkeys v0.4.5 // indirect
+	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/panjf2000/ants/v2 v2.9.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/reactivex/rxgo/v2 v2.5.0 // indirect
@@ -34,6 +38,7 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.11 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.26.0 // indirect
+	golang.org/x/crypto v0.16.0 // indirect
 	golang.org/x/exp v0.0.0-20231214170342-aacd6d4b4611 // indirect
 	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
