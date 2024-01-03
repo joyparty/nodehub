@@ -86,7 +86,7 @@ func (mq *redisMQ) subscribe() {
 		}
 
 		items := make(chan rxgo.Item)
-		mq.observer = rxgo.FromEventSource(items)
+		mq.observer = rxgo.FromEventSource(items, rxgo.WithErrorStrategy(rxgo.ContinueOnError))
 
 		mc := pubsub.Channel()
 		go func() {
