@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"math/rand"
 	"runtime"
 
 	"github.com/joyparty/gokit"
@@ -14,12 +15,14 @@ import (
 type grpcResolver struct {
 	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
-	// 每个服务的负载均衡器
-	// serviceCode => Balancer
-	balancer *gokit.MapOf[int32, Balancer]
-
 	// serviceCode => GRPCServiceDesc
 	services *gokit.MapOf[int32, GRPCServiceDesc]
+
+	serviceNodes *gokit.MapOf[int32, []NodeEntry]
+
+	// 每个服务的负载均衡器
+	// serviceCode => Balancer
+	serviceBalancer *gokit.MapOf[int32, Balancer]
 
 	// endpoint => *grpc.ClientConn
 	conns *gokit.MapOf[string, *grpc.ClientConn]
@@ -30,10 +33,11 @@ type grpcResolver struct {
 // newGRPCResolver 创建grpc服务发现
 func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 	return &grpcResolver{
-		allNodes: gokit.NewMapOf[ulid.ULID, NodeEntry](),
-		balancer: gokit.NewMapOf[int32, Balancer](),
-		services: gokit.NewMapOf[int32, GRPCServiceDesc](),
-		conns:    gokit.NewMapOf[string, *grpc.ClientConn](),
+		allNodes:        gokit.NewMapOf[ulid.ULID, NodeEntry](),
+		services:        gokit.NewMapOf[int32, GRPCServiceDesc](),
+		serviceNodes:    gokit.NewMapOf[int32, []NodeEntry](),
+		serviceBalancer: gokit.NewMapOf[int32, Balancer](),
+		conns:           gokit.NewMapOf[string, *grpc.ClientConn](),
 		dialOptions: append([]grpc.DialOption{
 			// 内部服务节点之间不需要加密
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -57,7 +61,8 @@ func (r *grpcResolver) Update(node NodeEntry) {
 
 		// 网关可以一直开启不重启，所以允许新的节点配置覆盖已有配置
 		r.services.Store(desc.Code, desc)
-		r.resetBalancer(desc.Code)
+		r.updateServiceNodes(desc.Code)
+		r.updateBalancer(desc.Code)
 	}
 }
 
@@ -69,12 +74,13 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 
 	r.allNodes.Delete(node.ID)
 	for _, desc := range node.GRPC.Services {
-		r.resetBalancer(desc.Code)
+		r.updateServiceNodes(desc.Code)
+		r.updateBalancer(desc.Code)
 	}
 }
 
-func (r *grpcResolver) resetBalancer(serviceCode int32) {
-	// 找出所有状态为OK的节点
+// updateServiceNodes 更新服务可用节点
+func (r *grpcResolver) updateServiceNodes(serviceCode int32) {
 	nodes := []NodeEntry{}
 	r.allNodes.Range(func(_ ulid.ULID, entry NodeEntry) bool {
 		if entry.State == NodeOK {
@@ -88,11 +94,27 @@ func (r *grpcResolver) resetBalancer(serviceCode int32) {
 		return true
 	})
 
+	if len(nodes) == 0 {
+		r.serviceNodes.Delete(serviceCode)
+	} else {
+		r.serviceNodes.Store(serviceCode, nodes)
+	}
+}
+
+func (r *grpcResolver) updateBalancer(serviceCode int32) {
+	// 私有服务不使用负载均衡
+	desc, ok := r.services.Load(serviceCode)
+	if !ok || !desc.Public {
+		return
+	}
+
+	nodes, _ := r.serviceNodes.Load(serviceCode)
+
 	// balancer不考虑在使用过程中增减节点，每次节点变更都重新生成相关服务的负载均衡器
 	if len(nodes) == 0 {
-		r.balancer.Delete(serviceCode)
+		r.serviceBalancer.Delete(serviceCode)
 	} else {
-		r.balancer.Store(serviceCode, NewBalancer(serviceCode, nodes))
+		r.serviceBalancer.Store(serviceCode, NewBalancer(serviceCode, nodes))
 	}
 }
 
@@ -101,9 +123,9 @@ func (r *grpcResolver) GetDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 	return r.services.Load(serviceCode)
 }
 
-// PickNode 根据负载均衡策略获取一个可用节点
-func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
-	balancer, foundBalancer := r.balancer.Load(serviceCode)
+// AllocNode 根据负载均衡策略分配可用节点
+func (r *grpcResolver) AllocNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
+	balancer, foundBalancer := r.serviceBalancer.Load(serviceCode)
 	if !foundBalancer {
 		err = ErrNoNodeAvailable
 		return
@@ -114,6 +136,19 @@ func (r *grpcResolver) PickNode(serviceCode int32, sess Session) (nodeID ulid.UL
 		return
 	}
 	return node.ID, nil
+}
+
+// PickNode 随机选择可用节点
+func (r *grpcResolver) PickNode(serviceCode int32) (nodeID ulid.ULID, err error) {
+	nodes, _ := r.serviceNodes.Load(serviceCode)
+	if l := len(nodes); l == 0 {
+		err = ErrNoNodeAvailable
+	} else if l == 1 {
+		nodeID = nodes[0].ID
+	} else {
+		nodeID = nodes[rand.Intn(l)].ID
+	}
+	return
 }
 
 // GetConn 获取节点连接

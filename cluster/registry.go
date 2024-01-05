@@ -176,9 +176,14 @@ func (r *Registry) GetGRPCDesc(serviceCode int32) (GRPCServiceDesc, bool) {
 	return r.grpcResolver.GetDesc(serviceCode)
 }
 
-// PickGRPCNode 根据负载均衡策略获取一个可用节点
-func (r *Registry) PickGRPCNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
-	return r.grpcResolver.PickNode(serviceCode, sess)
+// AllocGRPCNode 根据负载均衡策略给客户端会话分配可用节点
+func (r *Registry) AllocGRPCNode(serviceCode int32, sess Session) (nodeID ulid.ULID, err error) {
+	return r.grpcResolver.AllocNode(serviceCode, sess)
+}
+
+// PickGRPCNode 随机选择一个可用节点
+func (r *Registry) PickGRPCNode(serviceCode int32) (nodeID ulid.ULID, err error) {
+	return r.grpcResolver.PickNode(serviceCode)
 }
 
 // GetGRPCConn 获取指定节点的grpc连接

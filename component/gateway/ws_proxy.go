@@ -398,7 +398,7 @@ func (wp *WSProxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCS
 	var nodeID ulid.ULID
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
-		nodeID, err = wp.registry.PickGRPCNode(req.ServiceCode, sess)
+		nodeID, err = wp.registry.AllocGRPCNode(req.ServiceCode, sess)
 		if err != nil {
 			err = status.Errorf(codes.Unavailable, "pick grpc node, %v", err)
 			return
@@ -433,7 +433,7 @@ func (wp *WSProxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCS
 	}
 
 	// 自动分配策略，根据负载均衡策略选择一个节点发送
-	nodeID, err = wp.registry.PickGRPCNode(req.ServiceCode, sess)
+	nodeID, err = wp.registry.AllocGRPCNode(req.ServiceCode, sess)
 	if err != nil {
 		err = status.Errorf(codes.Unavailable, "pick grpc node, %v", err)
 		return
