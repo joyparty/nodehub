@@ -71,17 +71,17 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 
 	if err := evBus.Subscribe(context.Background(), func(ev event.UserConnected, _ time.Time) {
 		service.boardcast(&roompb.News{
-			Content: fmt.Sprintf("EVENT: #%s connected", ev.UserID),
+			Content: fmt.Sprintf("EVENT: #%s connected", ev.SessionID),
 		})
 	}); err != nil {
 		panic(err)
 	}
 
 	if err := evBus.Subscribe(context.Background(), func(ev event.UserDisconnected, _ time.Time) {
-		service.members.Delete(ev.UserID)
+		service.members.Delete(ev.SessionID)
 
 		service.boardcast(&roompb.News{
-			Content: fmt.Sprintf("EVENT: #%s disconnected", ev.UserID),
+			Content: fmt.Sprintf("EVENT: #%s disconnected", ev.SessionID),
 		})
 	}); err != nil {
 		panic(err)

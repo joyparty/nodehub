@@ -136,12 +136,12 @@ func (wp *WSProxy) Start(ctx context.Context) error {
 	// 有状态路由更新
 	if wp.eventBus != nil {
 		wp.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
-			if _, ok := wp.sessionHub.Load(ev.UserID); ok {
-				wp.stateTable.Store(ev.UserID, ev.ServiceCode, ev.NodeID)
+			if _, ok := wp.sessionHub.Load(ev.SessionID); ok {
+				wp.stateTable.Store(ev.SessionID, ev.ServiceCode, ev.NodeID)
 			}
 		})
 		wp.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-			wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
+			wp.stateTable.Remove(ev.SessionID, ev.ServiceCode)
 		})
 	}
 
@@ -157,7 +157,8 @@ func (wp *WSProxy) Stop(ctx context.Context) error {
 	if wp.eventBus != nil {
 		wp.sessionHub.Range(func(s Session) bool {
 			wp.eventBus.Publish(context.Background(), event.UserDisconnected{
-				UserID: s.ID(),
+				SessionID: s.ID(),
+				GatewayID: wp.nodeID.String(),
 			})
 			return true
 		})
@@ -278,7 +279,8 @@ func (wp *WSProxy) onConnect(ctx context.Context, sess Session) error {
 
 	if wp.eventBus != nil {
 		wp.eventBus.Publish(ctx, event.UserConnected{
-			UserID: sess.ID(),
+			SessionID: sess.ID(),
+			GatewayID: wp.nodeID.String(),
 		})
 	}
 	return nil
@@ -293,7 +295,8 @@ func (wp *WSProxy) onDisconnect(ctx context.Context, sess Session) {
 
 	if wp.eventBus != nil {
 		wp.eventBus.Publish(ctx, event.UserDisconnected{
-			UserID: sessID,
+			SessionID: sessID,
+			GatewayID: wp.nodeID.String(),
 		})
 	}
 

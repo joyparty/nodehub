@@ -67,24 +67,26 @@ func deref(t reflect.Type) reflect.Type {
 
 // UserConnected 用户连接事件
 type UserConnected struct {
-	UserID string `json:"userID"`
+	SessionID string `json:"sessionID"`
+	GatewayID string `json:"gatewayID"`
 }
 
 // UserDisconnected 用户断开连接事件
 type UserDisconnected struct {
-	UserID string `json:"userID"`
+	SessionID string `json:"sessionID"`
+	GatewayID string `json:"gatewayID"`
 }
 
 // NodeAssign 给用户分配有状态节点
 type NodeAssign struct {
 	ServiceCode int32     `json:"serviceCode"`
 	NodeID      ulid.ULID `json:"nodeID"`
-	UserID      string    `json:"userID"`
+	SessionID   string    `json:"sessionID"`
 }
 
 // NodeUnassign 取消用户分配的有状态节点
 type NodeUnassign struct {
 	ServiceCode int32     `json:"serviceCode"`
 	NodeID      ulid.ULID `json:"nodeID"`
-	UserID      string    `json:"userID"`
+	SessionID   string    `json:"sessionID"`
 }
