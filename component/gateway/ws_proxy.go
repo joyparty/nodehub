@@ -48,12 +48,15 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WSProxy struct {
-	nodeID      ulid.ULID
-	registry    *cluster.Registry
-	eventBus    *event.Bus
-	multicast   multicast.Subscriber
-	authorize   Authorize
-	interceptor Interceptor
+	nodeID    ulid.ULID
+	registry  *cluster.Registry
+	eventBus  *event.Bus
+	multicast multicast.Subscriber
+	authorize Authorize
+
+	requestInterceptor    RequestInterceptor
+	connectInterceptor    ConnectInterceptor
+	disconnectInterceptor DisconnectInterceptor
 
 	requestLogger logger.Logger
 	server        *http.Server
@@ -67,14 +70,17 @@ type WSProxy struct {
 // NewWSProxy 构造函数
 func NewWSProxy(nodeID ulid.ULID, registry *cluster.Registry, listenAddr string, opt ...WSProxyOption) *WSProxy {
 	wp := &WSProxy{
-		nodeID:      nodeID,
-		registry:    registry,
-		authorize:   defaultAuthorizer,
-		interceptor: defaultInterceptor,
-		sessionHub:  newSessionHub(),
-		stateTable:  newStateTable(),
-		cleanJobs:   gokit.NewMapOf[string, *time.Timer](),
-		done:        make(chan struct{}),
+		nodeID:     nodeID,
+		registry:   registry,
+		authorize:  defaultAuthorizer,
+		sessionHub: newSessionHub(),
+		stateTable: newStateTable(),
+		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
+		done:       make(chan struct{}),
+
+		requestInterceptor:    defaultRequestInterceptor,
+		connectInterceptor:    defaultConnectInterceptor,
+		disconnectInterceptor: defaultDisconnectInterceptor,
 	}
 
 	mux := http.NewServeMux()
@@ -135,7 +141,6 @@ func (wp *WSProxy) Start(ctx context.Context) error {
 			}
 		})
 		wp.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-			// 即使离线，状态路由也会继续留存一段时间，所以仍然接受删除操作
 			wp.stateTable.Remove(ev.UserID, ev.ServiceCode)
 		})
 	}
@@ -174,8 +179,11 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	wp.onConnect(ctx, sess)
 	defer wp.onDisconnect(ctx, sess)
+	if err := wp.onConnect(ctx, sess); err != nil {
+		logger.Error("on connect", "error", err)
+		return
+	}
 
 	requestQueue := make(chan serviceReqeust)
 	defer close(requestQueue)
@@ -223,7 +231,7 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		wp.interceptor(ctx, req, sess, requestHandler)
+		wp.requestInterceptor(ctx, req, sess, requestHandler)
 	}
 }
 
@@ -252,8 +260,13 @@ func (wp *WSProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, 
 	return sess, nil
 }
 
-func (wp *WSProxy) onConnect(ctx context.Context, sess Session) {
+func (wp *WSProxy) onConnect(ctx context.Context, sess Session) error {
 	wp.sessionHub.Store(sess)
+	logger.Info("client connected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+
+	if err := wp.connectInterceptor(ctx, sess); err != nil {
+		return err
+	}
 
 	// 放弃之前断线创造的清理任务
 	if timer, ok := wp.cleanJobs.Load(sess.ID()); ok {
@@ -268,11 +281,12 @@ func (wp *WSProxy) onConnect(ctx context.Context, sess Session) {
 			UserID: sess.ID(),
 		})
 	}
-
-	logger.Info("client connected", "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+	return nil
 }
 
 func (wp *WSProxy) onDisconnect(ctx context.Context, sess Session) {
+	wp.disconnectInterceptor(ctx, sess)
+
 	sessID := sess.ID()
 	wp.sessionHub.Delete(sessID)
 	sess.Close()
@@ -621,16 +635,16 @@ func WithEventBus(bus *event.Bus) WSProxyOption {
 // RequestHandler 请求处理函数
 type RequestHandler func(ctx context.Context, req *nh.Request, sess Session)
 
-// Interceptor 拦截器
+// RequestInterceptor 请求拦截器
 //
 // 拦截器提供了请求过程中注入自定义钩子的机制，拦截器需要在调用过程中执行handler函数来完成请求流程
-type Interceptor func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler)
+type RequestInterceptor func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler)
 
-var defaultInterceptor = func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler) {
+var defaultRequestInterceptor = func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler) {
 	handler(ctx, req, sess)
 }
 
-// WithInterceptor 设置拦截器
+// WithRequestInterceptor 设置拦截器
 //
 // Example:
 //
@@ -639,8 +653,34 @@ var defaultInterceptor = func(ctx context.Context, req *nh.Request, sess Session
 //		handler(ctx, req, sess)
 //		// do something after request
 //	}
-func WithInterceptor(i Interceptor) WSProxyOption {
+func WithRequestInterceptor(i RequestInterceptor) WSProxyOption {
 	return func(wp *WSProxy) {
-		wp.interceptor = i
+		wp.requestInterceptor = i
+	}
+}
+
+// ConnectInterceptor 在连接创建之后执行自定义操作，返回错误会中断连接
+type ConnectInterceptor func(ctx context.Context, sess Session) error
+
+var defaultConnectInterceptor = func(ctx context.Context, sess Session) error {
+	return nil
+}
+
+// WithConnectInterceptor 设置连接拦截器，在连接创建之后执行自定义操作，返回错误会中断连接
+func WithConnectInterceptor(i ConnectInterceptor) WSProxyOption {
+	return func(wp *WSProxy) {
+		wp.connectInterceptor = i
+	}
+}
+
+// DisconnectInterceptor 在连接断开前执行自定操作
+type DisconnectInterceptor func(ctx context.Context, sess Session)
+
+var defaultDisconnectInterceptor = func(ctx context.Context, sess Session) {}
+
+// WithDisconnectInterceptor 设置断开连接拦截器，在连接断开前执行自定操作
+func WithDisconnectInterceptor(i DisconnectInterceptor) WSProxyOption {
+	return func(wp *WSProxy) {
+		wp.disconnectInterceptor = i
 	}
 }
