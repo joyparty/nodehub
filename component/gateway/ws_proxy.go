@@ -190,7 +190,7 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	defer close(requestQueue)
 	go wp.runRequestQueue(ctx, requestQueue)
 
-	requestHandler := func(ctx context.Context, req *nh.Request, sess Session) {
+	requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
 		exec, unordered := wp.newUnaryRequest(ctx, req, sess)
 		fn := func() {
 			exec()
@@ -232,7 +232,7 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		wp.requestInterceptor(ctx, req, sess, requestHandler)
+		wp.requestInterceptor(ctx, sess, req, requestHandler)
 	}
 }
 
@@ -636,15 +636,15 @@ func WithEventBus(bus *event.Bus) WSProxyOption {
 }
 
 // RequestHandler 请求处理函数
-type RequestHandler func(ctx context.Context, req *nh.Request, sess Session)
+type RequestHandler func(ctx context.Context, sess Session, req *nh.Request)
 
 // RequestInterceptor 请求拦截器
 //
 // 拦截器提供了请求过程中注入自定义钩子的机制，拦截器需要在调用过程中执行handler函数来完成请求流程
-type RequestInterceptor func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler)
+type RequestInterceptor func(ctx context.Context, sess Session, req *nh.Request, next RequestHandler)
 
-var defaultRequestInterceptor = func(ctx context.Context, req *nh.Request, sess Session, handler RequestHandler) {
-	handler(ctx, req, sess)
+var defaultRequestInterceptor = func(ctx context.Context, sess Session, req *nh.Request, next RequestHandler) {
+	next(ctx, sess, req)
 }
 
 // WithRequestInterceptor 设置拦截器
