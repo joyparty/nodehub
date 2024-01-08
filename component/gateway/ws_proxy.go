@@ -173,7 +173,7 @@ func (wp *WSProxy) Stop(ctx context.Context) error {
 func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	sess, err := wp.newSession(w, r)
 	if err != nil {
-		logger.Error("initialize session", "error", err)
+		logger.Error("initialize session", "error", err, "remoteAddr", r.RemoteAddr)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer wp.onDisconnect(ctx, sess)
 	if err := wp.onConnect(ctx, sess); err != nil {
-		logger.Error("on connect", "error", err)
+		logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 		return
 	}
 
@@ -227,7 +227,7 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			requestPool.Put(req)
 
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Error("recv request", "error", err)
+				logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 			}
 			return
 		}
