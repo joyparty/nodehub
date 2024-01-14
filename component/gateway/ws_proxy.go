@@ -186,18 +186,18 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestQueue := make(chan serviceReqeust)
+	requestQueue := make(chan requestTask)
 	defer close(requestQueue)
 	go wp.runRequestQueue(ctx, requestQueue)
 
 	requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
-		exec, unordered := wp.newUnaryRequest(ctx, req, sess)
+		exec, pipeline := wp.newUnaryRequest(ctx, req, sess)
 		fn := func() {
 			exec()
 			requestPool.Put(req)
 		}
 
-		if unordered {
+		if pipeline == "" {
 			// 允许无序执行，并发处理
 			ants.Submit(fn)
 		} else {
@@ -205,9 +205,9 @@ func (wp *WSProxy) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			select {
 			case <-wp.done:
 				return
-			case requestQueue <- serviceReqeust{
-				Service: req.ServiceCode,
-				Request: fn,
+			case requestQueue <- requestTask{
+				Pipeline: pipeline,
+				Request:  fn,
 			}:
 			}
 		}
@@ -311,7 +311,7 @@ func (wp *WSProxy) onDisconnect(ctx context.Context, sess Session) {
 	logger.Info("client disconnected", "sessionID", sessID, "remoteAddr", sess.RemoteAddr())
 }
 
-func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *nh.Request, sess Session) (exec func(), unordered bool) {
+func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *nh.Request, sess Session) (exec func(), pipeline string) {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	var err error
 	desc, ok := wp.registry.GetGRPCDesc(req.ServiceCode)
@@ -324,14 +324,14 @@ func (wp *WSProxy) newUnaryRequest(ctx context.Context, req *nh.Request, sess Se
 	var doRequest func() error
 	startTime := time.Now()
 	if err != nil {
-		unordered = true // 不需要保证时序性
+		pipeline = ""
 
 		doRequest = func() error {
 			wp.logRequest(ctx, nil, sess, req, startTime, err)
 			return err
 		}
 	} else {
-		unordered = desc.Unordered
+		pipeline = desc.Pipeline
 
 		doRequest = func() (err error) {
 			var conn *grpc.ClientConn
@@ -503,20 +503,20 @@ func (wp *WSProxy) logRequest(
 	}
 }
 
-type serviceReqeust struct {
-	Service int32
-	Request func()
+type requestTask struct {
+	Pipeline string
+	Request  func()
 }
 
 // 把每个service的请求分发到不同的worker处理
 // 确保对同一个service的请求是顺序处理的
-func (wp *WSProxy) runRequestQueue(ctx context.Context, queue <-chan serviceReqeust) {
+func (wp *WSProxy) runRequestQueue(ctx context.Context, queue <-chan requestTask) {
 	type worker struct {
 		C          chan func()
 		ActiveTime time.Time
 	}
 
-	workers := map[int32]*worker{}
+	workers := map[string]*worker{}
 	defer func() {
 		for _, w := range workers {
 			close(w.C)
@@ -538,17 +538,17 @@ func (wp *WSProxy) runRequestQueue(ctx context.Context, queue <-chan serviceReqe
 					delete(workers, key)
 				}
 			}
-		case item, ok := <-queue:
+		case task, ok := <-queue:
 			if !ok {
 				return
 			}
 
-			w, ok := workers[item.Service]
+			w, ok := workers[task.Pipeline]
 			if !ok {
 				w = &worker{
 					C: make(chan func(), 100),
 				}
-				workers[item.Service] = w
+				workers[task.Pipeline] = w
 
 				go func() {
 					for fn := range w.C {
@@ -557,7 +557,7 @@ func (wp *WSProxy) runRequestQueue(ctx context.Context, queue <-chan serviceReqe
 				}()
 			}
 
-			w.C <- item.Request
+			w.C <- task.Request
 			w.ActiveTime = time.Now()
 		}
 	}

@@ -130,10 +130,14 @@ func WithAllocation(allocation string) Option {
 	}
 }
 
-// WithUnordered 设置此服务的所有接口请求不需要保证时序性
-func WithUnordered() Option {
+// WithPipeline 设置管道名称
+//
+// 设置了管道名称的请求会按照时序性顺序处理，没有设置管道的请求会并发处理
+//
+// 多个服务可以声明同一个管道名称，这样请求会被分配到同一个管道中
+func WithPipeline(pipeline string) Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
-		desc.Unordered = true
+		desc.Pipeline = pipeline
 		return desc
 	}
 }

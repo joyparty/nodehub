@@ -74,7 +74,7 @@ func (n *Node) AddComponent(c ...Component) {
 	for i := range c {
 		// 自动注入节点管理服务
 		if v, ok := c[i].(grpcServer); ok {
-			v.RegisterService(rpc.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n}, rpc.WithUnordered())
+			v.RegisterService(rpc.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
 			break
 		}
 	}
@@ -246,7 +246,7 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node.AddComponent(gw)
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
-	gs.RegisterService(rpc.GatewayServiceCode, nh.Gateway_ServiceDesc, gw.NewGRPCService(), rpc.WithUnordered())
+	gs.RegisterService(rpc.GatewayServiceCode, nh.Gateway_ServiceDesc, gw.NewGRPCService())
 	node.AddComponent(gs)
 
 	return node

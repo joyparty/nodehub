@@ -107,19 +107,16 @@ type GRPCServiceDesc struct {
 	// Weight 节点权重，用于负载均衡
 	Weight int `json:"weight,omitempty"`
 
-	// 接口之间是否不存在时序性要求，
-	// 这个配置会影响网关转发客户端请求的方式
-	//
-	// 设置为true时，网关会把对这个服务的每个请求并发处理，这有可能导致后发先至的结果，但好处是处理能力能够得到提高
-	//
-	// 默认为false，效果是同一个客户端对这个服务的请求一定会被顺序发送
-	Unordered bool `json:"unordered,omitempty"`
-
 	// Stateful 是否有状态服务
 	Stateful bool `json:"stateful,omitempty"`
 
 	// Allocation 有状态节点分配方式
 	Allocation string `json:"allocation,omitempty"`
+
+	// Pipeline 声明管道名称的服务，请求会严格按照时序性顺序处理，没有声明管道的请求会被并发处理
+	//
+	// 多个服务可以声明同一个管道名称，这样请求会被分配到同一个管道中
+	Pipeline string `json:"pipeline,omitempty"`
 }
 
 // Validate 验证条目是否合法
