@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	// MDUserID grpc metadata中的user id key
-	MDUserID = "x-user"
+	// MDSessID grpc metadata中的session id key
+	MDSessID = "x-sess"
 	// MDTransactionID grpc metadata中的transaction id key，用于跟踪请求
 	MDTransactionID = "x-trans"
 	// MDGateway grpc metadata中的gateway key，用于标识请求来自哪个网关

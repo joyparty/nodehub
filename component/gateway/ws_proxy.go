@@ -254,7 +254,7 @@ func (wp *WSProxy) newSession(w http.ResponseWriter, r *http.Request) (Session, 
 	sess := newWsSession(wsConn)
 	sess.SetID(userID)
 
-	md.Set(rpc.MDUserID, userID)
+	md.Set(rpc.MDSessID, userID)
 	md.Set(rpc.MDGateway, wp.nodeID.String())
 	sess.SetMetadata(md)
 
@@ -484,9 +484,6 @@ func (wp *WSProxy) logRequest(
 	if md, ok := metadata.FromOutgoingContext(ctx); ok {
 		if v := md.Get(rpc.MDTransactionID); len(v) > 0 {
 			logValues = append(logValues, "transID", v[0])
-		}
-		if v := md.Get(rpc.MDUserID); len(v) > 0 {
-			logValues = append(logValues, "userID", v[0])
 		}
 	}
 

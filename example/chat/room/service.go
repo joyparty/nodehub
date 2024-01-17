@@ -24,7 +24,7 @@ type roomService struct {
 }
 
 func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*emptypb.Empty, error) {
-	userID := rpc.UserIDInContext(ctx)
+	userID := rpc.SessionIDInContext(ctx)
 
 	userName := req.GetName()
 	if userName == "" {
@@ -41,7 +41,7 @@ func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*empt
 }
 
 func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
-	userID := rpc.UserIDInContext(ctx)
+	userID := rpc.SessionIDInContext(ctx)
 
 	if _, ok := rs.members.Load(userID); ok {
 		rs.members.Delete(userID)
@@ -56,7 +56,7 @@ func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 }
 
 func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptypb.Empty, error) {
-	userID := rpc.UserIDInContext(ctx)
+	userID := rpc.SessionIDInContext(ctx)
 	if name, ok := rs.members.Load(userID); ok {
 		news := &roompb.News{
 			FromId:   userID,

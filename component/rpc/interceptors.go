@@ -22,7 +22,7 @@ func LogUnary(l logger.Logger) grpc.UnaryServerInterceptor {
 			}
 
 			if md, ok := metadata.FromIncomingContext(ctx); ok {
-				if v := md.Get(MDUserID); len(v) > 0 {
+				if v := md.Get(MDSessID); len(v) > 0 {
 					vals = append(vals, "userID", v[0])
 				}
 

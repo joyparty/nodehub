@@ -19,9 +19,9 @@ func GatewayIDInContext(ctx context.Context) ulid.ULID {
 	return gwID
 }
 
-// UserIDInContext 从context中获取user id
-func UserIDInContext(ctx context.Context) string {
-	value := metadata.ValueFromIncomingContext(ctx, MDUserID)
+// SessionIDInContext 从context中获取session id
+func SessionIDInContext(ctx context.Context) string {
+	value := metadata.ValueFromIncomingContext(ctx, MDSessID)
 	if len(value) == 0 {
 		panic(errors.New("user id not found in incoming context"))
 	}
