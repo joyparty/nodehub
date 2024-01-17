@@ -245,7 +245,7 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node := NewNode("gateway", registry)
 
 	playground := gateway.NewPlayground(node.ID(), registry, config.Options...)
-	gw := gateway.NewWSProxy(playground, config.WebsocketListen, config.Authorizer)
+	gw := gateway.NewWSServer(playground, config.WebsocketListen, config.Authorizer)
 	node.AddComponent(gw)
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
