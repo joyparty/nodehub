@@ -179,7 +179,6 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 	ws.setPingPongHandler()
 
 	go ws.sendLoop()
-	go ws.heartbeatLoop()
 	return ws
 }
 
@@ -198,25 +197,6 @@ func (ws *wsSession) setPingPongHandler() {
 
 		return pingHandler(appData)
 	})
-}
-
-func (ws *wsSession) heartbeatLoop() {
-	for {
-		select {
-		case <-ws.done:
-			return
-		case <-time.After(1 * time.Second):
-			if time.Since(ws.LastRWTime()) > DefaultHeartbeatDuration {
-				select {
-				case <-ws.done:
-				case ws.sendC <- wsPayload{
-					messageType: websocket.PingMessage,
-					data:        nil,
-				}:
-				}
-			}
-		}
-	}
 }
 
 func (ws *wsSession) ID() string {
@@ -280,10 +260,17 @@ func (ws *wsSession) Send(resp *nh.Reply) error {
 }
 
 func (ws *wsSession) sendLoop() {
+	ticker := time.NewTicker(DefaultHeartbeatDuration / 2)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ws.done:
 			return
+		case <-ticker.C:
+			if time.Since(ws.LastRWTime()) > DefaultHeartbeatDuration {
+				ws.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
+			}
 		case payload := <-ws.sendC:
 			ws.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := ws.conn.WriteMessage(payload.messageType, payload.data); err != nil {
