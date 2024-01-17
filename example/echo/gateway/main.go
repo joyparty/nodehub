@@ -51,14 +51,15 @@ func init() {
 
 func main() {
 	node := nodehub.NewGatewayNode(registry, nodehub.GatewayConfig{
-		WSProxyListen: websocketListen,
-		WSProxyOption: []gateway.WSProxyOption{
-			gateway.WithRequestLog(slog.Default()),
-			gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-				return ulid.Make().String(), metadata.MD{}, true
-			}),
+		Options: []gateway.Option{
+			gateway.WithRequestLogger(slog.Default()),
 		},
-		GRPCListen: grpcListen,
+		Authorizer: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+			return ulid.Make().String(), metadata.MD{}, true
+		},
+
+		WebsocketListen: websocketListen,
+		GRPCListen:      grpcListen,
 	})
 
 	if err := registry.Put(node.Entry()); err != nil {

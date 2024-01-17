@@ -57,19 +57,20 @@ func main() {
 
 	uid := &atomic.Int32{}
 	node := nodehub.NewGatewayNode(registry, nodehub.GatewayConfig{
-		WSProxyListen: websocketListen,
-		WSProxyOption: []gateway.WSProxyOption{
-			gateway.WithMulticastSubscriber(muBus),
+		Options: []gateway.Option{
+			gateway.WithRequestLogger(slog.Default()),
 			gateway.WithEventBus(evBus),
-			gateway.WithRequestLog(slog.Default()),
-			gateway.WithAuthorize(func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-				userID = fmt.Sprintf("%d", uid.Add(1))
-				md = metadata.MD{}
-				ok = true
-				return
-			}),
+			gateway.WithMulticast(muBus),
 		},
-		GRPCListen: grpcListen,
+		Authorizer: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+			userID = fmt.Sprintf("%d", uid.Add(1))
+			md = metadata.MD{}
+			ok = true
+			return
+		},
+
+		WebsocketListen: websocketListen,
+		GRPCListen:      grpcListen,
 	})
 
 	logger.Info("gateway server start", "listen", websocketListen)

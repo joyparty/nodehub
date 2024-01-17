@@ -3,6 +3,7 @@ package gateway
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sync/atomic"
 	"time"
 
@@ -27,20 +28,6 @@ var (
 
 	writeWait = 5 * time.Second
 )
-
-// Session 连接会话
-type Session interface {
-	ID() string
-	SetID(string)
-	SetMetadata(metadata.MD)
-	MetadataCopy() metadata.MD
-	Recv(*nh.Request) error
-	Send(*nh.Reply) error
-	LocalAddr() string
-	RemoteAddr() string
-	LastRWTime() time.Time
-	Close() error
-}
 
 type wsPayload struct {
 	messageType int
@@ -142,6 +129,9 @@ func (ws *wsSession) Recv(req *nh.Request) error {
 
 		messageType, message, err := ws.conn.ReadMessage()
 		if err != nil {
+			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				return io.EOF
+			}
 			return err
 		}
 		ws.lastRWTime.Store(time.Now())
@@ -227,84 +217,4 @@ func (ws *wsSession) Close() error {
 		return ws.conn.Close()
 	}
 	return nil
-}
-
-// sessionHub 会话集合
-type sessionHub struct {
-	clients *gokit.MapOf[string, Session]
-	count   *atomic.Int32
-	done    chan struct{}
-	closed  *atomic.Bool
-}
-
-func newSessionHub() *sessionHub {
-	hub := &sessionHub{
-		clients: gokit.NewMapOf[string, Session](),
-		count:   &atomic.Int32{},
-		done:    make(chan struct{}),
-		closed:  &atomic.Bool{},
-	}
-
-	go hub.removeZombie()
-	return hub
-}
-
-func (h *sessionHub) Count() int32 {
-	return h.count.Load()
-}
-
-func (h *sessionHub) Store(c Session) {
-	h.clients.Store(c.ID(), c)
-	h.count.Add(1)
-}
-
-func (h *sessionHub) Load(id string) (Session, bool) {
-	if c, ok := h.clients.Load(id); ok {
-		return c.(Session), true
-	}
-	return nil, false
-}
-
-func (h *sessionHub) Delete(id string) {
-	if _, ok := h.clients.Load(id); ok {
-		h.clients.Delete(id)
-		h.count.Add(-1)
-	}
-}
-
-func (h *sessionHub) Range(f func(s Session) bool) {
-	h.clients.Range(func(_ string, value Session) bool {
-		return f(value)
-	})
-}
-
-func (h *sessionHub) Close() {
-	if h.closed.CompareAndSwap(false, true) {
-		close(h.done)
-
-		h.Range(func(s Session) bool {
-			s.Close()
-
-			h.Delete(s.ID())
-			return true
-		})
-	}
-}
-
-// 定时移除心跳超时的客户端
-func (h *sessionHub) removeZombie() {
-	for {
-		select {
-		case <-h.done:
-			return
-		case <-time.After(10 * time.Second):
-			h.Range(func(s Session) bool {
-				if time.Since(s.LastRWTime()) > DefaultHeartbeatTimeout {
-					h.Delete(s.ID())
-					s.Close()
-				}
-				return true
-			})
-		}
-	}
 }

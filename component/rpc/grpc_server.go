@@ -90,7 +90,7 @@ func (gs *GRPCServer) Start(ctx context.Context) error {
 
 // Stop 停止服务
 func (gs *GRPCServer) Stop(ctx context.Context) error {
-	gs.server.Stop()
+	gs.server.GracefulStop()
 	return nil
 }
 

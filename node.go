@@ -232,8 +232,10 @@ func (n *Node) Entry() cluster.NodeEntry {
 
 // GatewayConfig 网关配置
 type GatewayConfig struct {
-	WSProxyListen    string
-	WSProxyOption    []gateway.WSProxyOption
+	Options []gateway.Option
+
+	WebsocketListen  string
+	Authorizer       gateway.Authorizer
 	GRPCListen       string
 	GRPCServerOption []grpc.ServerOption
 }
@@ -242,11 +244,12 @@ type GatewayConfig struct {
 func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node := NewNode("gateway", registry)
 
-	gw := gateway.NewWSProxy(node.ID(), registry, config.WSProxyListen, config.WSProxyOption...)
+	playground := gateway.NewPlayground(node.ID(), registry, config.Options...)
+	gw := gateway.NewWSProxy(playground, config.WebsocketListen, config.Authorizer)
 	node.AddComponent(gw)
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
-	gs.RegisterService(rpc.GatewayServiceCode, nh.Gateway_ServiceDesc, gw.NewGRPCService())
+	gs.RegisterService(rpc.GatewayServiceCode, nh.Gateway_ServiceDesc, playground.NewGRPCService())
 	node.AddComponent(gs)
 
 	return node
