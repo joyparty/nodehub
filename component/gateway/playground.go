@@ -28,6 +28,12 @@ import (
 )
 
 var (
+	// DefaultHeartbeatDuration 心跳消息发送时间间隔，连接在超过这个时间没有收发消息，就会发送心跳消息
+	DefaultHeartbeatDuration = 1 * time.Minute
+
+	// DefaultHeartbeatTimeout 心跳消息超时时间，默认为心跳消息发送时间间隔的3倍
+	DefaultHeartbeatTimeout = 3 * DefaultHeartbeatDuration
+
 	requestPool = &sync.Pool{
 		New: func() any {
 			return &nh.Request{}
@@ -308,8 +314,8 @@ func (p *Playground) onConnect(ctx context.Context, sess Session) error {
 }
 
 func (p *Playground) onDisconnect(ctx context.Context, sess Session) {
+	defer sess.Close()
 	p.disconnectInterceptor(ctx, sess)
-
 	p.sessions.Delete(sess.ID())
 
 	if p.eventBus != nil {
@@ -326,8 +332,6 @@ func (p *Playground) onDisconnect(ctx context.Context, sess Session) {
 		}
 		p.cleanJobs.Delete(sess.ID())
 	}))
-
-	sess.Close()
 }
 
 // Close 关闭服务

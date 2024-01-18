@@ -235,7 +235,7 @@ type GatewayConfig struct {
 	Options []gateway.Option
 
 	WebsocketListen  string
-	Authorizer       gateway.Authorizer
+	Authorizer       gateway.WSAuthorizer
 	GRPCListen       string
 	GRPCServerOption []grpc.ServerOption
 }

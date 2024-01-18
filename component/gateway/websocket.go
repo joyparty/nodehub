@@ -23,12 +23,6 @@ import (
 )
 
 var (
-	// DefaultHeartbeatDuration 心跳消息发送时间间隔，连接在超过这个时间没有收发消息，就会发送心跳消息
-	DefaultHeartbeatDuration = 1 * time.Minute
-
-	// DefaultHeartbeatTimeout 心跳消息超时时间，默认为心跳消息发送时间间隔的3倍
-	DefaultHeartbeatTimeout = 3 * DefaultHeartbeatDuration
-
 	// ErrSessionClosed 会话已关闭
 	ErrSessionClosed = errors.New("session closed")
 
@@ -41,7 +35,7 @@ var (
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type WSServer struct {
 	playground *Playground
-	authorizer Authorizer
+	authorizer WSAuthorizer
 	server     *http.Server
 }
 
@@ -49,7 +43,7 @@ type WSServer struct {
 func NewWSServer(
 	playground *Playground,
 	listenAddr string,
-	authorizer Authorizer,
+	authorizer WSAuthorizer,
 ) *WSServer {
 	ws := &WSServer{
 		playground: playground,
@@ -73,7 +67,7 @@ func (ws *WSServer) Name() string {
 
 // CompleteNodeEntry 补全节点信息
 func (ws *WSServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
-	entry.Websocket = fmt.Sprintf("ws://%s/grpc", ws.server.Addr)
+	entry.Entrance = fmt.Sprintf("ws://%s/grpc", ws.server.Addr)
 }
 
 // Start 启动websocket服务器
@@ -136,14 +130,14 @@ func (ws *WSServer) newSession(w http.ResponseWriter, r *http.Request) (Session,
 	return sess, nil
 }
 
-// Authorizer 身份验证逻辑
+// WSAuthorizer websocket方式身份验证逻辑
 //
 // 自定义身份验证逻辑，在websocket upgrade之前调用
 // 返回的metadata会在此连接的所有grpc request中携带
 // 返回的userID如果不为空，则会作为会话唯一标识使用，另外也会被自动加入到metadata中
 // 如果返回ok为false，会直接关闭连接
 // 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
-type Authorizer func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool)
+type WSAuthorizer func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool)
 
 type wsPayload struct {
 	messageType int
