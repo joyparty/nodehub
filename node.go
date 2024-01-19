@@ -74,7 +74,7 @@ func (n *Node) AddComponent(c ...Component) {
 	for i := range c {
 		// 自动注入节点管理服务
 		if v, ok := c[i].(grpcServer); ok {
-			v.RegisterService(rpc.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
+			v.RegisterService(nh.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
 			break
 		}
 	}
@@ -88,7 +88,7 @@ func (n *Node) Serve(ctx context.Context) error {
 	if entry.GRPC.Endpoint != "" {
 		var found bool
 		for _, desc := range entry.GRPC.Services {
-			if desc.Code == rpc.NodeServiceCode {
+			if desc.Code == nh.NodeServiceCode {
 				found = true
 				break
 			}
@@ -259,7 +259,7 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	}
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
-	gs.RegisterService(rpc.GatewayServiceCode, nh.Gateway_ServiceDesc, playground.NewGRPCService())
+	gs.RegisterService(nh.GatewayServiceCode, nh.Gateway_ServiceDesc, playground.NewGRPCService())
 	node.AddComponent(gs)
 
 	return node
