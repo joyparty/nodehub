@@ -234,12 +234,6 @@ func (n *Node) Entry() cluster.NodeEntry {
 type GatewayConfig struct {
 	Options []gateway.Option
 
-	WSListen     string
-	WSAuthorizer gateway.WSAuthorizer
-
-	TCPListen     string
-	TCPAuthorizer gateway.TCPAuthorizer
-
 	GRPCListen       string
 	GRPCServerOption []grpc.ServerOption
 }
@@ -248,18 +242,15 @@ type GatewayConfig struct {
 func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node := NewNode("gateway", registry)
 
-	playground := gateway.NewPlayground(node.ID(), registry, config.Options...)
-
-	if config.TCPListen != "" {
-		gw := gateway.NewTCPServer(playground, config.TCPListen, config.TCPAuthorizer)
-		node.AddComponent(gw)
-	} else {
-		gw := gateway.NewWSServer(playground, config.WSListen, config.WSAuthorizer)
-		node.AddComponent(gw)
+	options := append(config.Options, gateway.WithRegistry(registry))
+	proxy, err := gateway.NewProxy(node.ID(), options...)
+	if err != nil {
+		panic(fmt.Errorf("create proxy, %w", err))
 	}
+	node.AddComponent(proxy)
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
-	gs.RegisterService(nh.GatewayServiceCode, nh.Gateway_ServiceDesc, playground.NewGRPCService())
+	gs.RegisterService(nh.GatewayServiceCode, nh.Gateway_ServiceDesc, proxy.NewGRPCService())
 	node.AddComponent(gs)
 
 	return node

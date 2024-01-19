@@ -13,6 +13,7 @@ import (
 
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
+	"github.com/panjf2000/ants/v2"
 	"gitlab.haochang.tv/gopkg/nodehub/cluster"
 	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
@@ -33,35 +34,34 @@ var (
 // TCPAuthorizer tcp授权函数
 type TCPAuthorizer func(sess Session) (userID string, md metadata.MD, ok bool)
 
-// TCPServer tcp网关服务
-type TCPServer struct {
-	playground *Playground
-	listenAddr string
-	listener   net.Listener
-	authorizer TCPAuthorizer
+// tcpServer tcp网关服务
+type tcpServer struct {
+	listenAddr     string
+	listener       net.Listener
+	authorizer     TCPAuthorizer
+	sessionHandler func(sess Session) error
 }
 
 // NewTCPServer 构造函数
-func NewTCPServer(playground *Playground, listenAddr string, authorizer TCPAuthorizer) *TCPServer {
-	return &TCPServer{
-		playground: playground,
+func NewTCPServer(listenAddr string, authorizer TCPAuthorizer) Transporter {
+	return &tcpServer{
 		listenAddr: listenAddr,
 		authorizer: authorizer,
 	}
 }
 
-// Name 服务名称
-func (ts *TCPServer) Name() string {
-	return "tcpproxy"
-}
-
 // CompleteNodeEntry 补全节点信息
-func (ts *TCPServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
+func (ts *tcpServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Entrance = fmt.Sprintf("tcp://%s", ts.listenAddr)
 }
 
+// SetSessionHandler 设置会话处理函数
+func (ts *tcpServer) SetSessionHandler(handler func(sess Session) error) {
+	ts.sessionHandler = handler
+}
+
 // Start 启动服务
-func (ts *TCPServer) Start(ctx context.Context) error {
+func (ts *tcpServer) Start(ctx context.Context) error {
 	l, err := net.Listen("tcp", ts.listenAddr)
 	if err != nil {
 		return fmt.Errorf("listen, %w", err)
@@ -78,7 +78,12 @@ func (ts *TCPServer) Start(ctx context.Context) error {
 				continue
 			}
 
-			go ts.handle(conn)
+			if err := ants.Submit(func() {
+				ts.handle(conn)
+			}); err != nil {
+				logger.Error("handle connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
+				conn.Close()
+			}
 		}
 	}()
 
@@ -86,26 +91,21 @@ func (ts *TCPServer) Start(ctx context.Context) error {
 }
 
 // Stop 停止服务
-func (ts *TCPServer) Stop(ctx context.Context) error {
+func (ts *tcpServer) Stop(ctx context.Context) error {
 	ts.listener.Close()
-	ts.playground.Close()
 	return nil
 }
 
-func (ts *TCPServer) handle(conn net.Conn) {
-	sess, err := ts.newSession(conn)
-	if err != nil {
+func (ts *tcpServer) handle(conn net.Conn) {
+	if sess, err := ts.newSession(conn); err != nil {
 		logger.Error("initialize session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-		return
+	} else if err := ts.sessionHandler(sess); err != nil {
+		logger.Error("handle session", "error", err, "sessID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+		sess.Close()
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ts.playground.Handle(ctx, sess)
 }
 
-func (ts *TCPServer) newSession(conn net.Conn) (Session, error) {
+func (ts *tcpServer) newSession(conn net.Conn) (Session, error) {
 	sess := newTCPSession(conn)
 
 	userID, md, ok := ts.authorizer(sess)

@@ -47,6 +47,16 @@ var (
 	}
 )
 
+// Transporter 网关传输层接口
+type Transporter interface {
+	CompleteNodeEntry(entry *cluster.NodeEntry)
+	// 设置会话处理函数，每个连接创建时都需要调用设置的handler处理
+	SetSessionHandler(handler func(sess Session) error)
+
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
+
 // Session 连接会话
 type Session interface {
 	ID() string
@@ -141,28 +151,29 @@ func (h *sessionHub) removeZombie() {
 	}
 }
 
-// Playground 客户端会话运行环境
-type Playground struct {
+// Proxy 客户端会话运行环境
+type Proxy struct {
 	nodeID        ulid.ULID
+	transporter   Transporter
 	registry      *cluster.Registry
-	sessions      *sessionHub
 	eventBus      *event.Bus
 	multicast     multicast.Subscriber
-	stateTable    *stateTable
-	cleanJobs     *gokit.MapOf[string, *time.Timer]
 	requestLogger logger.Logger
-	done          chan struct{}
+
+	sessions   *sessionHub
+	stateTable *stateTable
+	cleanJobs  *gokit.MapOf[string, *time.Timer]
+	done       chan struct{}
 
 	requestInterceptor    RequestInterceptor
 	connectInterceptor    ConnectInterceptor
 	disconnectInterceptor DisconnectInterceptor
 }
 
-// NewPlayground 构造函数
-func NewPlayground(nodeID ulid.ULID, registry *cluster.Registry, opt ...Option) *Playground {
-	p := &Playground{
+// NewProxy 构造函数
+func NewProxy(nodeID ulid.ULID, opt ...Option) (*Proxy, error) {
+	p := &Proxy{
 		nodeID:     nodeID,
-		registry:   registry,
 		sessions:   newSessionHub(),
 		stateTable: newStateTable(),
 		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
@@ -177,124 +188,163 @@ func NewPlayground(nodeID ulid.ULID, registry *cluster.Registry, opt ...Option) 
 		fn(p)
 	}
 
-	p.init(context.Background())
-	return p
+	if err := p.validate(); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
-func (p *Playground) init(ctx context.Context) {
-	if p.eventBus != nil {
-		// 有状态路由更新
-		p.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
-			if _, ok := p.sessions.Load(ev.SessionID); ok {
-				p.stateTable.Store(ev.SessionID, ev.ServiceCode, ev.NodeID)
-			}
-		})
-		p.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-			p.stateTable.Remove(ev.SessionID, ev.ServiceCode)
-		})
-
-		// 禁止同一个用户同时连接多个网关
-		p.eventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
-			if ev.GatewayID != p.nodeID.String() {
-				if sess, ok := p.sessions.Load(ev.SessionID); ok {
-					p.sessions.Delete(sess.ID())
-					sess.Close()
-				}
-			}
-		})
+func (p *Proxy) validate() error {
+	if p.registry == nil {
+		return errors.New("registry is nil")
+	} else if p.transporter == nil {
+		return errors.New("transporter is nil")
+	} else if p.eventBus == nil {
+		return errors.New("eventBus is nil")
+	} else if p.multicast == nil {
+		return errors.New("multicast subscriber is nil")
 	}
 
-	// 处理主动下行消息
-	if p.multicast != nil {
-		p.multicast.Subscribe(ctx, func(msg *nh.Multicast) {
-			// 只发送5分钟内的消息
-			if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
-				for _, sessID := range msg.GetReceiver() {
-					if sess, ok := p.sessions.Load(sessID); ok {
-						ants.Submit(func() {
-							sess.Send(msg.Content)
-						})
-					}
-				}
-			}
-		})
-	}
+	return nil
+}
 
-	p.registry.SubscribeDelete(func(entry cluster.NodeEntry) {
-		p.stateTable.CleanNode(entry.ID)
-	})
+// Name 服务名称
+func (p *Proxy) Name() string {
+	return "proxy"
+}
+
+// CompleteNodeEntry 补全节点信息
+func (p *Proxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
+	p.transporter.CompleteNodeEntry(entry)
+}
+
+// Start 启动服务
+func (p *Proxy) Start(ctx context.Context) error {
+	p.transporter.SetSessionHandler(p.handle)
+	return p.transporter.Start(ctx)
+}
+
+// Stop 停止服务
+func (p *Proxy) Stop(ctx context.Context) error {
+	close(p.done)
+	p.sessions.Close()
+
+	return p.transporter.Stop(ctx)
 }
 
 // NewGRPCService 网关管理服务
-func (p *Playground) NewGRPCService() nh.GatewayServer {
+func (p *Proxy) NewGRPCService() nh.GatewayServer {
 	return &gwService{
 		sessionHub: p.sessions,
 		stateTable: p.stateTable,
 	}
 }
 
+func (p *Proxy) init(ctx context.Context) {
+	// 有状态路由更新
+	p.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
+		if _, ok := p.sessions.Load(ev.SessionID); ok {
+			p.stateTable.Store(ev.SessionID, ev.ServiceCode, ev.NodeID)
+		}
+	})
+	p.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
+		p.stateTable.Remove(ev.SessionID, ev.ServiceCode)
+	})
+
+	// 禁止同一个用户同时连接多个网关
+	p.eventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
+		if ev.GatewayID != p.nodeID.String() {
+			if sess, ok := p.sessions.Load(ev.SessionID); ok {
+				p.sessions.Delete(sess.ID())
+				sess.Close()
+			}
+		}
+	})
+
+	// 处理主动下行消息
+	p.multicast.Subscribe(ctx, func(msg *nh.Multicast) {
+		// 只发送5分钟内的消息
+		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
+			for _, sessID := range msg.GetReceiver() {
+				if sess, ok := p.sessions.Load(sessID); ok {
+					ants.Submit(func() {
+						sess.Send(msg.Content)
+					})
+				}
+			}
+		}
+	})
+
+	p.registry.SubscribeDelete(func(entry cluster.NodeEntry) {
+		p.stateTable.CleanNode(entry.ID)
+	})
+}
+
 // Handle 处理客户端连接
-func (p *Playground) Handle(ctx context.Context, sess Session) {
-	if err := p.onConnect(ctx, sess); err != nil {
-		logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
-		return
-	}
-
-	p.sessions.Store(sess)
-	defer p.onDisconnect(ctx, sess)
-
-	reqC := make(chan requestTask)
-	defer close(reqC)
-	go p.runPipeline(ctx, reqC)
-
-	requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
-		exec, pipeline := p.buildRequest(ctx, sess, req)
-		fn := func() {
-			exec()
-			requestPool.Put(req)
+func (p *Proxy) handle(sess Session) error {
+	return ants.Submit(func() {
+		ctx := context.Background()
+		if err := p.onConnect(ctx, sess); err != nil {
+			logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+			return
 		}
 
-		if pipeline == "" {
-			// 允许无序执行，并发处理
-			ants.Submit(fn)
-		} else {
-			// 需要保证时序性，投递到队列处理
+		p.sessions.Store(sess)
+		defer p.onDisconnect(ctx, sess)
+
+		reqC := make(chan requestTask)
+		defer close(reqC)
+		go p.runPipeline(ctx, reqC)
+
+		requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
+			exec, pipeline := p.buildRequest(ctx, sess, req)
+			fn := func() {
+				exec()
+				requestPool.Put(req)
+			}
+
+			if pipeline == "" {
+				// 允许无序执行，并发处理
+				ants.Submit(fn)
+			} else {
+				// 需要保证时序性，投递到队列处理
+				select {
+				case <-p.done:
+					return
+				case reqC <- requestTask{
+					Pipeline: pipeline,
+					Request:  fn,
+				}:
+				}
+			}
+		}
+
+		for {
 			select {
 			case <-p.done:
 				return
-			case reqC <- requestTask{
-				Pipeline: pipeline,
-				Request:  fn,
-			}:
-			}
-		}
-	}
-
-	for {
-		select {
-		case <-p.done:
-			return
-		default:
-		}
-
-		req := requestPool.Get().(*nh.Request)
-		nh.ResetRequest(req)
-
-		if err := sess.Recv(req); err != nil {
-			requestPool.Put(req)
-
-			if !errors.Is(err, io.EOF) {
-				logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+			default:
 			}
 
-			return
-		}
+			req := requestPool.Get().(*nh.Request)
+			nh.ResetRequest(req)
 
-		p.requestInterceptor(ctx, sess, req, requestHandler)
-	}
+			if err := sess.Recv(req); err != nil {
+				requestPool.Put(req)
+
+				if !errors.Is(err, io.EOF) {
+					logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+				}
+
+				return
+			}
+
+			p.requestInterceptor(ctx, sess, req, requestHandler)
+		}
+	})
 }
 
-func (p *Playground) onConnect(ctx context.Context, sess Session) error {
+func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 	if err := p.connectInterceptor(ctx, sess); err != nil {
 		return err
 	}
@@ -312,28 +362,24 @@ func (p *Playground) onConnect(ctx context.Context, sess Session) error {
 		p.cleanJobs.Delete(sess.ID())
 	}
 
-	if p.eventBus != nil {
-		if err := p.eventBus.Publish(ctx, event.UserConnected{
-			SessionID: sess.ID(),
-			GatewayID: p.nodeID.String(),
-		}); err != nil {
-			return fmt.Errorf("publish event, %w", err)
-		}
+	if err := p.eventBus.Publish(ctx, event.UserConnected{
+		SessionID: sess.ID(),
+		GatewayID: p.nodeID.String(),
+	}); err != nil {
+		return fmt.Errorf("publish event, %w", err)
 	}
 	return nil
 }
 
-func (p *Playground) onDisconnect(ctx context.Context, sess Session) {
+func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 	defer sess.Close()
 	p.disconnectInterceptor(ctx, sess)
 	p.sessions.Delete(sess.ID())
 
-	if p.eventBus != nil {
-		p.eventBus.Publish(ctx, event.UserDisconnected{
-			SessionID: sess.ID(),
-			GatewayID: p.nodeID.String(),
-		})
-	}
+	p.eventBus.Publish(ctx, event.UserDisconnected{
+		SessionID: sess.ID(),
+		GatewayID: p.nodeID.String(),
+	})
 
 	// 延迟5分钟之后，确认session不存在了，则清除相关数据
 	p.cleanJobs.Store(sess.ID(), time.AfterFunc(5*time.Minute, func() {
@@ -344,13 +390,7 @@ func (p *Playground) onDisconnect(ctx context.Context, sess Session) {
 	}))
 }
 
-// Close 关闭服务
-func (p *Playground) Close() {
-	close(p.done)
-	p.sessions.Close()
-}
-
-func (p *Playground) buildRequest(ctx context.Context, sess Session, req *nh.Request) (exec func(), pipeline string) {
+func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request) (exec func(), pipeline string) {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	var err error
 	desc, ok := p.registry.GetGRPCDesc(req.ServiceCode)
@@ -436,7 +476,7 @@ func (p *Playground) buildRequest(ctx context.Context, sess Session, req *nh.Req
 	return
 }
 
-func (p *Playground) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
+func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
 	var nodeID ulid.ULID
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
@@ -494,7 +534,7 @@ FINISH:
 	return
 }
 
-func (p *Playground) logRequest(
+func (p *Proxy) logRequest(
 	ctx context.Context,
 	sess Session,
 	req *nh.Request,
@@ -549,7 +589,7 @@ type requestTask struct {
 
 // 把每个service的请求分发到不同的worker处理
 // 确保对同一个service的请求是顺序处理的
-func (p *Playground) runPipeline(ctx context.Context, reqC <-chan requestTask) {
+func (p *Proxy) runPipeline(ctx context.Context, reqC <-chan requestTask) {
 	type worker struct {
 		C          chan func()
 		ActiveTime time.Time
@@ -603,7 +643,21 @@ func (p *Playground) runPipeline(ctx context.Context, reqC <-chan requestTask) {
 }
 
 // Option 网关配置选项
-type Option func(p *Playground)
+type Option func(p *Proxy)
+
+// WithRegistry 设置服务注册中心
+func WithRegistry(registry *cluster.Registry) Option {
+	return func(p *Proxy) {
+		p.registry = registry
+	}
+}
+
+// WithTransporter 设置传输层
+func WithTransporter(transporter Transporter) Option {
+	return func(p *Proxy) {
+		p.transporter = transporter
+	}
+}
 
 // RequestHandler 请求处理函数
 type RequestHandler func(ctx context.Context, sess Session, req *nh.Request)
@@ -619,7 +673,7 @@ var defaultRequestInterceptor = func(ctx context.Context, sess Session, req *nh.
 
 // WithRequestInterceptor 设置请求拦截器
 func WithRequestInterceptor(interceptor RequestInterceptor) Option {
-	return func(p *Playground) {
+	return func(p *Proxy) {
 		p.requestInterceptor = interceptor
 	}
 }
@@ -633,7 +687,7 @@ var defaultConnectInterceptor = func(ctx context.Context, sess Session) error {
 
 // WithConnectInterceptor 设置连接拦截器
 func WithConnectInterceptor(interceptor ConnectInterceptor) Option {
-	return func(p *Playground) {
+	return func(p *Proxy) {
 		p.connectInterceptor = interceptor
 	}
 }
@@ -645,28 +699,28 @@ var defaultDisconnectInterceptor = func(ctx context.Context, sess Session) {}
 
 // WithDisconnectInterceptor 设置断开连接拦截器
 func WithDisconnectInterceptor(interceptor DisconnectInterceptor) Option {
-	return func(p *Playground) {
+	return func(p *Proxy) {
 		p.disconnectInterceptor = interceptor
 	}
 }
 
 // WithEventBus 设置事件总线
 func WithEventBus(bus *event.Bus) Option {
-	return func(p *Playground) {
+	return func(p *Proxy) {
 		p.eventBus = bus
 	}
 }
 
 // WithMulticast 设置广播组件
 func WithMulticast(multicast multicast.Subscriber) Option {
-	return func(p *Playground) {
+	return func(p *Proxy) {
 		p.multicast = multicast
 	}
 }
 
 // WithRequestLogger 设置请求日志记录器
 func WithRequestLogger(logger logger.Logger) Option {
-	return func(p *Playground) {
+	return func(p *Proxy) {
 		p.requestLogger = logger
 	}
 }

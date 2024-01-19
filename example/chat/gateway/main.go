@@ -54,36 +54,42 @@ func init() {
 }
 
 func main() {
+	var transporter gateway.Transporter
+	uid := &atomic.Int32{}
+	if useTCP {
+		transporter = gateway.NewTCPServer(
+			proxyListen,
+			func(sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+				userID = fmt.Sprintf("%d", uid.Add(1))
+				md = metadata.MD{}
+				ok = true
+				return
+			},
+		)
+	} else {
+		transporter = gateway.NewWSServer(
+			proxyListen,
+			func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+				userID = fmt.Sprintf("%d", uid.Add(1))
+				md = metadata.MD{}
+				ok = true
+				return
+			},
+		)
+	}
+
 	// evBus, muBus := newRedisBus()
 	evBus, muBus := newNatsBus()
 
 	gwConfig := nodehub.GatewayConfig{
 		Options: []gateway.Option{
+			gateway.WithTransporter(transporter),
 			gateway.WithRequestLogger(slog.Default()),
 			gateway.WithEventBus(evBus),
 			gateway.WithMulticast(muBus),
 		},
 
 		GRPCListen: grpcListen,
-	}
-
-	uid := &atomic.Int32{}
-	if useTCP {
-		gwConfig.TCPListen = proxyListen
-		gwConfig.TCPAuthorizer = func(sess gateway.Session) (userID string, md metadata.MD, ok bool) {
-			userID = fmt.Sprintf("%d", uid.Add(1))
-			md = metadata.MD{}
-			ok = true
-			return
-		}
-	} else {
-		gwConfig.WSListen = proxyListen
-		gwConfig.WSAuthorizer = func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-			userID = fmt.Sprintf("%d", uid.Add(1))
-			md = metadata.MD{}
-			ok = true
-			return
-		}
 	}
 
 	node := nodehub.NewGatewayNode(registry, gwConfig)

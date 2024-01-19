@@ -28,23 +28,18 @@ var (
 	upgrader  = websocket.Upgrader{}
 )
 
-// WSServer websocket网关服务器
+// wsServer websocket网关服务器
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
-type WSServer struct {
-	playground *Playground
-	authorizer WSAuthorizer
-	server     *http.Server
+type wsServer struct {
+	authorizer     WSAuthorizer
+	server         *http.Server
+	sessionHandler func(sess Session) error
 }
 
 // NewWSServer 构造函数
-func NewWSServer(
-	playground *Playground,
-	listenAddr string,
-	authorizer WSAuthorizer,
-) *WSServer {
-	ws := &WSServer{
-		playground: playground,
+func NewWSServer(listenAddr string, authorizer WSAuthorizer) Transporter {
+	ws := &wsServer{
 		authorizer: authorizer,
 	}
 
@@ -58,18 +53,18 @@ func NewWSServer(
 	return ws
 }
 
-// Name 服务名称
-func (ws *WSServer) Name() string {
-	return "wsproxy"
-}
-
 // CompleteNodeEntry 补全节点信息
-func (ws *WSServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
+func (ws *wsServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Entrance = fmt.Sprintf("ws://%s/grpc", ws.server.Addr)
 }
 
+// SetSessionHandler 设置会话处理函数
+func (ws *wsServer) SetSessionHandler(handler func(sess Session) error) {
+	ws.sessionHandler = handler
+}
+
 // Start 启动websocket服务器
-func (ws *WSServer) Start(ctx context.Context) error {
+func (ws *wsServer) Start(ctx context.Context) error {
 	l, err := net.Listen("tcp", ws.server.Addr)
 	if err != nil {
 		return fmt.Errorf("listen, %w", err)
@@ -78,7 +73,6 @@ func (ws *WSServer) Start(ctx context.Context) error {
 	go func() {
 		if err := ws.server.Serve(l); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
-
 			panic(fmt.Errorf("start gateway, %w", err))
 		}
 	}()
@@ -87,26 +81,25 @@ func (ws *WSServer) Start(ctx context.Context) error {
 }
 
 // Stop 停止websocket服务器
-func (ws *WSServer) Stop(ctx context.Context) error {
-	ws.server.Shutdown(ctx)
-	ws.playground.Close()
-	return nil
+func (ws *wsServer) Stop(ctx context.Context) error {
+	return ws.server.Shutdown(ctx)
 }
 
-func (ws *WSServer) handle(w http.ResponseWriter, r *http.Request) {
+func (ws *wsServer) handle(w http.ResponseWriter, r *http.Request) {
 	sess, err := ws.newSession(w, r)
 	if err != nil {
 		logger.Error("initialize session", "error", err, "remoteAddr", r.RemoteAddr)
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ws.playground.Handle(ctx, sess)
+	if err := ws.sessionHandler(sess); err != nil {
+		logger.Error("handle session", "error", err, "sessID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+		sess.Close()
+		return
+	}
 }
 
-func (ws *WSServer) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
+func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
 	userID, md, ok := ws.authorizer(w, r)
 	if !ok {
 		return nil, errors.New("deny by authorize")
