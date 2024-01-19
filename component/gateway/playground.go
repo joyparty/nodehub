@@ -182,8 +182,8 @@ func NewPlayground(nodeID ulid.ULID, registry *cluster.Registry, opt ...Option) 
 }
 
 func (p *Playground) init(ctx context.Context) {
-	// 有状态路由更新
 	if p.eventBus != nil {
+		// 有状态路由更新
 		p.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
 			if _, ok := p.sessions.Load(ev.SessionID); ok {
 				p.stateTable.Store(ev.SessionID, ev.ServiceCode, ev.NodeID)
@@ -191,6 +191,16 @@ func (p *Playground) init(ctx context.Context) {
 		})
 		p.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
 			p.stateTable.Remove(ev.SessionID, ev.ServiceCode)
+		})
+
+		// 禁止同一个用户同时连接多个网关
+		p.eventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
+			if ev.GatewayID != p.nodeID.String() {
+				if sess, ok := p.sessions.Load(ev.SessionID); ok {
+					p.sessions.Delete(sess.ID())
+					sess.Close()
+				}
+			}
 		})
 	}
 
