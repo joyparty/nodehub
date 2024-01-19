@@ -22,6 +22,7 @@ var (
 	name       string
 	say        string
 	node       string
+	useTCP     bool
 
 	chatServiceCode = int32(clusterpb.Services_ROOM)
 )
@@ -31,12 +32,20 @@ func init() {
 	flag.StringVar(&name, "name", "", "user name")
 	flag.StringVar(&say, "say", "", "words send after join")
 	flag.StringVar(&node, "node", "", "node id")
+	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
 	flag.Parse()
 }
 
 func main() {
+	var gwClient *gateway.Client
+	if useTCP {
+		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("tcp://%s", serverAddr)))
+	} else {
+		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("ws://%s/grpc", serverAddr)))
+	}
+
 	client := &chatClient{
-		Client: gokit.MustReturn(gateway.NewClient(fmt.Sprintf("ws://%s/grpc", serverAddr))),
+		Client: gwClient,
 	}
 	// defer client.Close()
 

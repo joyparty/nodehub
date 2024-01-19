@@ -25,17 +25,19 @@ import (
 var (
 	registry *cluster.Registry
 
-	websocketListen string
-	grpcListen      string
-	redisAddr       string
-	natsAddr        string
+	proxyListen string
+	grpcListen  string
+	redisAddr   string
+	natsAddr    string
+	useTCP      bool
 )
 
 func init() {
-	flag.StringVar(&websocketListen, "websocket", "127.0.0.1:9000", "websocket listen address")
+	flag.StringVar(&proxyListen, "proxy", "127.0.0.1:9000", "proxy listen address")
 	flag.StringVar(&grpcListen, "grpc", "127.0.0.1:10000", "grpc listen address")
 	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
 	flag.StringVar(&natsAddr, "nats", "127.0.0.1:4222", "nats address")
+	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -55,25 +57,38 @@ func main() {
 	// evBus, muBus := newRedisBus()
 	evBus, muBus := newNatsBus()
 
-	uid := &atomic.Int32{}
-	node := nodehub.NewGatewayNode(registry, nodehub.GatewayConfig{
+	gwConfig := nodehub.GatewayConfig{
 		Options: []gateway.Option{
 			gateway.WithRequestLogger(slog.Default()),
 			gateway.WithEventBus(evBus),
 			gateway.WithMulticast(muBus),
 		},
-		Authorizer: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+
+		GRPCListen: grpcListen,
+	}
+
+	uid := &atomic.Int32{}
+	if useTCP {
+		gwConfig.TCPListen = proxyListen
+		gwConfig.TCPAuthorizer = func(sess gateway.Session) (userID string, md metadata.MD, ok bool) {
 			userID = fmt.Sprintf("%d", uid.Add(1))
 			md = metadata.MD{}
 			ok = true
 			return
-		},
+		}
+	} else {
+		gwConfig.WSListen = proxyListen
+		gwConfig.WSAuthorizer = func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+			userID = fmt.Sprintf("%d", uid.Add(1))
+			md = metadata.MD{}
+			ok = true
+			return
+		}
+	}
 
-		WebsocketListen: websocketListen,
-		GRPCListen:      grpcListen,
-	})
+	node := nodehub.NewGatewayNode(registry, gwConfig)
 
-	logger.Info("gateway server start", "listen", websocketListen)
+	logger.Info("gateway server start", "listen", proxyListen)
 	mustDo(node.Serve(context.Background()))
 }
 

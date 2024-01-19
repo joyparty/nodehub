@@ -234,8 +234,12 @@ func (n *Node) Entry() cluster.NodeEntry {
 type GatewayConfig struct {
 	Options []gateway.Option
 
-	WebsocketListen  string
-	Authorizer       gateway.WSAuthorizer
+	WSListen     string
+	WSAuthorizer gateway.WSAuthorizer
+
+	TCPListen     string
+	TCPAuthorizer gateway.TCPAuthorizer
+
 	GRPCListen       string
 	GRPCServerOption []grpc.ServerOption
 }
@@ -245,8 +249,14 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	node := NewNode("gateway", registry)
 
 	playground := gateway.NewPlayground(node.ID(), registry, config.Options...)
-	gw := gateway.NewWSServer(playground, config.WebsocketListen, config.Authorizer)
-	node.AddComponent(gw)
+
+	if config.TCPListen != "" {
+		gw := gateway.NewTCPServer(playground, config.TCPListen, config.TCPAuthorizer)
+		node.AddComponent(gw)
+	} else {
+		gw := gateway.NewWSServer(playground, config.WSListen, config.WSAuthorizer)
+		node.AddComponent(gw)
+	}
 
 	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
 	gs.RegisterService(rpc.GatewayServiceCode, nh.Gateway_ServiceDesc, playground.NewGRPCService())

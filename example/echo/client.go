@@ -16,17 +16,26 @@ import (
 )
 
 var (
-	serverAddr      string
+	serverAddr string
+	useTCP     bool
+
 	echoServiceCode = int32(clusterpb.Services_ECHO)
 )
 
 func init() {
 	flag.StringVar(&serverAddr, "server", "127.0.0.1:9000", "server address")
+	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
 	flag.Parse()
 }
 
 func main() {
-	endpoint := fmt.Sprintf("ws://%s/grpc", serverAddr)
+	var endpoint string
+	if useTCP {
+		endpoint = fmt.Sprintf("tcp://%s", serverAddr)
+	} else {
+		endpoint = fmt.Sprintf("ws://%s/grpc", serverAddr)
+	}
+
 	client := &echoClient{
 		Client: gokit.MustReturn(gateway.NewClient(endpoint)),
 	}

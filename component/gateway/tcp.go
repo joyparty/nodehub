@@ -66,6 +66,7 @@ func (ts *TCPServer) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen, %w", err)
 	}
+	ts.listener = l
 
 	go func() {
 		for {

@@ -18,14 +18,16 @@ import (
 )
 
 var (
-	registry        *cluster.Registry
-	websocketListen string
-	grpcListen      string
+	registry    *cluster.Registry
+	proxyListen string
+	grpcListen  string
+	useTCP      bool
 )
 
 func init() {
-	flag.StringVar(&websocketListen, "websocket", "127.0.0.1:9000", "websocket listen address")
+	flag.StringVar(&proxyListen, "proxy", "127.0.0.1:9000", "proxy listen address")
 	flag.StringVar(&grpcListen, "grpc", "127.0.0.1:10000", "grpc listen address")
+	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -50,17 +52,27 @@ func init() {
 }
 
 func main() {
-	node := nodehub.NewGatewayNode(registry, nodehub.GatewayConfig{
+	gwConfig := nodehub.GatewayConfig{
 		Options: []gateway.Option{
 			gateway.WithRequestLogger(slog.Default()),
 		},
-		Authorizer: func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-			return ulid.Make().String(), metadata.MD{}, true
-		},
 
-		WebsocketListen: websocketListen,
-		GRPCListen:      grpcListen,
-	})
+		GRPCListen: grpcListen,
+	}
+
+	if useTCP {
+		gwConfig.TCPListen = proxyListen
+		gwConfig.TCPAuthorizer = func(sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+			return ulid.Make().String(), metadata.MD{}, true
+		}
+	} else {
+		gwConfig.WSListen = proxyListen
+		gwConfig.WSAuthorizer = func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
+			return ulid.Make().String(), metadata.MD{}, true
+		}
+	}
+
+	node := nodehub.NewGatewayNode(registry, gwConfig)
 
 	if err := registry.Put(node.Entry()); err != nil {
 		panic(err)

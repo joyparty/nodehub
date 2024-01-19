@@ -19,8 +19,8 @@ import (
 )
 
 type client interface {
-	Send([]byte) error
-	ReplyStream() <-chan *nh.Reply
+	send([]byte) error
+	replyStream() <-chan *nh.Reply
 	Close()
 }
 
@@ -41,7 +41,7 @@ func newTCPClient(addr string) (*tcpClient, error) {
 	}, nil
 }
 
-func (tc *tcpClient) Send(data []byte) error {
+func (tc *tcpClient) send(data []byte) error {
 	buf := bytes.NewBuffer(nil)
 
 	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
@@ -59,7 +59,7 @@ func (tc *tcpClient) Send(data []byte) error {
 	return err
 }
 
-func (tc *tcpClient) ReplyStream() <-chan *nh.Reply {
+func (tc *tcpClient) replyStream() <-chan *nh.Reply {
 	ch := make(chan *nh.Reply)
 
 	go func() {
@@ -127,12 +127,12 @@ func newWSClient(url string) (*wsClient, error) {
 	}, nil
 }
 
-func (wc *wsClient) Send(data []byte) error {
+func (wc *wsClient) send(data []byte) error {
 	wc.conn.SetWriteDeadline(time.Now().Add(writeWait))
 	return wc.conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
-func (wc *wsClient) ReplyStream() <-chan *nh.Reply {
+func (wc *wsClient) replyStream() <-chan *nh.Reply {
 	ch := make(chan *nh.Reply)
 
 	go func() {
@@ -178,8 +178,9 @@ func (wc *wsClient) Close() {
 
 // Client 网关客户端，用于测试及演示
 type Client struct {
-	client client
-	idSeq  *atomic.Uint32
+	client
+
+	idSeq *atomic.Uint32
 
 	// serviceCode => messageType => handler
 	handlers       *gokit.MapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]]
@@ -239,7 +240,7 @@ func (c *Client) Call(serviceCode int32, method string, arg proto.Message, optio
 		return fmt.Errorf("marshal request message, %w", err)
 	}
 
-	return c.client.Send(data)
+	return c.send(data)
 }
 
 // OnReceive 注册消息处理器
@@ -287,11 +288,6 @@ func (c *Client) OnReceive(serviceCode int32, messageType int32, handler any) {
 	})
 }
 
-// Close 关闭客户端
-func (c *Client) Close() {
-	c.client.Close()
-}
-
 func (c *Client) newRequest(msg proto.Message, options ...CallOption) (*nh.Request, error) {
 	req := &nh.Request{
 		Id: c.idSeq.Add(1),
@@ -311,7 +307,7 @@ func (c *Client) newRequest(msg proto.Message, options ...CallOption) (*nh.Reque
 }
 
 func (c *Client) run() {
-	ch := c.client.ReplyStream()
+	ch := c.replyStream()
 	for {
 		select {
 		case reply, ok := <-ch:
