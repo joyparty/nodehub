@@ -32,14 +32,14 @@ var (
 )
 
 // TCPAuthorizer tcp授权函数
-type TCPAuthorizer func(sess Session) (userID string, md metadata.MD, ok bool)
+type TCPAuthorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
 
 // tcpServer tcp网关服务
 type tcpServer struct {
 	listenAddr     string
 	listener       net.Listener
 	authorizer     TCPAuthorizer
-	sessionHandler func(sess Session) error
+	sessionHandler sessionHandler
 }
 
 // NewTCPServer 构造函数
@@ -56,7 +56,7 @@ func (ts *tcpServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 }
 
 // SetSessionHandler 设置会话处理函数
-func (ts *tcpServer) SetSessionHandler(handler func(sess Session) error) {
+func (ts *tcpServer) SetSessionHandler(handler sessionHandler) {
 	ts.sessionHandler = handler
 }
 
@@ -79,7 +79,7 @@ func (ts *tcpServer) Start(ctx context.Context) error {
 			}
 
 			if err := ants.Submit(func() {
-				ts.handle(conn)
+				ts.handle(ctx, conn)
 			}); err != nil {
 				logger.Error("handle connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
 				conn.Close()
@@ -96,19 +96,19 @@ func (ts *tcpServer) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (ts *tcpServer) handle(conn net.Conn) {
-	if sess, err := ts.newSession(conn); err != nil {
+func (ts *tcpServer) handle(ctx context.Context, conn net.Conn) {
+	if sess, err := ts.newSession(ctx, conn); err != nil {
 		logger.Error("initialize session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-	} else if err := ts.sessionHandler(sess); err != nil {
+	} else if err := ts.sessionHandler(ctx, sess); err != nil {
 		logger.Error("handle session", "error", err, "sessID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 		sess.Close()
 	}
 }
 
-func (ts *tcpServer) newSession(conn net.Conn) (Session, error) {
+func (ts *tcpServer) newSession(ctx context.Context, conn net.Conn) (Session, error) {
 	sess := newTCPSession(conn)
 
-	userID, md, ok := ts.authorizer(sess)
+	userID, md, ok := ts.authorizer(ctx, sess)
 	if !ok {
 		return nil, fmt.Errorf("deny by authorizer")
 	} else if userID == "" {

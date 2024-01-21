@@ -47,11 +47,13 @@ var (
 	}
 )
 
+type sessionHandler func(ctx context.Context, sess Session) error
+
 // Transporter 网关传输层接口
 type Transporter interface {
 	CompleteNodeEntry(entry *cluster.NodeEntry)
 	// 设置会话处理函数，每个连接创建时都需要调用设置的handler处理
-	SetSessionHandler(handler func(sess Session) error)
+	SetSessionHandler(handler sessionHandler)
 
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
@@ -281,9 +283,8 @@ func (p *Proxy) init(ctx context.Context) {
 }
 
 // Handle 处理客户端连接
-func (p *Proxy) handle(sess Session) error {
+func (p *Proxy) handle(ctx context.Context, sess Session) error {
 	return ants.Submit(func() {
-		ctx := context.Background()
 		if err := p.onConnect(ctx, sess); err != nil {
 			logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 			return

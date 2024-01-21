@@ -59,7 +59,7 @@ func main() {
 	if useTCP {
 		transporter = gateway.NewTCPServer(
 			proxyListen,
-			func(sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+			func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
 				userID = fmt.Sprintf("%d", uid.Add(1))
 				md = metadata.MD{}
 				ok = true

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -32,46 +31,44 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type wsServer struct {
+	listenAddr     string
 	authorizer     WSAuthorizer
 	server         *http.Server
-	sessionHandler func(sess Session) error
+	sessionHandler sessionHandler
 }
 
 // NewWSServer 构造函数
 func NewWSServer(listenAddr string, authorizer WSAuthorizer) Transporter {
-	ws := &wsServer{
+	return &wsServer{
+		listenAddr: listenAddr,
 		authorizer: authorizer,
 	}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/grpc", ws.handle)
-
-	ws.server = &http.Server{
-		Addr:    listenAddr,
-		Handler: http.HandlerFunc(mux.ServeHTTP),
-	}
-	return ws
 }
 
 // CompleteNodeEntry 补全节点信息
 func (ws *wsServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
-	entry.Entrance = fmt.Sprintf("ws://%s/grpc", ws.server.Addr)
+	entry.Entrance = fmt.Sprintf("ws://%s/grpc", ws.listenAddr)
 }
 
 // SetSessionHandler 设置会话处理函数
-func (ws *wsServer) SetSessionHandler(handler func(sess Session) error) {
+func (ws *wsServer) SetSessionHandler(handler sessionHandler) {
 	ws.sessionHandler = handler
 }
 
 // Start 启动websocket服务器
 func (ws *wsServer) Start(ctx context.Context) error {
-	l, err := net.Listen("tcp", ws.server.Addr)
-	if err != nil {
-		return fmt.Errorf("listen, %w", err)
+	router := http.NewServeMux()
+	router.HandleFunc("/grpc", func(w http.ResponseWriter, r *http.Request) {
+		ws.handle(w, r.WithContext(ctx))
+	})
+
+	ws.server = &http.Server{
+		Addr:    ws.listenAddr,
+		Handler: http.HandlerFunc(router.ServeHTTP),
 	}
 
 	go func() {
-		if err := ws.server.Serve(l); err != nil && err != http.ErrServerClosed {
+		if err := ws.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 			panic(fmt.Errorf("start gateway, %w", err))
 		}
@@ -92,7 +89,7 @@ func (ws *wsServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := ws.sessionHandler(sess); err != nil {
+	if err := ws.sessionHandler(r.Context(), sess); err != nil {
 		logger.Error("handle session", "error", err, "sessID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 		sess.Close()
 		return
