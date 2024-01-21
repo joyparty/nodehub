@@ -223,6 +223,8 @@ func (p *Proxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
 // Start 启动服务
 func (p *Proxy) Start(ctx context.Context) error {
 	p.transporter.SetSessionHandler(p.handle)
+
+	p.init(ctx)
 	return p.transporter.Start(ctx)
 }
 
