@@ -20,9 +20,6 @@ import (
 )
 
 var (
-	// ErrSessionClosed 会话已关闭
-	ErrSessionClosed = errors.New("session closed")
-
 	writeWait = 5 * time.Second
 	upgrader  = websocket.Upgrader{}
 )
@@ -201,7 +198,7 @@ func (ws *wsSession) Recv(req *nh.Request) error {
 	for {
 		select {
 		case <-ws.done:
-			return ErrSessionClosed
+			return io.EOF
 		default:
 		}
 
@@ -232,7 +229,7 @@ func (ws *wsSession) Send(resp *nh.Reply) error {
 
 	select {
 	case <-ws.done:
-		return ErrSessionClosed
+		return io.EOF
 	case ws.sendC <- wsPayload{
 		messageType: websocket.BinaryMessage,
 		data:        data,
