@@ -44,26 +44,8 @@ func main() {
 		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("ws://%s/grpc", serverAddr)))
 	}
 
-	client := &chatClient{
-		Client: gwClient,
-	}
+	client := newChatClient(gwClient)
 	// defer client.Close()
-
-	client.Client.SetDefaultHandler(func(resp *nh.Reply) {
-		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
-	})
-
-	client.Client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
-		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
-			time.Now().Format(time.RFC3339),
-			requestID,
-			reply.GetRequestService(),
-			reply.GetRequestMethod(),
-			codes.Code(reply.Status.Code),
-			reply.Status.Message,
-		)
-		os.Exit(1)
-	})
 
 	client.OnReceive(int32(roompb.Protocol_NEWS), func(requestID uint32, reply *roompb.News) {
 		if reply.FromId == "" {
@@ -105,6 +87,30 @@ func main() {
 
 type chatClient struct {
 	*gateway.Client
+}
+
+func newChatClient(gc *gateway.Client) *chatClient {
+	cc := &chatClient{
+		Client: gc,
+	}
+
+	cc.Client.SetDefaultHandler(func(resp *nh.Reply) {
+		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
+	})
+
+	cc.Client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
+		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
+			time.Now().Format(time.RFC3339),
+			requestID,
+			reply.GetRequestService(),
+			reply.GetRequestMethod(),
+			codes.Code(reply.Status.Code),
+			reply.Status.Message,
+		)
+		os.Exit(1) // revive:disable-line:deep-exit
+	})
+
+	return cc
 }
 
 func (c *chatClient) Call(method string, arg proto.Message, options ...gateway.CallOption) error {

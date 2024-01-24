@@ -36,26 +36,8 @@ func main() {
 		endpoint = fmt.Sprintf("ws://%s/grpc", serverAddr)
 	}
 
-	client := &echoClient{
-		Client: gokit.MustReturn(gateway.NewClient(endpoint)),
-	}
+	client := newEchoClient(endpoint)
 	defer client.Close()
-
-	client.Client.SetDefaultHandler(func(resp *nh.Reply) {
-		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
-	})
-
-	client.Client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
-		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
-			time.Now().Format(time.RFC3339),
-			requestID,
-			reply.GetRequestService(),
-			reply.GetRequestMethod(),
-			codes.Code(reply.Status.Code),
-			reply.Status.Message,
-		)
-		os.Exit(1)
-	})
 
 	client.OnReceive(int32(echopb.Protocol_MSG), func(requestID uint32, reply *echopb.Msg) {
 		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.Message)
@@ -73,6 +55,30 @@ func main() {
 
 type echoClient struct {
 	*gateway.Client
+}
+
+func newEchoClient(endpoint string) *echoClient {
+	ec := &echoClient{
+		Client: gokit.MustReturn(gateway.NewClient(endpoint)),
+	}
+
+	ec.Client.SetDefaultHandler(func(resp *nh.Reply) {
+		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
+	})
+
+	ec.Client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
+		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
+			time.Now().Format(time.RFC3339),
+			requestID,
+			reply.GetRequestService(),
+			reply.GetRequestMethod(),
+			codes.Code(reply.Status.Code),
+			reply.Status.Message,
+		)
+		os.Exit(1) // revive:disable-line:deep-exit
+	})
+
+	return ec
 }
 
 func (c *echoClient) Call(method string, arg proto.Message, options ...gateway.CallOption) error {
