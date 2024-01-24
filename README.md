@@ -96,11 +96,13 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 `grpc.services.pipeline`用于控制单个客户端的消息时序性保证，`pipeline`的名字允许自行指定任意字符串，设置后会按照消息的接收顺序，处理完一条才会继续处理下一条。如果多个服务设置了相同的`pipeline`值，那么对这些服务的请求均会保证时序性。如果没有指定，消息会被并发处理，有可能出现后发先至的结果。
 
-## gRPC约束
+## gRPC使用约束
 
-- 面向客户端的gRPC方法的返回结果，只能是`nodehub.Reply`和[google.protobuf.Empty](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/empty.proto)两种类型，否则会导致客户端无法解析
-- `MSG`会被encode到`nodehub.Reply.data`字段内，客户端通过`nodehub.Reply.message_type`才能知道具体的消息类型，所以`MSG`需要额外定义一个数据类型枚举值
-- 所有会被下行到客户端的消息类型枚举值，都定义到`enum Protocol`枚举值表内，也可以使用`Protocol`之外的名字，这里并不强制
+面向客户端的gRPC方法的返回结果，只能是`nodehub.Reply`和[google.protobuf.Empty](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/empty.proto)两种类型，否则会导致客户端无法解析。
+
+凡是要下行到客户端解析的真正message类型，需要单独定义类型枚举值，这样客户端才能根据`nodehub.Reply.message_type`的值，使用正确的类型把`nodehub.Reply.data`内的数据解码使用。
+
+内部服务的gRPC方法没有任何这种限制，因为内部节点间是通过正常的gRPC方式直接通讯。
 
 ## 示例 (echo server)
 
