@@ -107,4 +107,5 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 ## 示例 (echo server)
 
 [./example/echo/](./example/echo/) 实现了把客户端发送的消息内容原封不动返回的简单服务。
+
 [./example/chat/](./example/chat/) 实现了一个非常非常简单的聊天室。
