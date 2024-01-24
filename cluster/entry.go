@@ -41,7 +41,7 @@ type NodeEntry struct {
 	// Example:
 	//	 - tcp://0.0.0.0:8222
 	//	 - ws://0.0.0.0:8222/grpc
-	Entrance string `json:"entrance"`
+	Entrance string `json:"entrance,omitempty"`
 
 	// grpc服务信息
 	GRPC GRPCEntry `json:"grpc"`
