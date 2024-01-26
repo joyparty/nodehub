@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
+	"github.com/joyparty/nodehub/internal/mq"
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
-	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/protobuf/proto"
 )
 

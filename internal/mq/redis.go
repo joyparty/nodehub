@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/joyparty/nodehub/logger"
 	"github.com/reactivex/rxgo/v2"
 	"github.com/redis/go-redis/v9"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
 )
 
 // redisMQ 是基于 Redis 的消息队列

@@ -7,10 +7,10 @@ import (
 	"path"
 
 	"github.com/joyparty/gokit"
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
 	"github.com/reactivex/rxgo/v2"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"

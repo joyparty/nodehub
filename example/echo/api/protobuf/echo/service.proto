@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package echo;
 
-option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb";
+option go_package = "github.com/joyparty/nodehub/example/echo/proto/echopb";
 
 import "nodehub/client.proto";
 import "echo/message.proto";

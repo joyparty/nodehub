@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package nodehub;
 
-option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/nh";
+option go_package = "github.com/joyparty/nodehub/proto/nh";
 
 // 客户端上行消息
 // 请求会被网关转换为grpc请求转发到内部服务

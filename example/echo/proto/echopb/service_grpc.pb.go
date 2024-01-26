@@ -8,7 +8,7 @@ package echopb
 
 import (
 	context "context"
-	nh "gitlab.haochang.tv/gopkg/nodehub/proto/nh"
+	nh "github.com/joyparty/nodehub/proto/nh"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"

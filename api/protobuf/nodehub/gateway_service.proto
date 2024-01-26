@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package nodehub;
 
-option go_package = "gitlab.haochang.tv/gopkg/nodehub/proto/nh";
+option go_package = "github.com/joyparty/nodehub/proto/nh";
 
 import "google/protobuf/empty.proto";
 import "nodehub/client.proto";

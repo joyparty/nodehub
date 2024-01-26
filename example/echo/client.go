@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
-	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
-	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/clusterpb"
-	"gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/echopb"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
+	"github.com/joyparty/nodehub/component/gateway"
+	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
+	"github.com/joyparty/nodehub/example/echo/proto/echopb"
+	"github.com/joyparty/nodehub/proto/nh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 )

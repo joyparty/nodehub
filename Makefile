@@ -9,7 +9,7 @@ build_protobuf:
 	(cd $(ROOT_DIR) && protoc \
 		--proto_path=./api/protobuf \
 		--go_out=./proto \
-		--go_opt=module=gitlab.haochang.tv/gopkg/nodehub/proto \
+		--go_opt=module=github.com/joyparty/nodehub/proto \
 		--go-grpc_out=./proto \
-		--go-grpc_opt=module=gitlab.haochang.tv/gopkg/nodehub/proto \
+		--go-grpc_opt=module=github.com/joyparty/nodehub/proto \
 		./api/protobuf/nodehub/*.proto)

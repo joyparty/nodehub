@@ -1,4 +1,4 @@
-module gitlab.haochang.tv/gopkg/nodehub
+module github.com/joyparty/nodehub
 
 go 1.21.4
 

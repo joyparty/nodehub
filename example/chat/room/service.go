@@ -5,12 +5,12 @@ import (
 	"fmt"
 
 	"github.com/joyparty/gokit"
-	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
-	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/clusterpb"
-	"gitlab.haochang.tv/gopkg/nodehub/example/chat/proto/roompb"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/multicast"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
+	"github.com/joyparty/nodehub/component/rpc"
+	"github.com/joyparty/nodehub/example/chat/proto/clusterpb"
+	"github.com/joyparty/nodehub/example/chat/proto/roompb"
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/multicast"
+	"github.com/joyparty/nodehub/proto/nh"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 

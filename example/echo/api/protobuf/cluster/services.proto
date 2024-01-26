@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package cluster;
 
-option go_package = "gitlab.haochang.tv/gopkg/nodehub/example/echo/proto/clusterpb";
+option go_package = "github.com/joyparty/nodehub/example/echo/proto/clusterpb";
 
 enum Services {
 	UNSPECIFIED = 0;

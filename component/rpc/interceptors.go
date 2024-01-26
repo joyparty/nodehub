@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/proto/nh"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"

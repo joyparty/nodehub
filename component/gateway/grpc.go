@@ -3,8 +3,8 @@ package gateway
 import (
 	"context"
 
+	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"

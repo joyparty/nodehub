@@ -1,13 +1,13 @@
-module gitlab.haochang.tv/gopkg/nodehub/example
+module github.com/joyparty/nodehub/example
 
 go 1.21.4
 
 require (
 	github.com/joyparty/gokit v0.0.0-20231215030552-11b001634aa3
+	github.com/joyparty/nodehub v0.0.0-20231214095413-449034d6bda2
 	github.com/nats-io/nats.go v1.32.0
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/redis/go-redis/v9 v9.4.0
-	gitlab.haochang.tv/gopkg/nodehub v0.0.0-20231214095413-449034d6bda2
 	go.etcd.io/etcd/client/v3 v3.5.11
 	google.golang.org/grpc v1.61.0
 	google.golang.org/protobuf v1.32.0
@@ -49,4 +49,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace gitlab.haochang.tv/gopkg/nodehub => ../
+replace github.com/joyparty/nodehub => ../

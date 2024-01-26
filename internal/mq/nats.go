@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/joyparty/nodehub/logger"
 	"github.com/nats-io/nats.go"
 	"github.com/reactivex/rxgo/v2"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
 )
 
 type natsMQ struct {

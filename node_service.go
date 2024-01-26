@@ -3,9 +3,9 @@ package nodehub
 import (
 	"context"
 
-	"gitlab.haochang.tv/gopkg/nodehub/cluster"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
+	"github.com/joyparty/nodehub/cluster"
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/proto/nh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"

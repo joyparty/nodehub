@@ -3,7 +3,7 @@ package multicast
 import (
 	"context"
 
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
+	"github.com/joyparty/nodehub/proto/nh"
 )
 
 // Publisher 把消息发布到消息队列

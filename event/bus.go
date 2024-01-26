@@ -8,10 +8,10 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/joyparty/nodehub/internal/mq"
+	"github.com/joyparty/nodehub/logger"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
-	"gitlab.haochang.tv/gopkg/nodehub/internal/mq"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
 )
 
 // Channel 通道名称

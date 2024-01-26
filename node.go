@@ -7,12 +7,12 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/joyparty/nodehub/cluster"
+	"github.com/joyparty/nodehub/component/gateway"
+	"github.com/joyparty/nodehub/component/rpc"
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
-	"gitlab.haochang.tv/gopkg/nodehub/cluster"
-	"gitlab.haochang.tv/gopkg/nodehub/component/gateway"
-	"gitlab.haochang.tv/gopkg/nodehub/component/rpc"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
-	"gitlab.haochang.tv/gopkg/nodehub/proto/nh"
 	"google.golang.org/grpc"
 )
 

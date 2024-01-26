@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/joyparty/nodehub/cluster"
+	"github.com/joyparty/nodehub/logger"
 	"github.com/samber/lo"
-	"gitlab.haochang.tv/gopkg/nodehub/cluster"
-	"gitlab.haochang.tv/gopkg/nodehub/logger"
 	"google.golang.org/grpc"
 )
 
