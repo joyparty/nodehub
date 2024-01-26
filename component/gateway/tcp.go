@@ -39,7 +39,7 @@ type tcpServer struct {
 	listenAddr     string
 	listener       net.Listener
 	authorizer     TCPAuthorizer
-	sessionHandler sessionHandler
+	sessionHandler SessionHandler
 }
 
 // NewTCPServer 构造函数
@@ -56,7 +56,7 @@ func (ts *tcpServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 }
 
 // SetSessionHandler 设置会话处理函数
-func (ts *tcpServer) SetSessionHandler(handler sessionHandler) {
+func (ts *tcpServer) SetSessionHandler(handler SessionHandler) {
 	ts.sessionHandler = handler
 }
 

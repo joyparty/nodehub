@@ -31,7 +31,7 @@ type wsServer struct {
 	listenAddr     string
 	authorizer     WSAuthorizer
 	server         *http.Server
-	sessionHandler sessionHandler
+	sessionHandler SessionHandler
 }
 
 // NewWSServer 构造函数
@@ -48,7 +48,7 @@ func (ws *wsServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 }
 
 // SetSessionHandler 设置会话处理函数
-func (ws *wsServer) SetSessionHandler(handler sessionHandler) {
+func (ws *wsServer) SetSessionHandler(handler SessionHandler) {
 	ws.sessionHandler = handler
 }
 

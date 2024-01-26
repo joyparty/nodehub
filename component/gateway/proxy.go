@@ -47,13 +47,14 @@ var (
 	}
 )
 
-type sessionHandler func(ctx context.Context, sess Session) error
+// SessionHandler 会话处理函数
+type SessionHandler func(ctx context.Context, sess Session) error
 
 // Transporter 网关传输层接口
 type Transporter interface {
 	CompleteNodeEntry(entry *cluster.NodeEntry)
 	// 设置会话处理函数，每个连接创建时都需要调用设置的handler处理
-	SetSessionHandler(handler sessionHandler)
+	SetSessionHandler(handler SessionHandler)
 
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
