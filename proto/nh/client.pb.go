@@ -36,12 +36,9 @@ type Request struct {
 	NodeId string `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	// 服务ID，对应内部节点的每种grpc服务
 	// 内部节点在注册服务发现时，会将服务ID注册到etcd中
-	// 网关根据Service字段将请求转发到对应的内部节点
-	// 另外，网关在构造grpc请求时，会使用Service和Method字段构造grpc请求的路径名
+	// 网关根据service_code字段将请求转发到对应的内部服务
 	ServiceCode int32 `protobuf:"varint,3,opt,name=service_code,json=serviceCode,proto3" json:"service_code,omitempty"`
 	// grpc方法名，大小写敏感，例如: SayHello
-	// 与Service不同，Service变化较少，所以可以采用枚举值的方式减少传输数据量
-	// 方法名变化较多，所以采用字符串的方式传输
 	Method string `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
 	// grpc方法对应的protobuf message序列化之后的数据
 	// 具体对应关系需要自行查看grpc服务的protobuf文件
@@ -131,21 +128,21 @@ type Reply struct {
 	unknownFields protoimpl.UnknownFields
 
 	// 触发此次请求的request_id
-	// 如果是服务器端主动下发，request_id = 0
 	// 网关会自动给这个字段赋值
+	// 如果是服务器端主动下发，request_id = 0
 	RequestId uint32 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// 服务ID，对应内部节点的每种grpc服务
 	// 标识这个消息来自于哪个内部服务
 	// grpc调用返回结果，网关会自动给这个字段赋值
 	// 如果是服务器端主动下发，需要自行赋值
-	// 如果from_service = 0，表示这个消息来自于网关本身
+	// from_service = 0，表示这个消息来自于网关本身
 	FromService int32 `protobuf:"varint,2,opt,name=from_service,json=fromService,proto3" json:"from_service,omitempty"`
 	// 消息类型ID，可以是集群范围唯一，也可以是服务范围唯一
 	// 需要下发时自行指定
 	// message_type = 0，表示这是google.protobuf.Empty类型的空消息
 	MessageType int32 `protobuf:"varint,3,opt,name=message_type,json=messageType,proto3" json:"message_type,omitempty"`
 	// 下行protobuf message序列化之后的数据
-	// 客户端需要根据Route字段判断具体反序列化成哪个protobuf message
+	// 客户端需要根据message_type字段判断具体反序列化成哪个protobuf message
 	Data []byte `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
 }
 

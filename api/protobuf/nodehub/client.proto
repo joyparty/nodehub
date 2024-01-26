@@ -18,13 +18,10 @@ message Request {
 
 	// 服务ID，对应内部节点的每种grpc服务
 	// 内部节点在注册服务发现时，会将服务ID注册到etcd中
-	// 网关根据Service字段将请求转发到对应的内部节点
-	// 另外，网关在构造grpc请求时，会使用Service和Method字段构造grpc请求的路径名
+	// 网关根据service_code字段将请求转发到对应的内部服务
 	int32 service_code = 3;
 
 	// grpc方法名，大小写敏感，例如: SayHello
-	// 与Service不同，Service变化较少，所以可以采用枚举值的方式减少传输数据量
-	// 方法名变化较多，所以采用字符串的方式传输
 	string method = 4;
 
 	// grpc方法对应的protobuf message序列化之后的数据
@@ -38,15 +35,15 @@ message Request {
 // 来自服务器端下行的消息
 message Reply {
 	// 触发此次请求的request_id
-	// 如果是服务器端主动下发，request_id = 0
 	// 网关会自动给这个字段赋值
+	// 如果是服务器端主动下发，request_id = 0
 	uint32 request_id = 1;
 
 	// 服务ID，对应内部节点的每种grpc服务
 	// 标识这个消息来自于哪个内部服务
 	// grpc调用返回结果，网关会自动给这个字段赋值
 	// 如果是服务器端主动下发，需要自行赋值
-	// 如果from_service = 0，表示这个消息来自于网关本身
+	// from_service = 0，表示这个消息来自于网关本身
 	int32 from_service = 2;
 
 	// 消息类型ID，可以是集群范围唯一，也可以是服务范围唯一
@@ -55,6 +52,6 @@ message Reply {
 	int32 message_type = 3;
 
 	// 下行protobuf message序列化之后的数据
-	// 客户端需要根据Route字段判断具体反序列化成哪个protobuf message
+	// 客户端需要根据message_type字段判断具体反序列化成哪个protobuf message
 	bytes data = 4;
 }
