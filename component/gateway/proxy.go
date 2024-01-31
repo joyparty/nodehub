@@ -34,6 +34,12 @@ var (
 	// DefaultHeartbeatTimeout 心跳消息超时时间，默认为心跳消息发送时间间隔的3倍
 	DefaultHeartbeatTimeout = 3 * DefaultHeartbeatDuration
 
+	requestPool = &sync.Pool{
+		New: func() any {
+			return &nh.Request{}
+		},
+	}
+
 	replyPool = &sync.Pool{
 		New: func() any {
 			return &nh.Reply{}
@@ -297,9 +303,14 @@ func (p *Proxy) handle(ctx context.Context, sess Session) error {
 		requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
 			exec, pipeline := p.buildRequest(ctx, sess, req)
 
+			fn := func() {
+				defer requestPool.Put(req)
+				exec()
+			}
+
 			if pipeline == "" {
 				// 允许无序执行，并发处理
-				ants.Submit(exec)
+				ants.Submit(fn)
 			} else {
 				// 需要保证时序性，投递到队列处理
 				select {
@@ -307,7 +318,7 @@ func (p *Proxy) handle(ctx context.Context, sess Session) error {
 					return
 				case reqC <- requestTask{
 					Pipeline: pipeline,
-					Request:  exec,
+					Request:  fn,
 				}:
 				}
 			}
@@ -320,8 +331,12 @@ func (p *Proxy) handle(ctx context.Context, sess Session) error {
 			default:
 			}
 
-			req := &nh.Request{}
+			req := requestPool.Get().(*nh.Request)
+			nh.ResetRequest(req)
+
 			if err := sess.Recv(req); err != nil {
+				requestPool.Put(req)
+
 				if !errors.Is(err, io.EOF) {
 					logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 				}
@@ -329,7 +344,20 @@ func (p *Proxy) handle(ctx context.Context, sess Session) error {
 				return
 			}
 
-			p.requestInterceptor(ctx, sess, req, requestHandler)
+			if pass, err := p.requestInterceptor(ctx, sess, req); err != nil {
+				requestPool.Put(req)
+
+				logger.Error("request interceptor",
+					"error", err,
+					"sessionID", sess.ID(),
+					"remoteAddr", sess.RemoteAddr(),
+					"requestID", req.GetId(),
+					"serviceCode", req.GetServiceCode(),
+					"method", req.GetMethod(),
+				)
+			} else if pass {
+				requestHandler(ctx, sess, req)
+			}
 		}
 	})
 }
@@ -649,16 +677,13 @@ func WithTransporter(transporter Transporter) Option {
 	}
 }
 
-// RequestHandler 请求处理函数
-type RequestHandler func(ctx context.Context, sess Session, req *nh.Request)
-
 // RequestInterceptor 请求拦截器
 //
-// 拦截器提供了请求过程中注入自定义钩子的机制，拦截器需要在调用过程中执行handler函数来完成请求流程
-type RequestInterceptor func(ctx context.Context, sess Session, req *nh.Request, next RequestHandler)
+// 每次收到客户端请求都会执行，return pass=false会中断当次请求
+type RequestInterceptor func(ctx context.Context, sess Session, req *nh.Request) (pass bool, err error)
 
-var defaultRequestInterceptor = func(ctx context.Context, sess Session, req *nh.Request, next RequestHandler) {
-	next(ctx, sess, req)
+var defaultRequestInterceptor = func(ctx context.Context, sess Session, req *nh.Request) (pass bool, err error) {
+	return true, nil
 }
 
 // WithRequestInterceptor 设置请求拦截器
