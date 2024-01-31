@@ -34,12 +34,6 @@ var (
 	// DefaultHeartbeatTimeout 心跳消息超时时间，默认为心跳消息发送时间间隔的3倍
 	DefaultHeartbeatTimeout = 3 * DefaultHeartbeatDuration
 
-	requestPool = &sync.Pool{
-		New: func() any {
-			return &nh.Request{}
-		},
-	}
-
 	replyPool = &sync.Pool{
 		New: func() any {
 			return &nh.Reply{}
@@ -302,14 +296,10 @@ func (p *Proxy) handle(ctx context.Context, sess Session) error {
 
 		requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
 			exec, pipeline := p.buildRequest(ctx, sess, req)
-			fn := func() {
-				exec()
-				requestPool.Put(req)
-			}
 
 			if pipeline == "" {
 				// 允许无序执行，并发处理
-				ants.Submit(fn)
+				ants.Submit(exec)
 			} else {
 				// 需要保证时序性，投递到队列处理
 				select {
@@ -317,7 +307,7 @@ func (p *Proxy) handle(ctx context.Context, sess Session) error {
 					return
 				case reqC <- requestTask{
 					Pipeline: pipeline,
-					Request:  fn,
+					Request:  exec,
 				}:
 				}
 			}
@@ -330,12 +320,8 @@ func (p *Proxy) handle(ctx context.Context, sess Session) error {
 			default:
 			}
 
-			req := requestPool.Get().(*nh.Request)
-			nh.ResetRequest(req)
-
+			req := &nh.Request{}
 			if err := sess.Recv(req); err != nil {
-				requestPool.Put(req)
-
 				if !errors.Is(err, io.EOF) {
 					logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
 				}
