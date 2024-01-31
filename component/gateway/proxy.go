@@ -443,7 +443,7 @@ func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request)
 			ctx = metadata.NewOutgoingContext(ctx, md)
 
 			method := path.Join(desc.Path, req.Method)
-			if err = grpc.Invoke(ctx, method, input, output, conn); err != nil {
+			if err = conn.Invoke(ctx, method, input, output); err != nil {
 				return fmt.Errorf("invoke service: %w", err)
 			}
 
