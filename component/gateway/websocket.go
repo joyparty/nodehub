@@ -86,11 +86,7 @@ func (ws *wsServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := ws.sessionHandler(r.Context(), sess); err != nil {
-		logger.Error("handle session", "error", err, "sessID", sess.ID(), "remoteAddr", sess.RemoteAddr())
-		sess.Close()
-		return
-	}
+	ws.sessionHandler(r.Context(), sess)
 }
 
 func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {

@@ -48,7 +48,7 @@ var (
 )
 
 // SessionHandler 会话处理函数
-type SessionHandler func(ctx context.Context, sess Session) error
+type SessionHandler func(ctx context.Context, sess Session)
 
 // Transporter 网关传输层接口
 type Transporter interface {
@@ -223,9 +223,9 @@ func (p *Proxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
 
 // Start 启动服务
 func (p *Proxy) Start(ctx context.Context) error {
-	p.transporter.SetSessionHandler(p.handle)
-
 	p.init(ctx)
+
+	p.transporter.SetSessionHandler(p.handle)
 	return p.transporter.Start(ctx)
 }
 
@@ -286,80 +286,79 @@ func (p *Proxy) init(ctx context.Context) {
 }
 
 // Handle 处理客户端连接
-func (p *Proxy) handle(ctx context.Context, sess Session) error {
-	return ants.Submit(func() {
-		if err := p.onConnect(ctx, sess); err != nil {
-			logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
-			return
+func (p *Proxy) handle(ctx context.Context, sess Session) {
+	if err := p.onConnect(ctx, sess); err != nil {
+		logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+		sess.Close()
+		return
+	}
+
+	p.sessions.Store(sess)
+	defer p.onDisconnect(ctx, sess)
+
+	reqC := make(chan requestTask)
+	defer close(reqC)
+	go p.runPipeline(ctx, reqC)
+
+	requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
+		exec, pipeline := p.buildRequest(ctx, sess, req)
+
+		fn := func() {
+			defer requestPool.Put(req)
+			exec()
 		}
 
-		p.sessions.Store(sess)
-		defer p.onDisconnect(ctx, sess)
-
-		reqC := make(chan requestTask)
-		defer close(reqC)
-		go p.runPipeline(ctx, reqC)
-
-		requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
-			exec, pipeline := p.buildRequest(ctx, sess, req)
-
-			fn := func() {
-				defer requestPool.Put(req)
-				exec()
-			}
-
-			if pipeline == "" {
-				// 允许无序执行，并发处理
-				ants.Submit(fn)
-			} else {
-				// 需要保证时序性，投递到队列处理
-				select {
-				case <-p.done:
-					return
-				case reqC <- requestTask{
-					Pipeline: pipeline,
-					Request:  fn,
-				}:
-				}
-			}
-		}
-
-		for {
+		if pipeline == "" {
+			// 允许无序执行，并发处理
+			ants.Submit(fn)
+		} else {
+			// 需要保证时序性，投递到队列处理
 			select {
 			case <-p.done:
 				return
-			default:
-			}
-
-			req := requestPool.Get().(*nh.Request)
-			nh.ResetRequest(req)
-
-			if err := sess.Recv(req); err != nil {
-				requestPool.Put(req)
-
-				if !errors.Is(err, io.EOF) {
-					logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
-				}
-
-				return
-			}
-
-			if pass, err := p.requestInterceptor(ctx, sess, req); err != nil {
-				requestPool.Put(req)
-
-				logger.Error("request interceptor",
-					"error", err,
-					"sessionID", sess.ID(),
-					"remoteAddr", sess.RemoteAddr(),
-					"requestID", req.GetId(),
-					"serviceCode", req.GetServiceCode(),
-					"method", req.GetMethod(),
-				)
-			} else if pass {
-				requestHandler(ctx, sess, req)
+			case reqC <- requestTask{
+				Pipeline: pipeline,
+				Request:  fn,
+			}:
 			}
 		}
-	})
+	}
+
+	for {
+		select {
+		case <-p.done:
+			return
+		default:
+		}
+
+		req := requestPool.Get().(*nh.Request)
+		nh.ResetRequest(req)
+
+		if err := sess.Recv(req); err != nil {
+			requestPool.Put(req)
+
+			if !errors.Is(err, io.EOF) {
+				logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+			}
+
+			return
+		}
+
+		if pass, err := p.requestInterceptor(ctx, sess, req); err != nil {
+			requestPool.Put(req)
+
+			logger.Error("request interceptor",
+				"error", err,
+				"sessionID", sess.ID(),
+				"remoteAddr", sess.RemoteAddr(),
+				"requestID", req.GetId(),
+				"serviceCode", req.GetServiceCode(),
+				"method", req.GetMethod(),
+			)
+		} else if pass {
+			requestHandler(ctx, sess, req)
+		}
+	}
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {

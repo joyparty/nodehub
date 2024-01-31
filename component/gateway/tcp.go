@@ -97,12 +97,14 @@ func (ts *tcpServer) Stop(ctx context.Context) error {
 }
 
 func (ts *tcpServer) handle(ctx context.Context, conn net.Conn) {
-	if sess, err := ts.newSession(ctx, conn); err != nil {
+	sess, err := ts.newSession(ctx, conn)
+	if err != nil {
 		logger.Error("initialize session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-	} else if err := ts.sessionHandler(ctx, sess); err != nil {
-		logger.Error("handle session", "error", err, "sessID", sess.ID(), "remoteAddr", sess.RemoteAddr())
-		sess.Close()
+		conn.Close()
+		return
 	}
+
+	ts.sessionHandler(ctx, sess)
 }
 
 func (ts *tcpServer) newSession(ctx context.Context, conn net.Conn) (Session, error) {
