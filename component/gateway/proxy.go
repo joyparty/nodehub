@@ -300,8 +300,11 @@ func (p *Proxy) handle(ctx context.Context, sess Session) {
 	defer close(reqC)
 	go p.runPipeline(ctx, reqC)
 
+	recorder := newPipelineRecorder()
+	defer recorder.Release()
+
 	requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
-		exec, pipeline := p.buildRequest(ctx, sess, req)
+		exec, pipeline := p.buildRequest(ctx, recorder, sess, req)
 
 		fn := func() {
 			defer requestPool.Put(req)
@@ -407,7 +410,7 @@ func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 	}))
 }
 
-func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request) (exec func(), pipeline string) {
+func (p *Proxy) buildRequest(ctx context.Context, recorder *pipelineRecorder, sess Session, req *nh.Request) (exec func(), pipeline string) {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	var err error
 	desc, ok := p.registry.GetGRPCDesc(req.ServiceCode)
@@ -437,6 +440,17 @@ func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request)
 				p.logRequest(ctx, sess, req, start, conn, err)
 			}()
 
+			if lastID, lastReply, ok := recorder.LastReplyOf(pipeline); ok {
+				if req.GetId() < lastID {
+					return status.Errorf(codes.Aborted, "request id %d is less than last request id %d", req.GetId(), lastID)
+				} else if req.GetId() == lastID {
+					if req.GetNoReply() {
+						return nil
+					}
+					return sess.Send(lastReply)
+				}
+			}
+
 			conn, err = p.getUpstream(sess, req, desc)
 			if err != nil {
 				return
@@ -448,8 +462,14 @@ func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request)
 			}
 
 			output := replyPool.Get().(*nh.Reply)
-			defer replyPool.Put(output)
 			nh.ResetReply(output)
+
+			defer func() {
+				if err != nil ||
+					!recorder.Save(pipeline, req, output) {
+					replyPool.Put(output)
+				}
+			}()
 
 			md := sess.MetadataCopy()
 			md.Set(rpc.MDTransactionID, ulid.Make().String())
@@ -745,4 +765,54 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 		err = proto.Unmarshal(data, msg)
 	}
 	return
+}
+
+// 记录每个时序性管道的最后一次请求和响应结果
+// 如果request id小于最后一次的request id，说明顺序存在问题
+// 如果request id等于最后一次的request id，直接返回最后一次的响应结果
+type pipelineRecorder struct {
+	lastID    *gokit.MapOf[string, uint32]
+	lastReply *gokit.MapOf[string, *nh.Reply]
+}
+
+func newPipelineRecorder() *pipelineRecorder {
+	return &pipelineRecorder{
+		lastID:    gokit.NewMapOf[string, uint32](),
+		lastReply: gokit.NewMapOf[string, *nh.Reply](),
+	}
+}
+
+func (r *pipelineRecorder) Save(pipeline string, req *nh.Request, reply *nh.Reply) bool {
+	// 只有具备时序性的管道请求才会保存
+	// 非时序性请求，可能出现后发先至的情况，在处理过程中request id并不能保证递增，即使记录也没有意义
+	if pipeline == "" {
+		return false
+	}
+
+	r.lastID.Store(pipeline, req.GetId())
+
+	prev, ok := r.lastReply.Swap(pipeline, reply)
+	// 把保存的上一次响应结果放回对象池
+	if ok {
+		replyPool.Put(prev)
+	}
+	return true
+}
+
+func (r *pipelineRecorder) LastReplyOf(pipeline string) (uint32, *nh.Reply, bool) {
+	if id, ok := r.lastID.Load(pipeline); ok {
+		if reply, ok := r.lastReply.Load(pipeline); ok {
+			return id, reply, true
+		}
+	}
+
+	return 0, nil, false
+}
+
+func (r *pipelineRecorder) Release() {
+	r.lastReply.Range(func(key string, value *nh.Reply) bool {
+		replyPool.Put(value)
+		r.lastReply.Delete(key)
+		return true
+	})
 }
