@@ -23,11 +23,19 @@ import (
 
 const sizeLen = 4
 
-var bufPool = &sync.Pool{
-	New: func() any {
-		return bytes.NewBuffer(make([]byte, 0, 1024))
-	},
-}
+var (
+	tcpWriterPool = &sync.Pool{
+		New: func() any {
+			return bytes.NewBuffer(make([]byte, 0, 1024))
+		},
+	}
+
+	tcpReaderPool = &sync.Pool{
+		New: func() any {
+			return make([]byte, MaxPayloadSize)
+		},
+	}
+)
 
 // TCPAuthorizer tcp授权函数
 type TCPAuthorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
@@ -180,12 +188,14 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 			return fmt.Errorf("payload size exceeds the limit, %d", size)
 		}
 
-		data := make([]byte, size)
-		if _, err := io.ReadFull(ts.conn, data); err != nil {
+		data := tcpReaderPool.Get().([]byte)
+		defer tcpReaderPool.Put(data)
+
+		if _, err := io.ReadAtLeast(ts.conn, data, size); err != nil {
 			return fmt.Errorf("read data frame, %w", err)
 		}
 
-		if err := proto.Unmarshal(data, req); err != nil {
+		if err := proto.Unmarshal(data[:size], req); err != nil {
 			return fmt.Errorf("unmarshal request, %w", err)
 		}
 		ts.lastRWTime.Store(time.Now())
@@ -199,8 +209,8 @@ func (ts *tcpSession) Send(reply *nh.Reply) error {
 		return fmt.Errorf("marshal reply, %w", err)
 	}
 
-	buf := bufPool.Get().(*bytes.Buffer)
-	defer bufPool.Put(buf)
+	buf := tcpWriterPool.Get().(*bytes.Buffer)
+	defer tcpWriterPool.Put(buf)
 	buf.Reset()
 
 	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {

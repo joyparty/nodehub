@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,7 +22,12 @@ import (
 
 var (
 	// Upgrader websocket upgrader
-	Upgrader = websocket.Upgrader{}
+	Upgrader = websocket.Upgrader{
+		HandshakeTimeout: 10 * time.Second,
+		ReadBufferSize:   1024,
+		WriteBufferSize:  1024,
+		WriteBufferPool:  &sync.Pool{},
+	}
 
 	writeWait = 5 * time.Second
 )
