@@ -20,8 +20,10 @@ import (
 )
 
 var (
+	// Upgrader websocket upgrader
+	Upgrader = websocket.Upgrader{}
+
 	writeWait = 5 * time.Second
-	upgrader  = websocket.Upgrader{}
 )
 
 // wsServer websocket网关服务器
@@ -99,7 +101,7 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session,
 		md = metadata.MD{}
 	}
 
-	wsConn, err := upgrader.Upgrade(w, r, nil)
+	wsConn, err := Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return nil, fmt.Errorf("upgrade websocket, %w", err)
 	}
