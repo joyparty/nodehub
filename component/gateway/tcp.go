@@ -23,13 +23,11 @@ import (
 
 const sizeLen = 4
 
-var (
-	bufPool = &sync.Pool{
-		New: func() any {
-			return bytes.NewBuffer(make([]byte, 0, 1024))
-		},
-	}
-)
+var bufPool = &sync.Pool{
+	New: func() any {
+		return bytes.NewBuffer(make([]byte, 0, 1024))
+	},
+}
 
 // TCPAuthorizer tcp授权函数
 type TCPAuthorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
@@ -178,6 +176,8 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 		if size == 0 { // ping
 			ts.lastRWTime.Store(time.Now())
 			continue
+		} else if size > MaxPayloadSize {
+			return fmt.Errorf("payload size exceeds the limit, %d", size)
 		}
 
 		data := make([]byte, size)

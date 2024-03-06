@@ -103,6 +103,7 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session,
 	if err != nil {
 		return nil, fmt.Errorf("upgrade websocket, %w", err)
 	}
+	wsConn.SetReadLimit(int64(MaxPayloadSize))
 
 	sess := newWsSession(wsConn)
 	sess.SetID(userID)
