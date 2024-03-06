@@ -191,7 +191,7 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 		data := tcpReaderPool.Get().([]byte)
 		defer tcpReaderPool.Put(data)
 
-		if _, err := io.ReadAtLeast(ts.conn, data, size); err != nil {
+		if _, err := io.ReadAtLeast(ts.conn, data[:size], size); err != nil {
 			return fmt.Errorf("read data frame, %w", err)
 		}
 
