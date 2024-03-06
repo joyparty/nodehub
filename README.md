@@ -1,5 +1,9 @@
 # Nodehub
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/joyparty/nodehub.svg)](https://pkg.go.dev/github.com/joyparty/nodehub)
+[![License](https://img.shields.io/github/license/joyparty/nodehub)](./LICENSE)
+[![Go report](https://goreportcard.com/badge/github.com/joyparty/nodehub)](https://goreportcard.com/report/github.com/joyparty/nodehub)
+
 Nodehub是为社交类游戏、棋牌类游戏设计的服务器端框架。
 
 Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用Nodehub开发之前，需要对[gRPC开发方式](https://grpc.io/docs/languages/go/)有所了解。
