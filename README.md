@@ -41,7 +41,7 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 	"id": "",	// ulid，每次启动后自动生成
 	"name": "",	// 节点名称
 	"state": "ok",	// 节点状态
-	"entrace": "ws://host:port/grpc",	// 网关入口地址
+	"entrace": "ws://host:port/grpc",	// 网关入口地址，非网关节点没有值
 	"grpc": {
 		"endpoint": "ip:port",	// grpc服务监听地址
 		"services": [
@@ -94,7 +94,17 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 `server`和`client`适用于房间服务类型的节点请求，在房间创建之后才建立路由关系，玩家在游戏过程中可能会访问多个不同的房间节点。无论使用`server`还是`client`类型的分配策略，都能达到类似的效果，具体开发时可根据实际情况酌情使用。
 
+## 消息时序性约束
+
 `grpc.services.pipeline`用于控制单个客户端的消息时序性保证，`pipeline`的名字允许自行指定任意字符串，设置后会按照消息的接收顺序，处理完一条才会继续处理下一条。如果多个服务设置了相同的`pipeline`值，那么对这些服务的请求均会保证时序性。如果没有指定，消息会被并发处理，有可能出现后发先至的结果。
+
+配置了`grpc.services.pipeline`之后，网关还会根据request id进行时序性检查。
+
+- 如果当前发送的request id小于最后一次request id，说明客户端消息发送逻辑存在问题，这种消息会放弃处理且返回错误响应。
+- 如果当前发送的request id等于最后一次request id，那么会把缓存的最后一次reply返回到客户端。
+- 如果当前发送的request id大于最后一次request id，会作为新的请求转发到相应的服务节点去处理。
+
+基于这个机制，客户端可以对时序性消息进行安全重试，相同request id的请求不会被重复处理。
 
 ## gRPC使用约束
 
