@@ -34,8 +34,8 @@ var (
 	// DefaultHeartbeatTimeout 心跳消息超时时间，默认为心跳消息发送时间间隔的3倍
 	DefaultHeartbeatTimeout = 3 * DefaultHeartbeatDuration
 
-	// MaxPayloadSize 客户端消息最大长度，默认1MB
-	MaxPayloadSize = 1024 * 1024
+	// MaxPayloadSize 客户端消息最大长度，默认64KB
+	MaxPayloadSize = 64 * 1024
 
 	requestPool = &sync.Pool{
 		New: func() any {
