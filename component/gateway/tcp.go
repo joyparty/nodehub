@@ -173,14 +173,15 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 		}
 	}()
 
-	sizeFrame := make([]byte, sizeLen)
+	data := tcpReaderPool.Get().([]byte)
+	defer tcpReaderPool.Put(data)
 
 	for {
-		if _, err := io.ReadFull(ts.conn, sizeFrame); err != nil {
+		if _, err := io.ReadFull(ts.conn, data[:sizeLen]); err != nil {
 			return fmt.Errorf("read size frame, %w", err)
 		}
 
-		size := int(binary.BigEndian.Uint32(sizeFrame))
+		size := int(binary.BigEndian.Uint32(data[:sizeLen]))
 		if size == 0 { // ping
 			ts.lastRWTime.Store(time.Now())
 			continue
@@ -188,10 +189,7 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 			return fmt.Errorf("payload size exceeds the limit, %d", size)
 		}
 
-		data := tcpReaderPool.Get().([]byte)
-		defer tcpReaderPool.Put(data)
-
-		if _, err := io.ReadAtLeast(ts.conn, data[:size], size); err != nil {
+		if _, err := io.ReadFull(ts.conn, data[:size]); err != nil {
 			return fmt.Errorf("read data frame, %w", err)
 		}
 
