@@ -131,7 +131,7 @@ func (h *sessionHub) Close() {
 		close(h.done)
 
 		h.Range(func(s Session) bool {
-			s.Close()
+			_ = s.Close()
 
 			h.Delete(s.ID())
 			return true
@@ -149,7 +149,7 @@ func (h *sessionHub) removeZombie() {
 			h.Range(func(s Session) bool {
 				if time.Since(s.LastRWTime()) > DefaultHeartbeatTimeout {
 					h.Delete(s.ID())
-					s.Close()
+					_ = s.Close()
 				}
 				return true
 			})
@@ -292,7 +292,7 @@ func (p *Proxy) init(ctx context.Context) {
 func (p *Proxy) handle(ctx context.Context, sess Session) {
 	if err := p.onConnect(ctx, sess); err != nil {
 		logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
-		sess.Close()
+		_ = sess.Close()
 		return
 	}
 
@@ -413,6 +413,7 @@ func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 	}))
 }
 
+//revive:disable-next-line:cyclomatic High complexity score but easy to understand
 func (p *Proxy) buildRequest(ctx context.Context, recorder *pipelineRecorder, sess Session, req *nh.Request) (exec func(), pipeline string) {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	var err error
@@ -508,7 +509,7 @@ func (p *Proxy) buildRequest(ctx context.Context, recorder *pipelineRecorder, se
 				})
 				reply.RequestId = req.GetId()
 
-				sess.Send(reply)
+				_ = sess.Send(reply)
 			}
 		}
 	}

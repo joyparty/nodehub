@@ -88,7 +88,7 @@ func (ts *tcpServer) Start(ctx context.Context) error {
 				ts.handle(ctx, conn)
 			}); err != nil {
 				logger.Error("handle connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
-				conn.Close()
+				_ = conn.Close()
 			}
 		}
 	}()
@@ -98,7 +98,7 @@ func (ts *tcpServer) Start(ctx context.Context) error {
 
 // Stop 停止服务
 func (ts *tcpServer) Stop(ctx context.Context) error {
-	ts.listener.Close()
+	_ = ts.listener.Close()
 	return nil
 }
 
@@ -106,7 +106,7 @@ func (ts *tcpServer) handle(ctx context.Context, conn net.Conn) {
 	sess, err := ts.newSession(ctx, conn)
 	if err != nil {
 		logger.Error("initialize session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-		conn.Close()
+		_ = conn.Close()
 		return
 	}
 

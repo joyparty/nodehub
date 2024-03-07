@@ -74,7 +74,7 @@ func (n *Node) AddComponent(c ...Component) {
 	for i := range c {
 		// 自动注入节点管理服务
 		if v, ok := c[i].(grpcServer); ok {
-			v.RegisterService(nh.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
+			_ = v.RegisterService(nh.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
 			break
 		}
 	}

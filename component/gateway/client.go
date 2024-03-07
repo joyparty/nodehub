@@ -107,7 +107,7 @@ func (tc *tcpClient) replyStream() <-chan *nh.Reply {
 
 func (tc *tcpClient) Close() {
 	close(tc.done)
-	tc.conn.Close()
+	_ = tc.conn.Close()
 }
 
 type wsClient struct {
