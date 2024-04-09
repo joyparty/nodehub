@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joyparty/gokit"
@@ -18,6 +20,7 @@ import (
 var (
 	serverAddr string
 	useTCP     bool
+	useQUIC    bool
 
 	echoServiceCode = int32(clusterpb.Services_ECHO)
 )
@@ -25,6 +28,7 @@ var (
 func init() {
 	flag.StringVar(&serverAddr, "server", "127.0.0.1:9000", "server address")
 	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
+	flag.BoolVar(&useQUIC, "quic", false, "use quic")
 	flag.Parse()
 }
 
@@ -32,6 +36,8 @@ func main() {
 	var endpoint string
 	if useTCP {
 		endpoint = fmt.Sprintf("tcp://%s", serverAddr)
+	} else if useQUIC {
+		endpoint = fmt.Sprintf("quic://%s", serverAddr)
 	} else {
 		endpoint = fmt.Sprintf("ws://%s/grpc", serverAddr)
 	}
@@ -58,8 +64,19 @@ type echoClient struct {
 }
 
 func newEchoClient(endpoint string) *echoClient {
+	var client *gateway.Client
+	if strings.HasPrefix(endpoint, "quic://") {
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"quic-echo-example"},
+		}
+		client = gokit.MustReturn(gateway.NewQUICClient(endpoint, tlsConfig, nil))
+	} else {
+		client = gokit.MustReturn(gateway.NewClient(endpoint))
+	}
+
 	ec := &echoClient{
-		Client: gokit.MustReturn(gateway.NewClient(endpoint)),
+		Client: client,
 	}
 
 	ec.Client.SetDefaultHandler(func(resp *nh.Reply) {

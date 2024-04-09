@@ -50,6 +50,9 @@ var (
 	}
 )
 
+// ErrDenyByAuthorizer 身份验证未通过
+var ErrDenyByAuthorizer = errors.New("deny by authorizer")
+
 // SessionHandler 会话处理函数
 type SessionHandler func(ctx context.Context, sess Session)
 

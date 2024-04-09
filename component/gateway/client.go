@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"bytes"
+	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -15,11 +17,12 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/proto/nh"
+	"github.com/quic-go/quic-go"
 	"google.golang.org/protobuf/proto"
 )
 
 type client interface {
-	send([]byte) error
+	send(service int32, data []byte) error
 	replyStream() <-chan *nh.Reply
 	Close()
 }
@@ -41,7 +44,7 @@ func newTCPClient(addr string) (*tcpClient, error) {
 	}, nil
 }
 
-func (tc *tcpClient) send(data []byte) error {
+func (tc *tcpClient) send(service int32, data []byte) error {
 	buf := bytes.NewBuffer(nil)
 
 	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
@@ -110,6 +113,106 @@ func (tc *tcpClient) Close() {
 	_ = tc.conn.Close()
 }
 
+type quicClient struct {
+	conn    quic.Connection
+	streams []quic.Stream
+	done    chan struct{}
+}
+
+func newQUICClient(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) (*quicClient, error) {
+	conn, err := quic.DialAddr(context.Background(), addr, tlsConfig, quicConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	streams := []quic.Stream{}
+	for i := 0; i < 3; i++ {
+		stream, err := conn.OpenStream()
+		if err != nil {
+			return nil, fmt.Errorf("open stream, %w", err)
+		}
+		streams = append(streams, stream)
+	}
+
+	qc := &quicClient{
+		conn:    conn,
+		streams: streams,
+		done:    make(chan struct{}),
+	}
+
+	return qc, nil
+}
+
+func (qc *quicClient) send(service int32, data []byte) error {
+	s := qc.streams[int(service)%len(qc.streams)]
+
+	buf := bytes.NewBuffer(nil)
+
+	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
+		return fmt.Errorf("write size frame, %w", err)
+	}
+
+	if len(data) > 0 {
+		if err := binary.Write(buf, binary.BigEndian, data); err != nil {
+			return fmt.Errorf("write data frame, %w", err)
+		}
+	}
+
+	_, err := s.Write(buf.Bytes())
+	return err
+}
+
+func (qc *quicClient) replyStream() <-chan *nh.Reply {
+	c := make(chan *nh.Reply)
+
+	for _, s := range qc.streams {
+		go func(s quic.Stream) {
+			for {
+				select {
+				case <-qc.done:
+					return
+				default:
+				}
+
+				sizeFrame := make([]byte, sizeLen)
+				if _, err := io.ReadFull(s, sizeFrame); err != nil {
+					if errors.Is(err, net.ErrClosed) {
+						return
+					}
+					panic(fmt.Errorf("read size frame, %w", err))
+				}
+				size := int(binary.BigEndian.Uint32(sizeFrame))
+				if size == 0 { // ping
+					continue
+				}
+
+				data := make([]byte, size)
+				if _, err := io.ReadFull(s, data); err != nil {
+					panic(fmt.Errorf("read data frame, %w", err))
+				}
+
+				reply := &nh.Reply{}
+				if err := proto.Unmarshal(data, reply); err != nil {
+					panic(fmt.Errorf("unmarshal reply, %w", err))
+				}
+
+				select {
+				case <-qc.done:
+					return
+				case c <- reply:
+				}
+			}
+		}(s)
+	}
+
+	return c
+}
+
+func (qc *quicClient) Close() {
+	close(qc.done)
+	_ = qc.conn.CloseWithError(0, "")
+}
+
 type wsClient struct {
 	conn *websocket.Conn
 	done chan struct{}
@@ -127,7 +230,7 @@ func newWSClient(url string) (*wsClient, error) {
 	}, nil
 }
 
-func (wc *wsClient) send(data []byte) error {
+func (wc *wsClient) send(service int32, data []byte) error {
 	wc.conn.SetWriteDeadline(time.Now().Add(writeWait))
 	return wc.conn.WriteMessage(websocket.BinaryMessage, data)
 }
@@ -221,6 +324,31 @@ func NewClient(dialURL string) (*Client, error) {
 	return c, nil
 }
 
+// NewQUICClient 创建QUIC客户端
+func NewQUICClient(dialURL string, tlsConfig *tls.Config, quicConfig *quic.Config) (*Client, error) {
+	l, err := url.Parse(dialURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse dial url, %w", err)
+	} else if l.Scheme != "quic" {
+		return nil, fmt.Errorf("unsupported scheme: %s", l.Scheme)
+	}
+
+	qc, err := newQUICClient(l.Host, tlsConfig, quicConfig)
+	if err != nil {
+		return nil, fmt.Errorf("dial quic, %w", err)
+	}
+
+	c := &Client{
+		client:         qc,
+		idSeq:          &atomic.Uint32{},
+		handlers:       gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
+		defaultHandler: func(reply *nh.Reply) {},
+	}
+
+	go c.run()
+	return c, nil
+}
+
 // SetDefaultHandler 设置默认消息处理器
 func (c *Client) SetDefaultHandler(handler func(reply *nh.Reply)) {
 	c.defaultHandler = handler
@@ -240,7 +368,7 @@ func (c *Client) Call(serviceCode int32, method string, arg proto.Message, optio
 		return fmt.Errorf("marshal request message, %w", err)
 	}
 
-	return c.send(data)
+	return c.send(serviceCode, data)
 }
 
 // OnReceive 注册消息处理器

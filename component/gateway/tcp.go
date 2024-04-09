@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -21,35 +20,19 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const sizeLen = 4
-
-var (
-	tcpWriterPool = &sync.Pool{
-		New: func() any {
-			return bytes.NewBuffer(make([]byte, 0, 1024))
-		},
-	}
-
-	tcpReaderPool = &sync.Pool{
-		New: func() any {
-			return make([]byte, MaxPayloadSize)
-		},
-	}
-)
-
-// TCPAuthorizer tcp授权函数
-type TCPAuthorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
+// Authorizer tcp授权函数
+type Authorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
 
 // tcpServer tcp网关服务
 type tcpServer struct {
 	listenAddr     string
 	listener       net.Listener
-	authorizer     TCPAuthorizer
+	authorizer     Authorizer
 	sessionHandler SessionHandler
 }
 
 // NewTCPServer 构造函数
-func NewTCPServer(listenAddr string, authorizer TCPAuthorizer) Transporter {
+func NewTCPServer(listenAddr string, authorizer Authorizer) Transporter {
 	return &tcpServer{
 		listenAddr: listenAddr,
 		authorizer: authorizer,
@@ -80,7 +63,7 @@ func (ts *tcpServer) Start(ctx context.Context) error {
 			if errors.Is(err, net.ErrClosed) {
 				return
 			} else if err != nil {
-				logger.Error("accept", err)
+				logger.Error("tcp accept", "error", err)
 				continue
 			}
 
@@ -105,7 +88,7 @@ func (ts *tcpServer) Stop(ctx context.Context) error {
 func (ts *tcpServer) handle(ctx context.Context, conn net.Conn) {
 	sess, err := ts.newSession(ctx, conn)
 	if err != nil {
-		logger.Error("initialize session", "error", err, "remoteAddr", conn.RemoteAddr().String())
+		logger.Error("initialize tcp session", "error", err, "remoteAddr", conn.RemoteAddr().String())
 		_ = conn.Close()
 		return
 	}
@@ -118,7 +101,7 @@ func (ts *tcpServer) newSession(ctx context.Context, conn net.Conn) (Session, er
 
 	userID, md, ok := ts.authorizer(ctx, sess)
 	if !ok {
-		return nil, fmt.Errorf("deny by authorizer")
+		return nil, ErrDenyByAuthorizer
 	} else if userID == "" {
 		return nil, fmt.Errorf("user id is empty")
 	} else if md == nil {
@@ -173,8 +156,8 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 		}
 	}()
 
-	data := tcpReaderPool.Get().([]byte)
-	defer tcpReaderPool.Put(data)
+	data := bsPool.Get().([]byte)
+	defer bsPool.Put(data)
 
 	for {
 		if _, err := io.ReadFull(ts.conn, data[:sizeLen]); err != nil {
@@ -202,27 +185,14 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 }
 
 func (ts *tcpSession) Send(reply *nh.Reply) error {
-	data, err := proto.Marshal(reply)
-	if err != nil {
-		return fmt.Errorf("marshal reply, %w", err)
-	}
-
-	buf := tcpWriterPool.Get().(*bytes.Buffer)
-	defer tcpWriterPool.Put(buf)
-	buf.Reset()
-
-	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
-		return fmt.Errorf("write size frame, %w", err)
-	} else if err := binary.Write(buf, binary.BigEndian, data); err != nil {
-		return fmt.Errorf("write data frame, %w", err)
-	}
-
-	// ts.conn.SetWriteDeadline(time.Now().Add(writeWait))
-	_, err = ts.conn.Write(buf.Bytes())
-	if err == nil {
-		ts.lastRWTime.Store(time.Now())
-	}
-	return err
+	return sendBy(reply, func(data []byte) error {
+		// ts.conn.SetWriteDeadline(time.Now().Add(writeWait))
+		_, err := ts.conn.Write(data)
+		if err == nil {
+			ts.lastRWTime.Store(time.Now())
+		}
+		return err
+	})
 }
 
 func (ts *tcpSession) LocalAddr() string {
