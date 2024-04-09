@@ -2,9 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"os"
 	"time"
@@ -30,6 +36,7 @@ var (
 	redisAddr   string
 	natsAddr    string
 	useTCP      bool
+	useQUIC     bool
 )
 
 func init() {
@@ -38,6 +45,7 @@ func init() {
 	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
 	flag.StringVar(&natsAddr, "nats", "127.0.0.1:4222", "nats address")
 	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
+	flag.BoolVar(&useQUIC, "quic", false, "use quic")
 	flag.Parse()
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
@@ -68,6 +76,15 @@ func main() {
 			func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
 				return ulid.Make().String(), metadata.MD{}, true
 			},
+		)
+	} else if useQUIC {
+		transporter = gateway.NewQUICServer(
+			proxyListen,
+			func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+				return ulid.Make().String(), metadata.MD{}, true
+			},
+			generateTLSConfig(),
+			nil,
 		)
 	} else {
 		transporter = gateway.NewWSServer(
@@ -150,4 +167,28 @@ func newNatsBus() (*event.Bus, *multicast.Bus) {
 	dsn := fmt.Sprintf("nats://%s", natsAddr)
 	conn := gokit.MustReturn(nats.Connect(dsn))
 	return event.NewNatsBus(conn), multicast.NewNatsBus(conn)
+}
+
+// Setup a bare-bones TLS config for the server
+func generateTLSConfig() *tls.Config {
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		panic(err)
+	}
+	template := x509.Certificate{SerialNumber: big.NewInt(1)}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		panic(err)
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	tlsCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		panic(err)
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		NextProtos:   []string{"quic-echo-example"},
+	}
 }
