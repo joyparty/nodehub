@@ -369,9 +369,7 @@ func (p *Proxy) handle(ctx context.Context, sess Session) {
 			logger.Error("request interceptor",
 				"error", err,
 				"session", sess,
-				"requestID", req.GetId(),
-				"serviceCode", req.GetServiceCode(),
-				"method", req.GetMethod(),
+				"req", req,
 			)
 		} else if pass {
 			requestHandler(ctx, sess, req)
@@ -600,10 +598,8 @@ func (p *Proxy) logRequest(
 	}
 
 	logValues := []any{
-		"reqID", req.Id,
 		"session", sess,
-		"serviceCode", req.ServiceCode,
-		"method", req.Method,
+		"req", req,
 		"duration", time.Since(start).String(),
 	}
 
