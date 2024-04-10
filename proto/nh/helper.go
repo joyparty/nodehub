@@ -1,6 +1,8 @@
 package nh
 
 import (
+	"log/slog"
+
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -48,4 +50,18 @@ func ResetReply(resp *Reply) {
 	if len(resp.Data) > 0 {
 		resp.Data = resp.Data[:0]
 	}
+}
+
+// LogValue implements slog.LogValuer
+func (x *Request) LogValue() slog.Value {
+	attrs := []slog.Attr{
+		slog.Int("id", int(x.GetId())),
+		slog.Int("service", int(x.GetServiceCode())),
+		slog.String("method", x.GetMethod()),
+	}
+
+	if x.GetNoReply() {
+		attrs = append(attrs, slog.Bool("noReply", true))
+	}
+	return slog.GroupValue(attrs...)
 }
