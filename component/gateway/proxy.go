@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"path"
 	"sync"
 	"sync/atomic"
@@ -78,6 +79,7 @@ type Session interface {
 	RemoteAddr() string
 	LastRWTime() time.Time
 	Close() error
+	LogValue() slog.Value
 }
 
 // sessionHub 会话集合
@@ -293,8 +295,16 @@ func (p *Proxy) init(ctx context.Context) {
 
 // Handle 处理客户端连接
 func (p *Proxy) handle(ctx context.Context, sess Session) {
+	logVars := []any{
+		"session", sess,
+		"gateway", p.nodeID.String(),
+	}
+
+	logger.Info("session connected", logVars...)
+	defer logger.Info("session disconnected", logVars...)
+
 	if err := p.onConnect(ctx, sess); err != nil {
-		logger.Error("on connect", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+		logger.Error("on connect", "error", err, "session", sess)
 		_ = sess.Close()
 		return
 	}
@@ -347,7 +357,7 @@ func (p *Proxy) handle(ctx context.Context, sess Session) {
 			requestPool.Put(req)
 
 			if !errors.Is(err, io.EOF) {
-				logger.Error("recv request", "error", err, "sessionID", sess.ID(), "remoteAddr", sess.RemoteAddr())
+				logger.Error("recv request", "error", err, "session", sess)
 			}
 
 			return
@@ -358,8 +368,7 @@ func (p *Proxy) handle(ctx context.Context, sess Session) {
 
 			logger.Error("request interceptor",
 				"error", err,
-				"sessionID", sess.ID(),
-				"remoteAddr", sess.RemoteAddr(),
+				"session", sess,
 				"requestID", req.GetId(),
 				"serviceCode", req.GetServiceCode(),
 				"method", req.GetMethod(),
@@ -592,8 +601,7 @@ func (p *Proxy) logRequest(
 
 	logValues := []any{
 		"reqID", req.Id,
-		"sessID", sess.ID(),
-		"remoteAddr", sess.RemoteAddr(),
+		"session", sess,
 		"serviceCode", req.ServiceCode,
 		"method", req.Method,
 		"duration", time.Since(start).String(),
