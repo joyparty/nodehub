@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/joyparty/nodehub/proto/nh"
@@ -19,10 +20,8 @@ var (
 		},
 	}
 
-	bsPool = &sync.Pool{
-		New: func() any {
-			return make([]byte, MaxPayloadSize)
-		},
+	msgPool = &messagePool{
+		pool: make(chan *message, 1024),
 	}
 )
 
@@ -43,4 +42,58 @@ func sendBy(reply *nh.Reply, sender func([]byte) error) error {
 	}
 
 	return sender(buf.Bytes())
+}
+
+type message struct {
+	data []byte
+	size int
+}
+
+func newMessage() *message {
+	return &message{
+		data: make([]byte, MaxPayloadSize),
+	}
+}
+
+func (msg message) Bytes() []byte {
+	return msg.data[:msg.size]
+}
+
+func readMessage(r io.Reader, msg *message) error {
+	if _, err := io.ReadFull(r, msg.data[:sizeLen]); err != nil {
+		return fmt.Errorf("read size frame, %w", err)
+	}
+
+	msg.size = int(binary.BigEndian.Uint32(msg.data[:sizeLen]))
+	if msg.size == 0 {
+		return nil
+	} else if msg.size > MaxPayloadSize {
+		return fmt.Errorf("payload size exceeds the limit, %d", msg.size)
+	}
+
+	if _, err := io.ReadFull(r, msg.data[:msg.size]); err != nil {
+		return fmt.Errorf("read data frame, %w", err)
+	}
+	return nil
+}
+
+type messagePool struct {
+	pool chan *message
+}
+
+func (p *messagePool) Get() *message {
+	select {
+	case msg := <-p.pool:
+		msg.size = 0
+		return msg
+	default:
+		return newMessage()
+	}
+}
+
+func (p *messagePool) Put(msg *message) {
+	select {
+	case p.pool <- msg:
+	default:
+	}
 }
