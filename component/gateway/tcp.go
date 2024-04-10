@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -157,37 +156,27 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 		}
 	}()
 
-	data := bsPool.Get().([]byte)
-	defer bsPool.Put(data)
+	msg := msgPool.Get()
+	defer msgPool.Put(msg)
 
 	for {
-		if _, err := io.ReadFull(ts.conn, data[:sizeLen]); err != nil {
-			return fmt.Errorf("read size frame, %w", err)
-		}
-
-		size := int(binary.BigEndian.Uint32(data[:sizeLen]))
-		if size == 0 { // ping
-			ts.lastRWTime.Store(time.Now())
-			continue
-		} else if size > MaxPayloadSize {
-			return fmt.Errorf("payload size exceeds the limit, %d", size)
-		}
-
-		if _, err := io.ReadFull(ts.conn, data[:size]); err != nil {
-			return fmt.Errorf("read data frame, %w", err)
-		}
-
-		if err := proto.Unmarshal(data[:size], req); err != nil {
-			return fmt.Errorf("unmarshal request, %w", err)
+		if err = readMessage(ts.conn, msg); err != nil {
+			return fmt.Errorf("read message, %w", err)
 		}
 		ts.lastRWTime.Store(time.Now())
-		return nil
+
+		if msg.size > 0 {
+			if err := proto.Unmarshal(msg.Bytes(), req); err != nil {
+				return fmt.Errorf("unmarshal request, %w", err)
+			}
+			return nil
+		}
 	}
 }
 
 func (ts *tcpSession) Send(reply *nh.Reply) error {
 	return sendBy(reply, func(data []byte) error {
-		// ts.conn.SetWriteDeadline(time.Now().Add(writeWait))
+		_ = ts.conn.SetWriteDeadline(time.Now().Add(writeWait))
 		_, err := ts.conn.Write(data)
 		if err == nil {
 			ts.lastRWTime.Store(time.Now())

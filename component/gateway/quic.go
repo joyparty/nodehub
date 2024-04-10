@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"crypto/tls"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -123,7 +122,7 @@ type quicSession struct {
 	id         string
 	conn       quic.Connection
 	streams    *quicStreams
-	reqC       chan []byte
+	msgC       chan *message
 	md         metadata.MD
 	lastRWTime gokit.ValueOf[time.Time]
 	closeOnce  sync.Once
@@ -139,7 +138,7 @@ func newQuicSession(conn quic.Connection) *quicSession {
 		lastRWTime: gokit.NewValueOf[time.Time](),
 		done:       make(chan struct{}),
 
-		reqC: make(chan []byte),
+		msgC: make(chan *message),
 	}
 	qs.lastRWTime.Store(time.Now())
 
@@ -178,7 +177,7 @@ func (qs *quicSession) LastRWTime() time.Time {
 func (qs *quicSession) Close() error {
 	qs.closeOnce.Do(func() {
 		close(qs.done)
-		close(qs.reqC)
+		close(qs.msgC)
 
 		qs.streams.CloseAll()
 		_ = qs.conn.CloseWithError(0, "")
@@ -219,26 +218,12 @@ func (qs *quicSession) handleRequest() {
 				case <-qs.done:
 					return
 				default:
-					sizeFrame := make([]byte, sizeLen)
-					if _, err := io.ReadFull(s, sizeFrame); err != nil {
-						return fmt.Errorf("read size frame, %w", err)
+					msg := msgPool.Get()
+					if err := readMessage(s, msg); err != nil {
+						return err
 					}
-
-					size := int(binary.BigEndian.Uint32(sizeFrame))
-					if size == 0 { // ping
-						qs.lastRWTime.Store(time.Now())
-						continue
-					} else if size > MaxPayloadSize {
-						return fmt.Errorf("payload size exceeds the limit, %d", size)
-					}
-
-					payload := make([]byte, size)
-					if _, err := io.ReadFull(s, payload); err != nil {
-						return fmt.Errorf("read data frame, %w", err)
-					}
-
 					qs.lastRWTime.Store(time.Now())
-					qs.reqC <- payload
+					qs.msgC <- msg
 				}
 			}
 		}()
@@ -246,13 +231,23 @@ func (qs *quicSession) handleRequest() {
 }
 
 func (qs *quicSession) Recv(req *nh.Request) error {
-	payload, ok := <-qs.reqC
-	if !ok {
-		return io.EOF
-	} else if err := proto.Unmarshal(payload, req); err != nil {
-		return fmt.Errorf("unmarshal request, %w", err)
+	for {
+		msg, ok := <-qs.msgC
+		if !ok {
+			return io.EOF
+		}
+
+		if msg.size == 0 { // ping
+			msgPool.Put(msg)
+			continue
+		}
+
+		defer msgPool.Put(msg)
+		if err := proto.Unmarshal(msg.Bytes(), req); err != nil {
+			return fmt.Errorf("unmarshal request, %w", err)
+		}
+		return nil
 	}
-	return nil
 }
 
 func (qs *quicSession) Send(reply *nh.Reply) error {
@@ -262,7 +257,7 @@ func (qs *quicSession) Send(reply *nh.Reply) error {
 	}
 
 	return sendBy(reply, func(data []byte) error {
-		s.SetWriteDeadline(time.Now().Add(writeWait))
+		_ = s.SetWriteDeadline(time.Now().Add(writeWait))
 		_, err := s.Write(data)
 		return err
 	})
