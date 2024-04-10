@@ -25,7 +25,7 @@ var (
 	}
 )
 
-func sendBy(reply *nh.Reply, sender func([]byte) error) error {
+func sendReply(reply *nh.Reply, sender func([]byte) error) error {
 	data, err := proto.Marshal(reply)
 	if err != nil {
 		return fmt.Errorf("marshal reply, %w", err)
@@ -51,7 +51,7 @@ type message struct {
 
 func newMessage() *message {
 	return &message{
-		data: make([]byte, MaxPayloadSize),
+		data: make([]byte, MaxMessageSize),
 	}
 }
 
@@ -67,8 +67,8 @@ func readMessage(r io.Reader, msg *message) error {
 	msg.size = int(binary.BigEndian.Uint32(msg.data[:sizeLen]))
 	if msg.size == 0 {
 		return nil
-	} else if msg.size > MaxPayloadSize {
-		return fmt.Errorf("payload size exceeds the limit, %d", msg.size)
+	} else if msg.size > MaxMessageSize {
+		return fmt.Errorf("message size exceeds the limit, %d", msg.size)
 	}
 
 	if _, err := io.ReadFull(r, msg.data[:msg.size]); err != nil {

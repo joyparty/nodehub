@@ -256,7 +256,7 @@ func (qs *quicSession) Send(reply *nh.Reply) error {
 		return errors.New("no available stream")
 	}
 
-	return sendBy(reply, func(data []byte) error {
+	return sendReply(reply, func(data []byte) error {
 		_ = s.SetWriteDeadline(time.Now().Add(writeWait))
 		_, err := s.Write(data)
 		return err
