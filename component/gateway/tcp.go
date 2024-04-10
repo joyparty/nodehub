@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -212,4 +213,12 @@ func (ts *tcpSession) Close() (err error) {
 		err = ts.conn.Close()
 	})
 	return
+}
+
+func (ts *tcpSession) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("id", ts.id),
+		slog.String("type", "tcp"),
+		slog.String("addr", ts.RemoteAddr()),
+	)
 }

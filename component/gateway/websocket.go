@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -260,8 +261,7 @@ func (ws *wsSession) sendLoop() {
 			if err := ws.conn.WriteMessage(payload.messageType, payload.data); err != nil {
 				args := []any{
 					"error", err,
-					"sessID", ws.ID(),
-					"remoteAddr", ws.RemoteAddr(),
+					"session", ws,
 				}
 
 				if payload.messageType == websocket.BinaryMessage {
@@ -304,4 +304,12 @@ func (ws *wsSession) Close() error {
 		return ws.conn.Close()
 	}
 	return nil
+}
+
+func (ws *wsSession) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("id", ws.id),
+		slog.String("type", "websocket"),
+		slog.String("addr", ws.RemoteAddr()),
+	)
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"sync"
 	"time"
@@ -73,7 +74,7 @@ func (qs *quicServer) Start(ctx context.Context) error {
 				qs.handleConn(ctx, conn)
 			}); err != nil {
 				logger.Error("handle quic connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
-				_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.InternalError), "") // TODO: close with error code
+				_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.InternalError), "")
 			}
 		}
 	}()
@@ -189,7 +190,10 @@ func (qs *quicSession) handleRequest() {
 	for {
 		s, err := qs.conn.AcceptStream(context.Background())
 		if err != nil {
-			logger.Error("accept quic stream", "error", err, "remoteAddr", qs.RemoteAddr())
+			if isUnexpectedQUICError(err) {
+				logger.Error("accept quic stream", "error", err, "session", qs)
+			}
+
 			_ = qs.Close()
 			return
 		}
@@ -197,8 +201,8 @@ func (qs *quicSession) handleRequest() {
 
 		go func() (err error) {
 			defer func() {
-				if err != nil {
-					logger.Error("handle quic stream", "error", err, "remoteAddr", qs.RemoteAddr())
+				if isUnexpectedQUICError(err) {
+					logger.Error("handle quic stream", "error", err, "session", qs)
 				}
 
 				s.CancelRead(0)
@@ -244,7 +248,7 @@ func (qs *quicSession) handleRequest() {
 func (qs *quicSession) Recv(req *nh.Request) error {
 	payload, ok := <-qs.reqC
 	if !ok {
-		return fmt.Errorf("payload channel closed")
+		return io.EOF
 	} else if err := proto.Unmarshal(payload, req); err != nil {
 		return fmt.Errorf("unmarshal request, %w", err)
 	}
@@ -262,6 +266,14 @@ func (qs *quicSession) Send(reply *nh.Reply) error {
 		_, err := s.Write(data)
 		return err
 	})
+}
+
+func (qs *quicSession) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("id", qs.id),
+		slog.String("type", "quic"),
+		slog.String("addr", qs.RemoteAddr()),
+	)
 }
 
 type quicStreams struct {
@@ -318,4 +330,22 @@ func (qs *quicStreams) CloseAll() {
 	for _, s := range qs.ss {
 		_ = s.Close()
 	}
+}
+
+func isUnexpectedQUICError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var appErr *quic.ApplicationError
+	if errors.As(err, &appErr) {
+		return appErr.ErrorCode > 0
+	}
+
+	var timeoutErr *quic.IdleTimeoutError
+	if errors.As(err, &timeoutErr) {
+		return false
+	}
+
+	return true
 }
