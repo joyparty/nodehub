@@ -25,10 +25,9 @@ type Authorizer func(ctx context.Context, sess Session) (userID string, md metad
 
 // tcpServer tcp网关服务
 type tcpServer struct {
-	listenAddr     string
-	listener       net.Listener
-	authorizer     Authorizer
-	sessionHandler SessionHandler
+	listenAddr string
+	listener   net.Listener
+	authorizer Authorizer
 }
 
 // NewTCPServer 构造函数
@@ -44,20 +43,17 @@ func (ts *tcpServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Entrance = fmt.Sprintf("tcp://%s", ts.listenAddr)
 }
 
-// SetSessionHandler 设置会话处理函数
-func (ts *tcpServer) SetSessionHandler(handler SessionHandler) {
-	ts.sessionHandler = handler
-}
-
-// Start 启动服务
-func (ts *tcpServer) Start(ctx context.Context) error {
+func (ts *tcpServer) Serve(ctx context.Context) (chan Session, error) {
 	l, err := net.Listen("tcp", ts.listenAddr)
 	if err != nil {
-		return fmt.Errorf("listen, %w", err)
+		return nil, fmt.Errorf("listen, %w", err)
 	}
 	ts.listener = l
 
+	ch := make(chan Session)
 	go func() {
+		defer close(ch)
+
 		for {
 			conn, err := l.Accept()
 			if errors.Is(err, net.ErrClosed) {
@@ -68,32 +64,27 @@ func (ts *tcpServer) Start(ctx context.Context) error {
 			}
 
 			if err := ants.Submit(func() {
-				ts.handle(ctx, conn)
+				sess, err := ts.newSession(ctx, conn)
+				if err != nil {
+					logger.Error("initialize tcp session", "error", err, "remoteAddr", conn.RemoteAddr().String())
+					_ = conn.Close()
+					return
+				}
+
+				ch <- sess
 			}); err != nil {
-				logger.Error("handle connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
-				_ = conn.Close()
+				logger.Error("handle tcp connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
 			}
 		}
 	}()
 
-	return nil
+	return ch, nil
 }
 
-// Stop 停止服务
-func (ts *tcpServer) Stop(ctx context.Context) error {
+// Shutdown 停止服务
+func (ts *tcpServer) Shutdown(ctx context.Context) error {
 	_ = ts.listener.Close()
 	return nil
-}
-
-func (ts *tcpServer) handle(ctx context.Context, conn net.Conn) {
-	sess, err := ts.newSession(ctx, conn)
-	if err != nil {
-		logger.Error("initialize tcp session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-		_ = conn.Close()
-		return
-	}
-
-	ts.sessionHandler(ctx, sess)
 }
 
 func (ts *tcpServer) newSession(ctx context.Context, conn net.Conn) (Session, error) {

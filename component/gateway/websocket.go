@@ -37,10 +37,9 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type wsServer struct {
-	listenAddr     string
-	authorizer     WSAuthorizer
-	server         *http.Server
-	sessionHandler SessionHandler
+	listenAddr string
+	authorizer WSAuthorizer
+	server     *http.Server
 }
 
 // NewWSServer 构造函数
@@ -56,16 +55,25 @@ func (ws *wsServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Entrance = fmt.Sprintf("ws://%s/grpc", ws.listenAddr)
 }
 
-// SetSessionHandler 设置会话处理函数
-func (ws *wsServer) SetSessionHandler(handler SessionHandler) {
-	ws.sessionHandler = handler
-}
+func (ws *wsServer) Serve(ctx context.Context) (chan Session, error) {
+	ch := make(chan Session)
 
-// Start 启动websocket服务器
-func (ws *wsServer) Start(ctx context.Context) error {
 	router := http.NewServeMux()
 	router.HandleFunc("/grpc", func(w http.ResponseWriter, r *http.Request) {
-		ws.handle(w, r.WithContext(ctx))
+		sess, err := ws.newSession(w, r)
+		if err != nil {
+			logger.Error("initialize session", "error", err, "remoteAddr", r.RemoteAddr)
+			return
+		}
+
+		defer func() {
+			if v := recover(); v != nil {
+				// do nothing
+				_ = v
+			}
+		}()
+
+		ch <- sess
 	})
 
 	ws.server = &http.Server{
@@ -74,28 +82,20 @@ func (ws *wsServer) Start(ctx context.Context) error {
 	}
 
 	go func() {
+		defer close(ch)
+
 		if err := ws.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 			panic(fmt.Errorf("start gateway, %w", err))
 		}
 	}()
 
-	return nil
+	return ch, nil
 }
 
-// Stop 停止websocket服务器
-func (ws *wsServer) Stop(ctx context.Context) error {
+// Shutdown 停止websocket服务器
+func (ws *wsServer) Shutdown(ctx context.Context) error {
 	return ws.server.Shutdown(ctx)
-}
-
-func (ws *wsServer) handle(w http.ResponseWriter, r *http.Request) {
-	sess, err := ws.newSession(w, r)
-	if err != nil {
-		logger.Error("initialize session", "error", err, "remoteAddr", r.RemoteAddr)
-		return
-	}
-
-	ws.sessionHandler(r.Context(), sess)
 }
 
 func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {

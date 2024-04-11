@@ -28,12 +28,11 @@ var (
 )
 
 type quicServer struct {
-	listenAddr     string
-	tlsConfig      *tls.Config
-	quicConfig     *quic.Config
-	listener       *quic.Listener
-	authorizer     Authorizer
-	sessionHandler SessionHandler
+	listenAddr string
+	tlsConfig  *tls.Config
+	quicConfig *quic.Config
+	listener   *quic.Listener
+	authorizer Authorizer
 }
 
 // NewQUICServer 构造函数
@@ -50,55 +49,49 @@ func (qs *quicServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Entrance = fmt.Sprintf("quic://%s", qs.listenAddr)
 }
 
-func (qs *quicServer) SetSessionHandler(handler SessionHandler) {
-	qs.sessionHandler = handler
-}
-
-func (qs *quicServer) Start(ctx context.Context) error {
+func (qs *quicServer) Serve(ctx context.Context) (chan Session, error) {
 	l, err := quic.ListenAddr(qs.listenAddr, qs.tlsConfig, qs.quicConfig)
 	if err != nil {
-		return fmt.Errorf("listen, %w", err)
+		return nil, fmt.Errorf("listen, %w", err)
 	}
 	qs.listener = l
 
+	ch := make(chan Session)
 	go func() {
+		defer close(ch)
+
 		for {
 			conn, err := l.Accept(context.Background())
 			if err != nil {
-				logger.Error("quic accept", "error", err)
+				logger.Error("accept quic connection", "error", err)
 				return
 			}
 
 			if err := ants.Submit(func() {
-				qs.handleConn(ctx, conn)
+				sess, err := qs.newSession(ctx, conn)
+				if err != nil {
+					logger.Error("initialize quic session", "error", err, "remoteAddr", conn.RemoteAddr().String())
+
+					if errors.Is(err, ErrDenyByAuthorizer) {
+						_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.ConnectionRefused), err.Error())
+					} else {
+						_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.InternalError), "")
+					}
+					return
+				}
+
+				ch <- sess
 			}); err != nil {
 				logger.Error("handle quic connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
-				_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.InternalError), "")
 			}
 		}
 	}()
 
-	return nil
+	return ch, nil
 }
 
-func (qs *quicServer) Stop(_ context.Context) error {
+func (qs *quicServer) Shutdown(_ context.Context) error {
 	return qs.listener.Close()
-}
-
-func (qs *quicServer) handleConn(ctx context.Context, conn quic.Connection) {
-	sess, err := qs.newSession(ctx, conn)
-	if err != nil {
-		logger.Error("initialize quic session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-
-		if errors.Is(err, ErrDenyByAuthorizer) {
-			_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.ConnectionRefused), err.Error())
-		} else {
-			_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.InternalError), "")
-		}
-		return
-	}
-
-	qs.sessionHandler(ctx, sess)
 }
 
 func (qs *quicServer) newSession(ctx context.Context, conn quic.Connection) (Session, error) {

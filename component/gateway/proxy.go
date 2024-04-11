@@ -54,17 +54,11 @@ var (
 // ErrDenyByAuthorizer 身份验证未通过
 var ErrDenyByAuthorizer = errors.New("deny by authorizer")
 
-// SessionHandler 会话处理函数
-type SessionHandler func(ctx context.Context, sess Session)
-
 // Transporter 网关传输层接口
 type Transporter interface {
 	CompleteNodeEntry(entry *cluster.NodeEntry)
-	// 设置会话处理函数，每个连接创建时都需要调用设置的handler处理
-	SetSessionHandler(handler SessionHandler)
-
-	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
+	Serve(ctx context.Context) (chan Session, error)
+	Shutdown(ctx context.Context) error
 }
 
 // Session 连接会话
@@ -233,8 +227,31 @@ func (p *Proxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
 func (p *Proxy) Start(ctx context.Context) error {
 	p.init(ctx)
 
-	p.transporter.SetSessionHandler(p.handle)
-	return p.transporter.Start(ctx)
+	sc, err := p.transporter.Serve(ctx)
+	if err != nil {
+		return fmt.Errorf("start transporter, %w", err)
+	}
+
+	go func() {
+		for {
+			select {
+			case <-p.done:
+				return
+			case sess, ok := <-sc:
+				if !ok {
+					return
+				}
+
+				if err := ants.Submit(func() {
+					p.handleSession(ctx, sess)
+				}); err != nil {
+					logger.Error("handle session", "error", err, "session", sess)
+				}
+			}
+		}
+	}()
+
+	return nil
 }
 
 // Stop 停止服务
@@ -242,7 +259,10 @@ func (p *Proxy) Stop(ctx context.Context) error {
 	close(p.done)
 	p.sessions.Close()
 
-	return p.transporter.Stop(ctx)
+	if err := p.transporter.Shutdown(ctx); err != nil {
+		logger.Error("shutdown transporter", "error", err)
+	}
+	return nil
 }
 
 // NewGRPCService 网关管理服务
@@ -294,7 +314,7 @@ func (p *Proxy) init(ctx context.Context) {
 }
 
 // Handle 处理客户端连接
-func (p *Proxy) handle(ctx context.Context, sess Session) {
+func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	logVars := []any{
 		"session", sess,
 		"gateway", p.nodeID.String(),
