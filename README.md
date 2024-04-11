@@ -10,6 +10,7 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 ## 特性
 
+- 网关支持websocket、tcp、quic三种连接方式
 - 服务注册与发现（使用[etcd](https://etcd.io/)）
 - 服务节点负载均衡（允许自定义）
 - 有状态服务节点路由
@@ -20,7 +21,7 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 - 整体架构由客户端、网关节点、服务节点以及基础服务组成
 - 由etcd实现服务注册与发现，[nats](https://nats.io/)（推荐）或[redis](https://redis.io/)实现服务间消息总线
-- 客户端通过websocket或者raw tcp socket方式与网关连接，客户端只会通过网关与服务节点联系，不会直接请求服务节点
+- 客户端通过websocket/tcp/quic方式与网关连接，客户端只会通过网关与服务节点联系，不会直接请求服务节点
 - 内部服务节点通过gRPC方式提供接口
 - 网关把收到的客户端消息转换为gRPC请求转发到相应的内部节点，然后再把收到的gRPC响应结果返回给客户端
 
@@ -30,7 +31,7 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 所有的客户端请求一律使用`nodehub.Request`类型，服务器端返回的消息类型一律使用`nodehub.Reply`类型。
 
-在采用raw tcp socket方式与网关通讯时，采用了简单的`length + data`的方式实现数据包（0长度的包为心跳包）。
+在采用raw tcp socket/quic方式与网关通讯时，采用了简单的`length + data`的方式实现数据包（0长度的包为心跳包）。
 
 [client.proto](./api/protobuf/nodehub/client.proto)文件内包含了客户端上下行消息的protobuf定义。
 
