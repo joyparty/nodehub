@@ -94,8 +94,13 @@ func (qs *quicServer) Shutdown(_ context.Context) error {
 	return qs.listener.Close()
 }
 
-func (qs *quicServer) newSession(ctx context.Context, conn quic.Connection) (Session, error) {
-	sess := newQuicSession(conn)
+func (qs *quicServer) newSession(ctx context.Context, conn quic.Connection) (sess Session, err error) {
+	sess = newQuicSession(conn)
+	defer func() {
+		if err != nil {
+			_ = sess.Close()
+		}
+	}()
 
 	userID, md, ok := qs.authorizer(ctx, sess)
 	if !ok {

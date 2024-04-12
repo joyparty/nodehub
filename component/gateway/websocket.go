@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -98,14 +97,20 @@ func (ws *wsServer) Shutdown(ctx context.Context) error {
 	return ws.server.Shutdown(ctx)
 }
 
-func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
+func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (sess Session, err error) {
 	wsConn, err := Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return nil, fmt.Errorf("upgrade websocket, %w", err)
 	}
 	wsConn.SetReadLimit(int64(MaxMessageSize))
 
-	sess := newWsSession(wsConn)
+	sess = newWsSession(wsConn)
+	defer func() {
+		if err != nil {
+			_ = sess.Close()
+		}
+	}()
+
 	userID, md, ok := ws.authorizer(r.Context(), sess)
 	if !ok {
 		return nil, errors.New("deny by authorize")
@@ -136,8 +141,8 @@ type wsSession struct {
 	// 最后一次读写时间
 	lastRWTime gokit.ValueOf[time.Time]
 
-	done   chan struct{}
-	closed *atomic.Bool
+	closeOnce sync.Once
+	done      chan struct{}
 }
 
 func newWsSession(conn *websocket.Conn) *wsSession {
@@ -147,7 +152,6 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 		sendC:      make(chan wsPayload, 3), // 为什么是三？因为事不过三
 		done:       make(chan struct{}),
 		lastRWTime: gokit.NewValueOf[time.Time](),
-		closed:     &atomic.Bool{},
 	}
 
 	ws.lastRWTime.Store(time.Now())
@@ -289,10 +293,10 @@ func (ws *wsSession) RemoteAddr() string {
 }
 
 func (ws *wsSession) Close() error {
-	if ws.closed.CompareAndSwap(false, true) {
+	ws.closeOnce.Do(func() {
 		close(ws.done)
-		return ws.conn.Close()
-	}
+		_ = ws.conn.Close()
+	})
 	return nil
 }
 
