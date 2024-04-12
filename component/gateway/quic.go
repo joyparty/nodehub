@@ -16,7 +16,6 @@ import (
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
-	"github.com/panjf2000/ants/v2"
 	"github.com/quic-go/quic-go"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -32,16 +31,14 @@ type quicServer struct {
 	tlsConfig  *tls.Config
 	quicConfig *quic.Config
 	listener   *quic.Listener
-	authorizer Authorizer
 }
 
 // NewQUICServer 构造函数
-func NewQUICServer(listenAddr string, authorizer Authorizer, tlsConfig *tls.Config, quicConfig *quic.Config) Transporter {
+func NewQUICServer(listenAddr string, tlsConfig *tls.Config, quicConfig *quic.Config) Transporter {
 	return &quicServer{
 		listenAddr: listenAddr,
 		tlsConfig:  tlsConfig,
 		quicConfig: quicConfig,
-		authorizer: authorizer,
 	}
 }
 
@@ -67,23 +64,7 @@ func (qs *quicServer) Serve(ctx context.Context) (chan Session, error) {
 				return
 			}
 
-			if err := ants.Submit(func() {
-				sess, err := qs.newSession(ctx, conn)
-				if err != nil {
-					logger.Error("initialize quic session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-
-					if errors.Is(err, ErrDenyByAuthorizer) {
-						_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.ConnectionRefused), err.Error())
-					} else {
-						_ = conn.CloseWithError(quic.ApplicationErrorCode(quic.InternalError), "")
-					}
-					return
-				}
-
-				ch <- sess
-			}); err != nil {
-				logger.Error("handle quic connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
-			}
+			ch <- newQuicSession(conn)
 		}
 	}()
 
@@ -92,28 +73,6 @@ func (qs *quicServer) Serve(ctx context.Context) (chan Session, error) {
 
 func (qs *quicServer) Shutdown(_ context.Context) error {
 	return qs.listener.Close()
-}
-
-func (qs *quicServer) newSession(ctx context.Context, conn quic.Connection) (sess Session, err error) {
-	sess = newQuicSession(conn)
-	defer func() {
-		if err != nil {
-			_ = sess.Close()
-		}
-	}()
-
-	userID, md, ok := qs.authorizer(ctx, sess)
-	if !ok {
-		return nil, ErrDenyByAuthorizer
-	} else if userID == "" {
-		return nil, fmt.Errorf("user id is empty")
-	} else if md == nil {
-		md = metadata.MD{}
-	}
-
-	sess.SetID(userID)
-	sess.SetMetadata(md)
-	return sess, nil
 }
 
 type quicSession struct {

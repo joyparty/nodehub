@@ -68,17 +68,13 @@ func init() {
 }
 
 func main() {
-	auth := func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
-		return ulid.Make().String(), metadata.MD{}, true
-	}
-
 	var transporter gateway.Transporter
 	if useTCP {
-		transporter = gateway.NewTCPServer(proxyListen, auth)
+		transporter = gateway.NewTCPServer(proxyListen)
 	} else if useQUIC {
-		transporter = gateway.NewQUICServer(proxyListen, auth, generateTLSConfig(), nil)
+		transporter = gateway.NewQUICServer(proxyListen, generateTLSConfig(), nil)
 	} else {
-		transporter = gateway.NewWSServer(proxyListen, auth)
+		transporter = gateway.NewWSServer(proxyListen)
 	}
 
 	evBus, muBus := newNatsBus()
@@ -88,6 +84,9 @@ func main() {
 			gateway.WithTransporter(transporter),
 			gateway.WithEventBus(evBus),
 			gateway.WithMulticast(muBus),
+			gateway.WithAuthorizer(func(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+				return ulid.Make().String(), metadata.MD{}, true
+			}),
 		},
 
 		GRPCListen: grpcListen,

@@ -15,7 +15,6 @@ import (
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
-	"github.com/panjf2000/ants/v2"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
@@ -24,14 +23,12 @@ import (
 type tcpServer struct {
 	listenAddr string
 	listener   net.Listener
-	authorizer Authorizer
 }
 
 // NewTCPServer 构造函数
-func NewTCPServer(listenAddr string, authorizer Authorizer) Transporter {
+func NewTCPServer(listenAddr string) Transporter {
 	return &tcpServer{
 		listenAddr: listenAddr,
-		authorizer: authorizer,
 	}
 }
 
@@ -60,18 +57,7 @@ func (ts *tcpServer) Serve(ctx context.Context) (chan Session, error) {
 				continue
 			}
 
-			if err := ants.Submit(func() {
-				sess, err := ts.newSession(ctx, conn)
-				if err != nil {
-					logger.Error("initialize tcp session", "error", err, "remoteAddr", conn.RemoteAddr().String())
-					_ = conn.Close()
-					return
-				}
-
-				ch <- sess
-			}); err != nil {
-				logger.Error("handle tcp connection", "error", err, "remoteAddr", conn.RemoteAddr().String())
-			}
+			ch <- newTCPSession(conn)
 		}
 	}()
 
@@ -82,23 +68,6 @@ func (ts *tcpServer) Serve(ctx context.Context) (chan Session, error) {
 func (ts *tcpServer) Shutdown(ctx context.Context) error {
 	_ = ts.listener.Close()
 	return nil
-}
-
-func (ts *tcpServer) newSession(ctx context.Context, conn net.Conn) (Session, error) {
-	sess := newTCPSession(conn)
-
-	userID, md, ok := ts.authorizer(ctx, sess)
-	if !ok {
-		return nil, ErrDenyByAuthorizer
-	} else if userID == "" {
-		return nil, fmt.Errorf("user id is empty")
-	} else if md == nil {
-		md = metadata.MD{}
-	}
-
-	sess.SetID(userID)
-	sess.SetMetadata(md)
-	return sess, nil
 }
 
 type tcpSession struct {

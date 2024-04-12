@@ -53,30 +53,29 @@ func init() {
 }
 
 func main() {
-	uid := &atomic.Int32{}
-	auth := func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
-		userID = fmt.Sprintf("%d", uid.Add(1))
-		md = metadata.MD{}
-		ok = true
-		return
-	}
-
 	var transporter gateway.Transporter
 	if useTCP {
-		transporter = gateway.NewTCPServer(proxyListen, auth)
+		transporter = gateway.NewTCPServer(proxyListen)
 	} else {
-		transporter = gateway.NewWSServer(proxyListen, auth)
+		transporter = gateway.NewWSServer(proxyListen)
 	}
 
 	// evBus, muBus := newRedisBus()
 	evBus, muBus := newNatsBus()
 
+	uid := &atomic.Int32{}
 	gwConfig := nodehub.GatewayConfig{
 		Options: []gateway.Option{
 			gateway.WithTransporter(transporter),
 			gateway.WithRequestLogger(slog.Default()),
 			gateway.WithEventBus(evBus),
 			gateway.WithMulticast(muBus),
+			gateway.WithAuthorizer(func(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+				userID = fmt.Sprintf("%d", uid.Add(1))
+				md = metadata.MD{}
+				ok = true
+				return
+			}),
 		},
 
 		GRPCListen: grpcListen,

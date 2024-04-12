@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -37,15 +36,13 @@ var (
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type wsServer struct {
 	listenAddr string
-	authorizer Authorizer
 	server     *http.Server
 }
 
 // NewWSServer 构造函数
-func NewWSServer(listenAddr string, authorizer Authorizer) Transporter {
+func NewWSServer(listenAddr string) Transporter {
 	return &wsServer{
 		listenAddr: listenAddr,
-		authorizer: authorizer,
 	}
 }
 
@@ -102,27 +99,9 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (sess Ses
 	if err != nil {
 		return nil, fmt.Errorf("upgrade websocket, %w", err)
 	}
+
 	wsConn.SetReadLimit(int64(MaxMessageSize))
-
-	sess = newWsSession(wsConn)
-	defer func() {
-		if err != nil {
-			_ = sess.Close()
-		}
-	}()
-
-	userID, md, ok := ws.authorizer(r.Context(), sess)
-	if !ok {
-		return nil, errors.New("deny by authorize")
-	} else if userID == "" {
-		return nil, errors.New("empty userID")
-	} else if md == nil {
-		md = metadata.MD{}
-	}
-
-	sess.SetID(userID)
-	sess.SetMetadata(md)
-	return sess, nil
+	return newWsSession(wsConn), nil
 }
 
 type wsPayload struct {

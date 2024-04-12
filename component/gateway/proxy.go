@@ -168,6 +168,7 @@ func (h *sessionHub) removeZombie() {
 type Proxy struct {
 	nodeID        ulid.ULID
 	transporter   Transporter
+	authorizer    Authorizer
 	registry      *cluster.Registry
 	eventBus      *event.Bus
 	multicast     multicast.Subscriber
@@ -212,6 +213,8 @@ func (p *Proxy) validate() error {
 		return errors.New("registry is nil")
 	} else if p.transporter == nil {
 		return errors.New("transporter is nil")
+	} else if p.authorizer == nil {
+		return errors.New("authorizer is nil")
 	} else if p.eventBus == nil {
 		return errors.New("eventBus is nil")
 	} else if p.multicast == nil {
@@ -406,14 +409,23 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
-	if err := p.connectInterceptor(ctx, sess); err != nil {
-		return err
+	userID, md, ok := p.authorizer(ctx, sess)
+	if !ok {
+		return ErrDenyByAuthorizer
+	} else if userID == "" {
+		return errors.New("empty userID")
+	} else if md == nil {
+		md = metadata.MD{}
 	}
 
-	md := sess.MetadataCopy()
+	sess.SetID(userID)
 	md.Set(rpc.MDSessID, sess.ID())
 	md.Set(rpc.MDGateway, p.nodeID.String())
 	sess.SetMetadata(md)
+
+	if err := p.connectInterceptor(ctx, sess); err != nil {
+		return err
+	}
 
 	// 放弃之前断线创造的清理任务
 	if timer, ok := p.cleanJobs.Load(sess.ID()); ok {
@@ -732,6 +744,13 @@ func WithRegistry(registry *cluster.Registry) Option {
 func WithTransporter(transporter Transporter) Option {
 	return func(p *Proxy) {
 		p.transporter = transporter
+	}
+}
+
+// WithAuthorizer 设置身份验证
+func WithAuthorizer(authorizer Authorizer) Option {
+	return func(p *Proxy) {
+		p.authorizer = authorizer
 	}
 }
 
