@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"net/http"
 	"os"
 	"time"
 
@@ -69,30 +68,17 @@ func init() {
 }
 
 func main() {
+	auth := func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+		return ulid.Make().String(), metadata.MD{}, true
+	}
+
 	var transporter gateway.Transporter
 	if useTCP {
-		transporter = gateway.NewTCPServer(
-			proxyListen,
-			func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
-				return ulid.Make().String(), metadata.MD{}, true
-			},
-		)
+		transporter = gateway.NewTCPServer(proxyListen, auth)
 	} else if useQUIC {
-		transporter = gateway.NewQUICServer(
-			proxyListen,
-			func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
-				return ulid.Make().String(), metadata.MD{}, true
-			},
-			generateTLSConfig(),
-			nil,
-		)
+		transporter = gateway.NewQUICServer(proxyListen, auth, generateTLSConfig(), nil)
 	} else {
-		transporter = gateway.NewWSServer(
-			proxyListen,
-			func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-				return ulid.Make().String(), metadata.MD{}, true
-			},
-		)
+		transporter = gateway.NewWSServer(proxyListen, auth)
 	}
 
 	evBus, muBus := newNatsBus()

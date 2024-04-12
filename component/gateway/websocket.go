@@ -38,12 +38,12 @@ var (
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type wsServer struct {
 	listenAddr string
-	authorizer WSAuthorizer
+	authorizer Authorizer
 	server     *http.Server
 }
 
 // NewWSServer 构造函数
-func NewWSServer(listenAddr string, authorizer WSAuthorizer) Transporter {
+func NewWSServer(listenAddr string, authorizer Authorizer) Transporter {
 	return &wsServer{
 		listenAddr: listenAddr,
 		authorizer: authorizer,
@@ -99,7 +99,14 @@ func (ws *wsServer) Shutdown(ctx context.Context) error {
 }
 
 func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session, error) {
-	userID, md, ok := ws.authorizer(w, r)
+	wsConn, err := Upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return nil, fmt.Errorf("upgrade websocket, %w", err)
+	}
+	wsConn.SetReadLimit(int64(MaxMessageSize))
+
+	sess := newWsSession(wsConn)
+	userID, md, ok := ws.authorizer(r.Context(), sess)
 	if !ok {
 		return nil, errors.New("deny by authorize")
 	} else if userID == "" {
@@ -108,27 +115,10 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (Session,
 		md = metadata.MD{}
 	}
 
-	wsConn, err := Upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return nil, fmt.Errorf("upgrade websocket, %w", err)
-	}
-	wsConn.SetReadLimit(int64(MaxMessageSize))
-
-	sess := newWsSession(wsConn)
 	sess.SetID(userID)
 	sess.SetMetadata(md)
-
 	return sess, nil
 }
-
-// WSAuthorizer websocket方式身份验证逻辑
-//
-// 自定义身份验证逻辑，在websocket upgrade之前调用
-// 返回的metadata会在此连接的所有grpc request中携带
-// 返回的userID如果不为空，则会作为会话唯一标识使用，另外也会被自动加入到metadata中
-// 如果返回ok为false，会直接关闭连接
-// 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
-type WSAuthorizer func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool)
 
 type wsPayload struct {
 	messageType int

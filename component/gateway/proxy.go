@@ -54,6 +54,14 @@ var (
 // ErrDenyByAuthorizer 身份验证未通过
 var ErrDenyByAuthorizer = errors.New("deny by authorizer")
 
+// Authorizer 身份认证
+//
+// 返回的metadata会在此连接的所有grpc request中携带
+// 返回的userID如果不为空，则会作为会话唯一标识使用，另外也会被自动加入到metadata中
+// 如果返回ok为false，会直接关闭连接
+// 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
+type Authorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
+
 // Transporter 网关传输层接口
 type Transporter interface {
 	CompleteNodeEntry(entry *cluster.NodeEntry)

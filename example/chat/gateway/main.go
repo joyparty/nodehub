@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"sync/atomic"
 
@@ -54,28 +53,19 @@ func init() {
 }
 
 func main() {
-	var transporter gateway.Transporter
 	uid := &atomic.Int32{}
+	auth := func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+		userID = fmt.Sprintf("%d", uid.Add(1))
+		md = metadata.MD{}
+		ok = true
+		return
+	}
+
+	var transporter gateway.Transporter
 	if useTCP {
-		transporter = gateway.NewTCPServer(
-			proxyListen,
-			func(_ context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
-				userID = fmt.Sprintf("%d", uid.Add(1))
-				md = metadata.MD{}
-				ok = true
-				return
-			},
-		)
+		transporter = gateway.NewTCPServer(proxyListen, auth)
 	} else {
-		transporter = gateway.NewWSServer(
-			proxyListen,
-			func(w http.ResponseWriter, r *http.Request) (userID string, md metadata.MD, ok bool) {
-				userID = fmt.Sprintf("%d", uid.Add(1))
-				md = metadata.MD{}
-				ok = true
-				return
-			},
-		)
+		transporter = gateway.NewWSServer(proxyListen, auth)
 	}
 
 	// evBus, muBus := newRedisBus()

@@ -20,9 +20,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Authorizer tcp授权函数
-type Authorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
-
 // tcpServer tcp网关服务
 type tcpServer struct {
 	listenAddr string
