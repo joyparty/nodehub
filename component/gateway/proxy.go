@@ -155,6 +155,8 @@ func (h *sessionHub) removeZombie() {
 		case <-time.After(10 * time.Second):
 			h.Range(func(s Session) bool {
 				if time.Since(s.LastRWTime()) > DefaultHeartbeatTimeout {
+					logger.Info("remove heartbeat timeout session", "session", s)
+
 					h.Delete(s.ID())
 					_ = s.Close()
 				}
