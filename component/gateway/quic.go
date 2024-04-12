@@ -216,6 +216,9 @@ func (qs *quicSession) Send(reply *nh.Reply) error {
 	return sendReply(reply, func(data []byte) error {
 		_ = s.SetWriteDeadline(time.Now().Add(writeWait))
 		_, err := s.Write(data)
+		if err == nil {
+			qs.lastRWTime.Store(time.Now())
+		}
 		return err
 	})
 }
