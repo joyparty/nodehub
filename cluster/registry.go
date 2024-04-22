@@ -1,10 +1,12 @@
 package cluster
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"path"
+	"time"
 
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/logger"
@@ -71,14 +73,20 @@ func (r *Registry) Put(entry NodeEntry) error {
 		return fmt.Errorf("marshal entry, %w", err)
 	}
 
+	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+	defer cancel()
+
 	key := path.Join(r.keyPrefix, entry.ID.String())
-	_, err = r.client.Put(r.client.Ctx(), key, string(value), clientv3.WithLease(r.leaseID))
+	_, err = r.client.Put(ctx, key, string(value), clientv3.WithLease(r.leaseID))
 	return err
 }
 
 // 向etcd生成一个10秒过期的租约
 func (r *Registry) runKeeper() error {
-	lease, err := r.client.Grant(r.client.Ctx(), 10) // 10 seconds
+	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+	defer cancel()
+
+	lease, err := r.client.Grant(ctx, 10) // 10 seconds
 	if err != nil {
 		return fmt.Errorf("grant lease, %w", err)
 	}
@@ -90,11 +98,12 @@ func (r *Registry) runKeeper() error {
 		if err != nil {
 			logger.Error("keep lease alive", "error", err)
 		} else {
+		Loop:
 			for {
 				select {
-				case _, ok := <-ch:
-					if !ok {
-						return
+				case v := <-ch:
+					if v == nil { // etcd down
+						break Loop
 					}
 				case <-r.client.Ctx().Done():
 					return
@@ -102,6 +111,7 @@ func (r *Registry) runKeeper() error {
 			}
 		}
 
+		logger.Error("lease keeper closed")
 		panic(errors.New("lease keeper closed"))
 	}()
 
