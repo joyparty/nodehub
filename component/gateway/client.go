@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/joyparty/gokit"
+	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/quic-go/quic-go"
 	"google.golang.org/protobuf/proto"
@@ -23,6 +24,7 @@ import (
 
 type client interface {
 	send(service int32, data []byte) error
+	ping() error
 	replyStream() <-chan *nh.Reply
 	Close()
 }
@@ -60,6 +62,10 @@ func (tc *tcpClient) send(service int32, data []byte) error {
 	// tc.conn.SetWriteDeadline(time.Now().Add(writeWait))
 	_, err := tc.conn.Write(buf.Bytes())
 	return err
+}
+
+func (tc *tcpClient) ping() error {
+	return tc.send(0, nil)
 }
 
 func (tc *tcpClient) replyStream() <-chan *nh.Reply {
@@ -162,6 +168,10 @@ func (qc *quicClient) send(service int32, data []byte) error {
 	return err
 }
 
+func (qc *quicClient) ping() error {
+	return qc.send(0, nil)
+}
+
 func (qc *quicClient) replyStream() <-chan *nh.Reply {
 	c := make(chan *nh.Reply)
 
@@ -233,6 +243,10 @@ func newWSClient(url string) (*wsClient, error) {
 func (wc *wsClient) send(service int32, data []byte) error {
 	wc.conn.SetWriteDeadline(time.Now().Add(writeWait))
 	return wc.conn.WriteMessage(websocket.BinaryMessage, data)
+}
+
+func (wc *wsClient) ping() error {
+	return wc.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
 }
 
 func (wc *wsClient) replyStream() <-chan *nh.Reply {
@@ -435,6 +449,17 @@ func (c *Client) newRequest(msg proto.Message, options ...CallOption) (*nh.Reque
 }
 
 func (c *Client) run() {
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			if err := c.ping(); err != nil {
+				logger.Error("ping gateway", "error", err)
+			}
+		}
+	}()
+
 	ch := c.replyStream()
 	for {
 		select {
