@@ -57,7 +57,7 @@ func main() {
 	if useTCP {
 		transporter = gateway.NewTCPServer(proxyListen)
 	} else {
-		transporter = gateway.NewWSServer(proxyListen)
+		transporter = gateway.NewWSServer(proxyListen, "")
 	}
 
 	// evBus, muBus := newRedisBus()

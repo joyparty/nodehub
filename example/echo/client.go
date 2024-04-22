@@ -39,7 +39,7 @@ func main() {
 	} else if useQUIC {
 		endpoint = fmt.Sprintf("quic://%s", serverAddr)
 	} else {
-		endpoint = fmt.Sprintf("ws://%s/grpc", serverAddr)
+		endpoint = fmt.Sprintf("ws://%s/", serverAddr)
 	}
 
 	client := newEchoClient(endpoint)

@@ -41,7 +41,7 @@ func main() {
 	if useTCP {
 		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("tcp://%s", serverAddr)))
 	} else {
-		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("ws://%s/grpc", serverAddr)))
+		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("ws://%s", serverAddr)))
 	}
 
 	client := newChatClient(gwClient)

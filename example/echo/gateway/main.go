@@ -74,7 +74,7 @@ func main() {
 	} else if useQUIC {
 		transporter = gateway.NewQUICServer(proxyListen, generateTLSConfig(), nil)
 	} else {
-		transporter = gateway.NewWSServer(proxyListen)
+		transporter = gateway.NewWSServer(proxyListen, "")
 	}
 
 	evBus, muBus := newNatsBus()
