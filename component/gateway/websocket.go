@@ -36,31 +36,31 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type wsServer struct {
-	entrance *url.URL
-	server   *http.Server
+	url    *url.URL
+	server *http.Server
 }
 
 // NewWSServer 构造函数
-func NewWSServer(listenAddr string, path string) Transporter {
+func NewWSServer(listenAddr string, urlPath string) Transporter {
 	return &wsServer{
-		entrance: &url.URL{
+		url: &url.URL{
 			Scheme: "ws",
 			Host:   listenAddr,
-			Path:   path,
+			Path:   urlPath,
 		},
 	}
 }
 
 // CompleteNodeEntry 补全节点信息
 func (ws *wsServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
-	entry.Entrance = ws.entrance.String()
+	entry.Entrance = ws.url.String()
 }
 
 func (ws *wsServer) Serve(ctx context.Context) (chan Session, error) {
 	ch := make(chan Session)
 
 	router := http.NewServeMux()
-	router.HandleFunc(ws.entrance.RequestURI(), func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(ws.url.RequestURI(), func(w http.ResponseWriter, r *http.Request) {
 		sess, err := ws.newSession(w, r)
 		if err != nil {
 			logger.Error("initialize session", "error", err, "remoteAddr", r.RemoteAddr)
@@ -78,7 +78,7 @@ func (ws *wsServer) Serve(ctx context.Context) (chan Session, error) {
 	})
 
 	ws.server = &http.Server{
-		Addr:    ws.entrance.Host,
+		Addr:    ws.url.Host,
 		Handler: http.HandlerFunc(router.ServeHTTP),
 	}
 
