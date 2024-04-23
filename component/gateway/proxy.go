@@ -331,6 +331,9 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	logger.Info("session connected", logVars...)
 	defer logger.Info("session disconnected", logVars...)
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if err := p.onConnect(ctx, sess); err != nil {
 		logger.Error("on connect", "error", err, "session", sess)
 		_ = sess.Close()
@@ -340,36 +343,12 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	p.sessions.Store(sess)
 	defer p.onDisconnect(ctx, sess)
 
-	reqC := make(chan requestTask)
-	defer close(reqC)
-	go p.runPipeline(ctx, reqC)
+	taskC := make(chan requestTask)
+	defer close(taskC)
+	go p.runTasks(ctx, taskC)
 
 	tracer := newRequestTracer()
 	defer tracer.Release()
-
-	requestHandler := func(ctx context.Context, sess Session, req *nh.Request) {
-		exec, pipeline := p.buildRequest(ctx, tracer, sess, req)
-
-		fn := func() {
-			defer requestPool.Put(req)
-			exec()
-		}
-
-		if pipeline == "" {
-			// 允许无序执行，并发处理
-			ants.Submit(fn)
-		} else {
-			// 需要保证时序性，投递到队列处理
-			select {
-			case <-p.done:
-				return
-			case reqC <- requestTask{
-				Pipeline: pipeline,
-				Request:  fn,
-			}:
-			}
-		}
-	}
 
 	for {
 		select {
@@ -400,7 +379,26 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 				"req", req,
 			)
 		} else if pass {
-			requestHandler(ctx, sess, req)
+			run, pipeline := p.buildRequest(ctx, tracer, sess, req)
+			task := func() {
+				defer requestPool.Put(req)
+				run()
+			}
+
+			if pipeline == "" {
+				// 允许无序执行，并发处理
+				ants.Submit(task)
+			} else {
+				// 需要保证时序性，投递到队列处理
+				select {
+				case <-p.done:
+					return
+				case taskC <- requestTask{
+					Pipeline: pipeline,
+					Task:     task,
+				}:
+				}
+			}
 		}
 	}
 }
@@ -669,12 +667,12 @@ func (p *Proxy) logRequest(
 
 type requestTask struct {
 	Pipeline string
-	Request  func()
+	Task     func()
 }
 
 // 把每个service的请求分发到不同的worker处理
 // 确保对同一个service的请求是顺序处理的
-func (p *Proxy) runPipeline(ctx context.Context, reqC <-chan requestTask) {
+func (p *Proxy) runTasks(ctx context.Context, reqC <-chan requestTask) {
 	type worker struct {
 		C          chan func()
 		ActiveTime time.Time
@@ -721,7 +719,7 @@ func (p *Proxy) runPipeline(ctx context.Context, reqC <-chan requestTask) {
 				}()
 			}
 
-			w.C <- task.Request
+			w.C <- task.Task
 			w.ActiveTime = time.Now()
 		}
 	}
