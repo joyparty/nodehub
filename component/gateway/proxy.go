@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"path"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,17 +37,13 @@ var (
 	// MaxMessageSize 客户端消息最大长度，默认64KB
 	MaxMessageSize = 64 * 1024
 
-	requestPool = &sync.Pool{
-		New: func() any {
-			return &nh.Request{}
-		},
-	}
+	requestPool = gokit.NewPoolOf(func() *nh.Request {
+		return &nh.Request{}
+	})
 
-	replyPool = &sync.Pool{
-		New: func() any {
-			return &nh.Reply{}
-		},
-	}
+	replyPool = gokit.NewPoolOf(func() *nh.Reply {
+		return &nh.Reply{}
+	})
 )
 
 // ErrDenyByAuthorizer 身份验证未通过
@@ -383,7 +378,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		default:
 		}
 
-		req := requestPool.Get().(*nh.Request)
+		req := requestPool.Get()
 		nh.ResetRequest(req)
 
 		if err := sess.Recv(req); err != nil {
@@ -517,7 +512,7 @@ func (p *Proxy) buildRequest(ctx context.Context, recorder *pipelineRecorder, se
 				return fmt.Errorf("unmarshal request data: %w", err)
 			}
 
-			output := replyPool.Get().(*nh.Reply)
+			output := replyPool.Get()
 			nh.ResetReply(output)
 
 			defer func() {

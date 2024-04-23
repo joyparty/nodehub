@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sync"
 
+	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/proto/nh"
 	"google.golang.org/protobuf/proto"
 )
@@ -14,11 +14,9 @@ import (
 const sizeLen = 4
 
 var (
-	bbPool = &sync.Pool{
-		New: func() any {
-			return bytes.NewBuffer(make([]byte, 0, 1024))
-		},
-	}
+	bbPool = gokit.NewPoolOf(func() *bytes.Buffer {
+		return bytes.NewBuffer(make([]byte, 0, 1024))
+	})
 
 	msgPool = &messagePool{
 		pool: make(chan *message, 1024),
@@ -31,7 +29,7 @@ func sendReply(reply *nh.Reply, sender func([]byte) error) error {
 		return fmt.Errorf("marshal reply, %w", err)
 	}
 
-	buf := bbPool.Get().(*bytes.Buffer)
+	buf := bbPool.Get()
 	defer bbPool.Put(buf)
 	buf.Reset()
 
