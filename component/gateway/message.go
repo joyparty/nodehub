@@ -49,7 +49,7 @@ type message struct {
 
 func newMessage() *message {
 	return &message{
-		data: make([]byte, MaxMessageSize),
+		data: make([]byte, 4*1024), // default 4k
 	}
 }
 
@@ -69,6 +69,10 @@ func readMessage(r io.Reader, msg *message) error {
 		return fmt.Errorf("message size exceeds the limit, %d", msg.size)
 	}
 
+	// grow bytes
+	if c, s := cap(msg.data), msg.size; s > c {
+		msg.data = append(msg.data[:c], make([]byte, s-c)...)
+	}
 	if _, err := io.ReadFull(r, msg.data[:msg.size]); err != nil {
 		return fmt.Errorf("read data frame, %w", err)
 	}
