@@ -46,13 +46,10 @@ var (
 	})
 )
 
-// ErrDenyByAuthorizer 身份验证未通过
-var ErrDenyByAuthorizer = errors.New("deny by authorizer")
-
 // Authorizer 身份认证
 //
 // 返回的metadata会在此连接的所有grpc request中携带
-// 返回的userID如果不为空，则会作为会话唯一标识使用，另外也会被自动加入到metadata中
+// 返回的userID会作为会话唯一标识使用，也会被自动加入到metadata中
 // 如果返回ok为false，会直接关闭连接
 // 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
 type Authorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
@@ -339,9 +336,14 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		_ = sess.Close()
 		return
 	}
-
 	p.sessions.Store(sess)
-	defer p.onDisconnect(ctx, sess)
+
+	defer func() {
+		p.onDisconnect(ctx, sess)
+
+		p.sessions.Delete(sess.ID())
+		_ = sess.Close()
+	}()
 
 	taskC := make(chan requestTask)
 	defer close(taskC)
@@ -406,7 +408,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 	userID, md, ok := p.authorizer(ctx, sess)
 	if !ok {
-		return ErrDenyByAuthorizer
+		return errors.New("deny by authorizer")
 	} else if userID == "" {
 		return errors.New("empty userID")
 	} else if md == nil {
@@ -440,9 +442,7 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 }
 
 func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
-	defer sess.Close()
 	p.disconnectInterceptor(ctx, sess)
-	p.sessions.Delete(sess.ID())
 
 	p.eventBus.Publish(ctx, event.UserDisconnected{
 		SessionID: sess.ID(),
