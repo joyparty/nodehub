@@ -336,14 +336,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		_ = sess.Close()
 		return
 	}
-	p.sessions.Store(sess)
-
-	defer func() {
-		p.onDisconnect(ctx, sess)
-
-		p.sessions.Delete(sess.ID())
-		_ = sess.Close()
-	}()
+	defer p.onDisconnect(ctx, sess)
 
 	taskC := make(chan requestTask)
 	defer close(taskC)
@@ -438,13 +431,18 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 	}); err != nil {
 		return fmt.Errorf("publish event, %w", err)
 	}
+
+	p.sessions.Store(sess)
 	return nil
 }
 
 func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
+	defer sess.Close()
 	p.disconnectInterceptor(ctx, sess)
+	p.sessions.Delete(sess.ID())
 
-	p.eventBus.Publish(ctx, event.UserDisconnected{
+	// 即使出错也不中断断开流程
+	_ = p.eventBus.Publish(ctx, event.UserDisconnected{
 		SessionID: sess.ID(),
 		GatewayID: p.nodeID.String(),
 	})
