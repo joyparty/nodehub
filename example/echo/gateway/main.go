@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"net"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/joyparty/gokit"
@@ -25,12 +27,14 @@ import (
 	"github.com/oklog/ulid/v2"
 	"github.com/redis/go-redis/v9"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/metadata"
 )
 
 var (
 	registry    *cluster.Registry
 	proxyListen string
+	reuse       bool
 	grpcListen  string
 	redisAddr   string
 	natsAddr    string
@@ -40,6 +44,7 @@ var (
 
 func init() {
 	flag.StringVar(&proxyListen, "proxy", "127.0.0.1:9000", "proxy listen address")
+	flag.BoolVar(&reuse, "reuse", false, "reuse port")
 	flag.StringVar(&grpcListen, "grpc", "127.0.0.1:10000", "grpc listen address")
 	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
 	flag.StringVar(&natsAddr, "nats", "127.0.0.1:4222", "nats address")
@@ -69,12 +74,22 @@ func init() {
 
 func main() {
 	var transporter gateway.Transporter
+
 	if useTCP {
-		transporter = gateway.NewTCPServer(proxyListen)
+		transporter = gateway.BindTCPServer(
+			gokit.MustReturn(newTCPListener(proxyListen, reuse)),
+		)
 	} else if useQUIC {
-		transporter = gateway.NewQUICServer(proxyListen, generateTLSConfig(), nil)
+		transporter = gateway.BindQUICServer(
+			gokit.MustReturn(newPacketConn(proxyListen, reuse)),
+			generateTLSConfig(),
+			nil,
+		)
 	} else {
-		transporter = gateway.NewWSServer(proxyListen, "")
+		transporter = gateway.BindWSServer(
+			gokit.MustReturn(newTCPListener(proxyListen, reuse)),
+			"",
+		)
 	}
 
 	evBus, muBus := newNatsBus()
@@ -89,7 +104,7 @@ func main() {
 			}),
 		},
 
-		GRPCListen: grpcListen,
+		GRPCListener: gokit.MustReturn(newTCPListener(grpcListen, reuse)),
 	}
 
 	node := nodehub.NewGatewayNode(registry, gwConfig)
@@ -176,4 +191,38 @@ func generateTLSConfig() *tls.Config {
 		Certificates: []tls.Certificate{tlsCert},
 		NextProtos:   []string{"quic-echo-example"},
 	}
+}
+
+func newTCPListener(addr string, reuse bool) (net.Listener, error) {
+	if !reuse {
+		return net.Listen("tcp", addr)
+	}
+
+	lc := &net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR, 1)
+				_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+			})
+		},
+	}
+
+	return lc.Listen(context.Background(), "tcp", addr)
+}
+
+func newPacketConn(addr string, reuse bool) (net.PacketConn, error) {
+	if !reuse {
+		return net.ListenPacket("udp", addr)
+	}
+
+	lc := &net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEADDR, 1)
+				_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+			})
+		},
+	}
+
+	return lc.ListenPacket(context.Background(), "udp", addr)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"sync"
@@ -36,8 +37,9 @@ var (
 //
 // 客户端通过websocket方式连接网关，网关再转发请求到grpc后端服务
 type wsServer struct {
-	url    *url.URL
-	server *http.Server
+	url      *url.URL
+	listener net.Listener
+	server   *http.Server
 }
 
 // NewWSServer 构造函数
@@ -46,6 +48,18 @@ func NewWSServer(listenAddr string, urlPath string) Transporter {
 		url: &url.URL{
 			Scheme: "ws",
 			Host:   listenAddr,
+			Path:   urlPath,
+		},
+	}
+}
+
+// BindWSServer 绑定websocket服务器
+func BindWSServer(listener net.Listener, urlPath string) Transporter {
+	return &wsServer{
+		listener: listener,
+		url: &url.URL{
+			Scheme: "ws",
+			Host:   listener.Addr().String(),
 			Path:   urlPath,
 		},
 	}
@@ -78,14 +92,21 @@ func (ws *wsServer) Serve(ctx context.Context) (chan Session, error) {
 	})
 
 	ws.server = &http.Server{
-		Addr:    ws.url.Host,
 		Handler: http.HandlerFunc(router.ServeHTTP),
 	}
 
 	go func() {
 		defer close(ch)
 
-		if err := ws.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if ws.listener != nil {
+			err = ws.server.Serve(ws.listener)
+		} else {
+			ws.server.Addr = ws.url.Host
+			err = ws.server.ListenAndServe()
+		}
+
+		if err != nil && err != http.ErrServerClosed {
 			logger.Error("start gateway", "error", err)
 			panic(fmt.Errorf("start gateway, %w", err))
 		}

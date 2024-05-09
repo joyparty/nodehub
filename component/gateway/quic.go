@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"slices"
 	"sync"
 	"time"
@@ -28,6 +29,8 @@ var (
 
 type quicServer struct {
 	listenAddr string
+	packetConn net.PacketConn
+
 	tlsConfig  *tls.Config
 	quicConfig *quic.Config
 	listener   *quic.Listener
@@ -42,12 +45,31 @@ func NewQUICServer(listenAddr string, tlsConfig *tls.Config, quicConfig *quic.Co
 	}
 }
 
+// BindQUICServer 绑定QUIC服务器
+func BindQUICServer(conn net.PacketConn, tlsConfig *tls.Config, quicConfig *quic.Config) Transporter {
+	return &quicServer{
+		listenAddr: conn.LocalAddr().String(),
+		packetConn: conn,
+		tlsConfig:  tlsConfig,
+		quicConfig: quicConfig,
+	}
+}
+
 func (qs *quicServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Entrance = fmt.Sprintf("quic://%s", qs.listenAddr)
 }
 
 func (qs *quicServer) Serve(ctx context.Context) (chan Session, error) {
-	l, err := quic.ListenAddr(qs.listenAddr, qs.tlsConfig, qs.quicConfig)
+	var (
+		l   *quic.Listener
+		err error
+	)
+
+	if qs.packetConn != nil {
+		l, err = quic.Listen(qs.packetConn, qs.tlsConfig, qs.quicConfig)
+	} else {
+		l, err = quic.ListenAddr(qs.listenAddr, qs.tlsConfig, qs.quicConfig)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("listen, %w", err)
 	}

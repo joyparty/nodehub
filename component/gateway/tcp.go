@@ -32,24 +32,40 @@ func NewTCPServer(listenAddr string) Transporter {
 	}
 }
 
+// BindTCPServer 绑定TCP服务器
+func BindTCPServer(listener net.Listener) Transporter {
+	return &tcpServer{
+		listenAddr: listener.Addr().String(),
+		listener:   listener,
+	}
+}
+
 // CompleteNodeEntry 补全节点信息
 func (ts *tcpServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
 	entry.Entrance = fmt.Sprintf("tcp://%s", ts.listenAddr)
 }
 
 func (ts *tcpServer) Serve(ctx context.Context) (chan Session, error) {
-	l, err := net.Listen("tcp", ts.listenAddr)
-	if err != nil {
-		return nil, fmt.Errorf("listen, %w", err)
+	if ts.listener == nil {
+		l, err := net.Listen("tcp", ts.listenAddr)
+		if err != nil {
+			return nil, fmt.Errorf("listen, %w", err)
+		}
+		ts.listener = l
 	}
-	ts.listener = l
 
 	ch := make(chan Session)
 	go func() {
 		defer close(ch)
 
 		for {
-			conn, err := l.Accept()
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			conn, err := ts.listener.Accept()
 			if errors.Is(err, net.ErrClosed) {
 				return
 			} else if err != nil {

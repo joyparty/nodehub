@@ -3,6 +3,7 @@ package nodehub
 import (
 	"context"
 	"fmt"
+	"net"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -235,6 +236,7 @@ type GatewayConfig struct {
 	Options []gateway.Option
 
 	GRPCListen       string
+	GRPCListener     net.Listener
 	GRPCServerOption []grpc.ServerOption
 }
 
@@ -249,7 +251,12 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	}
 	node.AddComponent(proxy)
 
-	gs := rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
+	var gs *rpc.GRPCServer
+	if config.GRPCListener == nil {
+		gs = rpc.NewGRPCServer(config.GRPCListen, config.GRPCServerOption...)
+	} else {
+		gs = rpc.BindGRPCServer(config.GRPCListener, config.GRPCServerOption...)
+	}
 	gs.RegisterService(nh.GatewayServiceCode, nh.Gateway_ServiceDesc, proxy.NewGRPCService())
 	node.AddComponent(gs)
 

@@ -23,6 +23,7 @@ const (
 // GRPCServer grpc服务
 type GRPCServer struct {
 	listenAddr string
+	listener   net.Listener
 	server     *grpc.Server
 	services   map[int32]cluster.GRPCServiceDesc
 }
@@ -31,6 +32,16 @@ type GRPCServer struct {
 func NewGRPCServer(listenAddr string, opts ...grpc.ServerOption) *GRPCServer {
 	return &GRPCServer{
 		listenAddr: listenAddr,
+		server:     grpc.NewServer(opts...),
+		services:   make(map[int32]cluster.GRPCServiceDesc),
+	}
+}
+
+// BindGRPCServer 绑定grpc服务器
+func BindGRPCServer(listener net.Listener, opts ...grpc.ServerOption) *GRPCServer {
+	return &GRPCServer{
+		listenAddr: listener.Addr().String(),
+		listener:   listener,
 		server:     grpc.NewServer(opts...),
 		services:   make(map[int32]cluster.GRPCServiceDesc),
 	}
@@ -65,13 +76,16 @@ func (gs *GRPCServer) Name() string {
 
 // Start 启动服务
 func (gs *GRPCServer) Start(ctx context.Context) error {
-	l, err := net.Listen("tcp", gs.listenAddr)
-	if err != nil {
-		return fmt.Errorf("listen tcp, %w", err)
+	if gs.listener == nil {
+		l, err := net.Listen("tcp", gs.listenAddr)
+		if err != nil {
+			return fmt.Errorf("listen tcp, %w", err)
+		}
+		gs.listener = l
 	}
 
 	go func() {
-		if err := gs.server.Serve(l); err != nil {
+		if err := gs.server.Serve(gs.listener); err != nil {
 			logger.Error("start grpc", "error", err)
 
 			panic(fmt.Errorf("start grpc, %w", err))
