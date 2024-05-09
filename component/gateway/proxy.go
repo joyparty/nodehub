@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"path"
 	"sync/atomic"
 	"time"
@@ -260,14 +261,13 @@ func (p *Proxy) Start(ctx context.Context) error {
 }
 
 // Stop 停止服务
-func (p *Proxy) Stop(ctx context.Context) error {
+func (p *Proxy) Stop(ctx context.Context) {
 	close(p.done)
 	p.sessions.Close()
 
-	if err := p.transporter.Shutdown(ctx); err != nil {
-		logger.Error("shutdown transporter", "error", err)
+	if err := p.transporter.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+		logger.Error("shutdown gateway transporter", "error", err)
 	}
-	return nil
 }
 
 // NewGRPCService 网关管理服务

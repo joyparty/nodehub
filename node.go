@@ -24,13 +24,13 @@ type Component interface {
 
 	// Start方法注意不要阻塞程序执行
 	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
+	Stop(ctx context.Context)
 
 	// 如果实现了以下方法，会被自动调用
 	// CompleteNodeEntry(*cluster.NodeEntry)
 	// BeforeStart(ctx context.Context) error
 	// AfterStart(ctx context.Context)
-	// BeforeStop(ctx context.Context) error
+	// BeforeStop(ctx context.Context)
 	// AfterStop(ctx context.Context)
 }
 
@@ -121,9 +121,8 @@ func (n *Node) Serve(ctx context.Context) error {
 		return fmt.Errorf("cannot change node state, %w", err)
 	}
 
-	if err := n.stopAll(ctx); err != nil {
-		return fmt.Errorf("stop all server, %w", err)
-	}
+	n.stopAll(ctx)
+
 	// 服务发现注销
 	n.registry.Close()
 
@@ -155,22 +154,18 @@ func (n *Node) startAll(ctx context.Context) error {
 	return nil
 }
 
-func (n *Node) stopAll(ctx context.Context) error {
+func (n *Node) stopAll(ctx context.Context) {
 	for i := len(n.components) - 1; i >= 0; i-- {
 		c := n.components[i]
+		logger.Info("stop component", "name", c.Name())
 
 		if v, ok := c.(interface {
-			BeforeStop(ctx context.Context) error
+			BeforeStop(ctx context.Context)
 		}); ok {
-			if err := v.BeforeStop(ctx); err != nil {
-				return fmt.Errorf("before stop %s, %w", c.Name(), err)
-			}
+			v.BeforeStop(ctx)
 		}
 
-		if err := c.Stop(ctx); err != nil {
-			return fmt.Errorf("stop %s, %w", c.Name(), err)
-		}
-		logger.Info("stop component", "name", c.Name())
+		c.Stop(ctx)
 
 		if v, ok := c.(interface {
 			AfterStop(ctx context.Context)
@@ -178,8 +173,6 @@ func (n *Node) stopAll(ctx context.Context) error {
 			v.AfterStop(ctx)
 		}
 	}
-
-	return nil
 }
 
 // Shutdown 关闭节点

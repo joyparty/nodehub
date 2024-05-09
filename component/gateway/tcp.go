@@ -82,8 +82,7 @@ func (ts *tcpServer) Serve(ctx context.Context) (chan Session, error) {
 
 // Shutdown 停止服务
 func (ts *tcpServer) Shutdown(ctx context.Context) error {
-	_ = ts.listener.Close()
-	return nil
+	return ts.listener.Close()
 }
 
 type tcpSession struct {

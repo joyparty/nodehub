@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 
@@ -96,9 +97,12 @@ func (gs *GRPCServer) Start(ctx context.Context) error {
 }
 
 // Stop 停止服务
-func (gs *GRPCServer) Stop(ctx context.Context) error {
+func (gs *GRPCServer) Stop(ctx context.Context) {
 	gs.server.GracefulStop()
-	return nil
+
+	if err := gs.listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		logger.Error("close grpc listener", "error", err)
+	}
 }
 
 // CompleteNodeEntry 设置条目中的grpc信息
