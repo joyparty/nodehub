@@ -149,12 +149,21 @@ func (r *Registry) runWatcher() <-chan rxgo.Item {
 		}
 
 		// 处理已有条目
-		resp, err := r.client.Get(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix())
-		if err != nil {
+		if err := gokit.Retry(r.client.Ctx(), 5, time.Second, func() error {
+			ctx, cancel := context.WithTimeout(r.client.Ctx(), time.Second)
+			defer cancel()
+
+			resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
+			if err != nil {
+				return err
+			}
+			for _, kv := range resp.Kvs {
+				updateNodes(mvccpb.PUT, kv.Value)
+			}
+			return nil
+		}); err != nil {
 			logger.Error("get exist entries", "error", err)
-		}
-		for _, kv := range resp.Kvs {
-			updateNodes(mvccpb.PUT, kv.Value)
+			panic(fmt.Errorf("get exist entries, %w", err))
 		}
 
 		// 监听变更
