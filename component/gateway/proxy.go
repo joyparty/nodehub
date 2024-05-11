@@ -566,7 +566,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	if !desc.Stateful {
 		nodeID, err = p.registry.AllocGRPCNode(req.ServiceCode, sess)
 		if err != nil {
-			err = status.Errorf(codes.Unavailable, "pick grpc node, %v", err)
+			err = status.Errorf(codes.Aborted, "pick grpc node, %v", err)
 			return
 		}
 
@@ -599,14 +599,14 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 
 	// 非自动分配策略，没有找到节点就中断请求
 	if desc.Allocation != cluster.AutoAllocate && nodeID.Time() == 0 {
-		err = status.Error(codes.PermissionDenied, "no node allocated")
+		err = status.Error(codes.Aborted, "no node allocated")
 		return
 	}
 
 	// 自动分配策略，根据负载均衡策略选择一个节点发送
 	nodeID, err = p.registry.AllocGRPCNode(req.ServiceCode, sess)
 	if err != nil {
-		err = status.Errorf(codes.Unavailable, "pick grpc node, %v", err)
+		err = status.Errorf(codes.Aborted, "pick grpc node, %v", err)
 		return
 	}
 	defer func() {
@@ -618,7 +618,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 FINISH:
 	conn, err = p.registry.GetGRPCConn(nodeID)
 	if err != nil {
-		err = status.Errorf(codes.Unavailable, "get grpc conn, %v", err)
+		err = status.Errorf(codes.Aborted, "get grpc conn, %v", err)
 	}
 	return
 }
