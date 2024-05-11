@@ -209,7 +209,11 @@ func (ws *wsSession) Recv(req *nh.Request) error {
 
 		messageType, message, err := ws.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsCloseError(err,
+				websocket.CloseGoingAway,
+				websocket.CloseAbnormalClosure,
+				websocket.CloseNormalClosure,
+			) {
 				return io.EOF
 			}
 			return err
