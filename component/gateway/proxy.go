@@ -576,7 +576,12 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	if desc.Allocation == cluster.ClientAllocate {
 		// 每次客户端指定了节点，记录下来，后续使用
 		if v := req.GetNodeId(); v != "" {
-			nodeID, _ = ulid.Parse(v)
+			nodeID, err = ulid.Parse(v)
+			if err != nil {
+				err = status.Errorf(codes.InvalidArgument, "invalid request.NodeId, %s", v)
+				return
+			}
+
 			defer func() {
 				if err == nil {
 					p.stateTable.Store(sess.ID(), req.ServiceCode, nodeID)
