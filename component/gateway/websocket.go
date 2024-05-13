@@ -130,18 +130,13 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (sess Ses
 	return newWsSession(wsConn), nil
 }
 
-type wsPayload struct {
-	messageType int
-	data        []byte
-}
-
 type wsSession struct {
 	id   string
 	conn *websocket.Conn
 	md   metadata.MD
 
 	// 不允许并发写，因此用队列方式排队写
-	sendC chan wsPayload
+	sendC chan []byte
 
 	// 最后一次读写时间
 	lastRWTime gokit.ValueOf[time.Time]
@@ -154,7 +149,7 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 	ws := &wsSession{
 		id:         ulid.Make().String(),
 		conn:       conn,
-		sendC:      make(chan wsPayload, 3), // 为什么是三？因为事不过三
+		sendC:      make(chan []byte, 3), // 为什么是三？因为事不过三
 		done:       make(chan struct{}),
 		lastRWTime: gokit.NewValueOf[time.Time](),
 	}
@@ -239,10 +234,7 @@ func (ws *wsSession) Send(resp *nh.Reply) error {
 	select {
 	case <-ws.done:
 		return io.EOF
-	case ws.sendC <- wsPayload{
-		messageType: websocket.BinaryMessage,
-		data:        data,
-	}:
+	case ws.sendC <- data:
 	}
 	return nil
 }
@@ -259,31 +251,26 @@ func (ws *wsSession) sendLoop() {
 			if time.Since(ws.LastRWTime()) > DefaultHeartbeatDuration {
 				ws.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
 			}
-		case payload := <-ws.sendC:
+		case data := <-ws.sendC:
 			ws.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := ws.conn.WriteMessage(payload.messageType, payload.data); err != nil {
+			if err := ws.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
 				args := []any{
 					"error", err,
 					"session", ws,
 				}
 
-				if payload.messageType == websocket.BinaryMessage {
-					message := &nh.Reply{}
-					if err := proto.Unmarshal(payload.data, message); err == nil {
-						args = append(args,
-							"requestID", message.GetRequestId(),
-							"fromService", message.GetFromService(),
-							"messageType", message.GetMessageType(),
-						)
-					}
+				message := &nh.Reply{}
+				if err := proto.Unmarshal(data, message); err == nil {
+					args = append(args,
+						"requestID", message.GetRequestId(),
+						"fromService", message.GetFromService(),
+						"messageType", message.GetMessageType(),
+					)
 				}
 
 				logger.Error("send message", args...)
 			} else {
-				// 只有发送二进制消息才更新活跃时间，发送Ping消息不更新
-				if payload.messageType == websocket.BinaryMessage {
-					ws.lastRWTime.Store(time.Now())
-				}
+				ws.lastRWTime.Store(time.Now())
 			}
 		}
 	}
