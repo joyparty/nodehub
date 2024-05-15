@@ -293,8 +293,8 @@ func (p *Proxy) init(ctx context.Context) {
 	p.eventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
 		if ev.GatewayID != p.nodeID.String() {
 			if sess, ok := p.sessions.Load(ev.UserID); ok {
-				p.sessions.Delete(sess.ID())
-				sess.Close()
+				logger.Warn("close duplicate session, user connect to other gateway", "session", sess)
+				_ = sess.Close()
 			}
 		}
 	})
