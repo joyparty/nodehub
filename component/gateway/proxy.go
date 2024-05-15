@@ -431,8 +431,9 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 	}
 
 	if err := p.eventBus.Publish(ctx, event.UserConnected{
-		SessionID: sess.ID(),
-		GatewayID: p.nodeID.String(),
+		SessionID:  sess.ID(),
+		GatewayID:  p.nodeID.String(),
+		RemoteAddr: sess.RemoteAddr(),
 	}); err != nil {
 		return fmt.Errorf("publish event, %w", err)
 	}
@@ -448,8 +449,9 @@ func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 
 	// 即使出错也不中断断开流程
 	_ = p.eventBus.Publish(ctx, event.UserDisconnected{
-		SessionID: sess.ID(),
-		GatewayID: p.nodeID.String(),
+		SessionID:  sess.ID(),
+		GatewayID:  p.nodeID.String(),
+		RemoteAddr: sess.RemoteAddr(),
 	})
 
 	// 延迟5分钟之后，确认session不存在了，则清除相关数据
