@@ -281,18 +281,18 @@ func (p *Proxy) NewGRPCService() nh.GatewayServer {
 func (p *Proxy) init(ctx context.Context) {
 	// 有状态路由更新
 	p.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
-		if _, ok := p.sessions.Load(ev.SessionID); ok {
-			p.stateTable.Store(ev.SessionID, ev.ServiceCode, ev.NodeID)
+		if _, ok := p.sessions.Load(ev.UserID); ok {
+			p.stateTable.Store(ev.UserID, ev.ServiceCode, ev.NodeID)
 		}
 	})
 	p.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-		p.stateTable.Remove(ev.SessionID, ev.ServiceCode)
+		p.stateTable.Remove(ev.UserID, ev.ServiceCode)
 	})
 
 	// 禁止同一个用户同时连接多个网关
 	p.eventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
 		if ev.GatewayID != p.nodeID.String() {
-			if sess, ok := p.sessions.Load(ev.SessionID); ok {
+			if sess, ok := p.sessions.Load(ev.UserID); ok {
 				p.sessions.Delete(sess.ID())
 				sess.Close()
 			}
@@ -431,7 +431,7 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 	}
 
 	if err := p.eventBus.Publish(ctx, event.UserConnected{
-		SessionID:  sess.ID(),
+		UserID:     sess.ID(),
 		GatewayID:  p.nodeID.String(),
 		RemoteAddr: sess.RemoteAddr(),
 	}); err != nil {
@@ -449,7 +449,7 @@ func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 
 	// 即使出错也不中断断开流程
 	_ = p.eventBus.Publish(ctx, event.UserDisconnected{
-		SessionID:  sess.ID(),
+		UserID:     sess.ID(),
 		GatewayID:  p.nodeID.String(),
 		RemoteAddr: sess.RemoteAddr(),
 	})
