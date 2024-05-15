@@ -415,6 +415,13 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 		return err
 	}
 
+	// 断开同一个用户的其它连接
+	if prev, ok := p.sessions.Load(sess.ID()); ok {
+		logger.Warn("close duplicate session", "session", prev)
+
+		_ = prev.Close()
+	}
+
 	// 放弃之前断线创造的清理任务
 	if timer, ok := p.cleanJobs.Load(sess.ID()); ok {
 		if !timer.Stop() {

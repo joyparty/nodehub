@@ -4,6 +4,7 @@ package logger
 type Logger interface {
 	Debug(msg string, args ...any)
 	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
 	Error(msg string, args ...any)
 }
 
@@ -11,6 +12,7 @@ type nullLogger struct{}
 
 func (nullLogger) Debug(msg string, args ...any) {}
 func (nullLogger) Info(msg string, args ...any)  {}
+func (nullLogger) Warn(msg string, args ...any)  {}
 func (nullLogger) Error(msg string, args ...any) {}
 
 var defaultLogger Logger = nullLogger{}
@@ -28,6 +30,11 @@ func Debug(msg string, args ...any) {
 // Info 打印信息日志
 func Info(msg string, args ...any) {
 	defaultLogger.Info(msg, args...)
+}
+
+// Warn 打印警告日志
+func Warn(msg string, args ...any) {
+	defaultLogger.Warn(msg, args...)
 }
 
 // Error 打印错误日志
