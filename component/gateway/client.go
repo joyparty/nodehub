@@ -263,7 +263,7 @@ func (wc *wsClient) replyStream() <-chan *nh.Reply {
 			}
 
 			messageType, data, err := wc.conn.ReadMessage()
-			if err != nil && !websocket.IsCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if err != nil {
 				panic(fmt.Errorf("read websocket, %w", err))
 			}
 
