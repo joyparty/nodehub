@@ -409,8 +409,6 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 	}
 
 	sess.SetID(userID)
-	md.Set(rpc.MDSessID, sess.ID())
-	md.Set(rpc.MDGateway, p.nodeID.String())
 	sess.SetMetadata(md)
 
 	if err := p.connectInterceptor(ctx, sess); err != nil {
@@ -520,6 +518,8 @@ func (p *Proxy) buildRequest(ctx context.Context, tracer *requestTracer, sess Se
 
 			md := sess.MetadataCopy()
 			md.Set(rpc.MDTransactionID, ulid.Make().String())
+			md.Set(rpc.MDSessID, sess.ID())
+			md.Set(rpc.MDGateway, p.nodeID.String())
 			ctx = metadata.NewOutgoingContext(ctx, md)
 
 			method := path.Join(desc.Path, req.Method)
