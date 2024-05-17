@@ -9,8 +9,6 @@ option go_package = "github.com/joyparty/nodehub/proto/nh";
 message Request {
 	// id应该按照发送顺序自增长
 	// 网关会在每个request对应的reply.request_id内原样返回这个值
-	// 对于存在时序性约束的服务，如果id出现了顺序错乱，网关会丢弃请求并返回错误
-	// 同时如果id重复，网关会使用缓存的reply直接返回，客户端可以利用这个机制进行安全的重试
 	uint32 id = 1;
 
 	// 节点ID

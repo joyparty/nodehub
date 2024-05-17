@@ -27,8 +27,8 @@ type Request struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// 由客户端生成，网关会在response内原样返回
-	// id是会话级别唯一的
+	// id应该按照发送顺序自增长
+	// 网关会在每个request对应的reply.request_id内原样返回这个值
 	Id uint32 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	// 节点ID
 	// 如果有值，网关会把本次请求直接转发到指定的节点
