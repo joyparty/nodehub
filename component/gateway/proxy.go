@@ -366,11 +366,25 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 				"req", req,
 			)
 		} else if pass {
-			doRequest := p.buildRequest(ctx, sess, req)
 			if err := ants.Submit(func() {
 				defer requestPool.Put(req)
 
-				doRequest()
+				if err := p.handleRequest(ctx, sess, req); err != nil {
+					if s, ok := status.FromError(err); ok {
+						if s.Code() == codes.Unknown {
+							// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
+							s = status.New(codes.Unknown, "unknown error")
+						}
+
+						reply, _ := nh.NewReply(int32(nh.Protocol_RPC_ERROR), &nh.RPCError{
+							RequestService: req.GetServiceCode(),
+							RequestMethod:  req.GetMethod(),
+							Status:         s.Proto(),
+						})
+						reply.RequestId = req.GetId()
+						_ = sess.Send(reply)
+					}
+				}
 			}); err != nil {
 				requestPool.Put(req)
 
@@ -378,6 +392,61 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 			}
 		}
 	}
+}
+
+// 以status.Error()构造的错误，都会被下行通知到客户端
+func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) (err error) {
+	var (
+		conn  *grpc.ClientConn
+		start = time.Now()
+	)
+
+	defer func() {
+		p.logRequest(ctx, sess, req, start, conn, err)
+	}()
+
+	desc, ok := p.registry.GetGRPCDesc(req.GetServiceCode())
+	if !ok {
+		return status.Errorf(codes.NotFound, "service %d not found", req.GetServiceCode())
+	} else if !desc.Public {
+		return status.Errorf(codes.PermissionDenied, "request private service")
+	}
+
+	conn, err = p.getUpstream(sess, req, desc)
+	if err != nil {
+		return
+	}
+
+	input, err := newEmptyMessage(req.Data)
+	if err != nil {
+		return fmt.Errorf("unmarshal request data: %w", err)
+	}
+
+	output := replyPool.Get()
+	nh.ResetReply(output)
+	defer replyPool.Put(output)
+
+	md := sess.MetadataCopy()
+	md.Set(rpc.MDTransactionID, ulid.Make().String())
+	md.Set(rpc.MDSessID, sess.ID())
+	md.Set(rpc.MDGateway, p.nodeID.String())
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	method := path.Join(desc.Path, req.Method)
+	if err = conn.Invoke(ctx, method, input, output); err != nil {
+		return fmt.Errorf("invoke service: %w", err)
+	}
+
+	if req.GetNoReply() {
+		return nil
+	}
+
+	output.RequestId = req.GetId()
+	output.FromService = req.GetServiceCode()
+	if err := sess.Send(output); err != nil {
+		logger.Error("send reply", "error", err, "session", sess)
+	}
+	return nil
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
@@ -443,89 +512,6 @@ func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 		}
 		p.cleanJobs.Delete(sess.ID())
 	}))
-}
-
-//revive:disable-next-line:cyclomatic High complexity score but easy to understand
-func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request) func() {
-	// 以status.Error()构造的错误，都会被下行通知到客户端
-	var err error
-	desc, ok := p.registry.GetGRPCDesc(req.ServiceCode)
-	if !ok {
-		err = status.Errorf(codes.NotFound, "service %d not found", req.ServiceCode)
-	} else if !desc.Public {
-		err = status.Errorf(codes.PermissionDenied, "request private service")
-	}
-
-	var (
-		doRequest func() error
-		start     = time.Now()
-	)
-	if err != nil {
-		doRequest = func() error {
-			p.logRequest(ctx, sess, req, start, nil, err)
-			return err
-		}
-	} else {
-		doRequest = func() (err error) {
-			var conn *grpc.ClientConn
-			defer func() {
-				p.logRequest(ctx, sess, req, start, conn, err)
-			}()
-
-			conn, err = p.getUpstream(sess, req, desc)
-			if err != nil {
-				return
-			}
-
-			input, err := newEmptyMessage(req.Data)
-			if err != nil {
-				return fmt.Errorf("unmarshal request data: %w", err)
-			}
-
-			output := replyPool.Get()
-			nh.ResetReply(output)
-			defer replyPool.Put(output)
-
-			md := sess.MetadataCopy()
-			md.Set(rpc.MDTransactionID, ulid.Make().String())
-			md.Set(rpc.MDSessID, sess.ID())
-			md.Set(rpc.MDGateway, p.nodeID.String())
-			ctx = metadata.NewOutgoingContext(ctx, md)
-
-			method := path.Join(desc.Path, req.Method)
-			if err = conn.Invoke(ctx, method, input, output); err != nil {
-				return fmt.Errorf("invoke service: %w", err)
-			}
-
-			if req.GetNoReply() {
-				return nil
-			}
-
-			output.RequestId = req.GetId()
-			output.FromService = req.GetServiceCode()
-			return sess.Send(output)
-		}
-	}
-
-	return func() {
-		if err := doRequest(); err != nil {
-			if s, ok := status.FromError(err); ok {
-				// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
-				if s.Code() == codes.Unknown {
-					s = status.New(codes.Unknown, "unknown error")
-				}
-
-				reply, _ := nh.NewReply(int32(nh.Protocol_RPC_ERROR), &nh.RPCError{
-					RequestService: req.GetServiceCode(),
-					RequestMethod:  req.GetMethod(),
-					Status:         s.Proto(),
-				})
-				reply.RequestId = req.GetId()
-
-				_ = sess.Send(reply)
-			}
-		}
-	}
 }
 
 func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
