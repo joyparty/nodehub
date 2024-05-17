@@ -49,7 +49,6 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 func main() {
@@ -71,7 +70,6 @@ func newGRPCServer(node *nodehub.Node) (*rpc.GRPCServer, error) {
 
 	options := []rpc.Option{
 		rpc.WithPublic(),
-		rpc.WithPipeline("echo"),
 		rpc.WithBalancer(balancer),
 	}
 	if weight > 0 {

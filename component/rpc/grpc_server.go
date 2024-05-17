@@ -141,18 +141,6 @@ func WithAllocation(allocation string) Option {
 	}
 }
 
-// WithPipeline 设置管道名称
-//
-// 设置了管道名称的请求会按照时序性顺序处理，没有设置管道的请求会并发处理
-//
-// 多个服务可以声明同一个管道名称，这样请求会被分配到同一个管道中
-func WithPipeline(pipeline string) Option {
-	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
-		desc.Pipeline = pipeline
-		return desc
-	}
-}
-
 // WithBalancer 设置负载均衡策略
 func WithBalancer(balancer string) Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {

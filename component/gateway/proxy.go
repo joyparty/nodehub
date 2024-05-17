@@ -338,13 +338,6 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	}
 	defer p.onDisconnect(ctx, sess)
 
-	taskC := make(chan requestTask)
-	defer close(taskC)
-	go p.runTasks(ctx, taskC)
-
-	tracer := newRequestTracer()
-	defer tracer.Release()
-
 	for {
 		select {
 		case <-p.done:
@@ -374,25 +367,13 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 				"req", req,
 			)
 		} else if pass {
-			run, pipeline := p.buildRequest(ctx, tracer, sess, req)
-			task := func() {
-				defer requestPool.Put(req)
-				run()
-			}
+			doRequest := p.buildRequest(ctx, sess, req)
 
-			if pipeline == "" {
-				// 允许无序执行，并发处理
-				ants.Submit(task)
-			} else {
-				// 需要保证时序性，投递到队列处理
-				select {
-				case <-p.done:
-					return
-				case taskC <- requestTask{
-					Pipeline: pipeline,
-					Task:     task,
-				}:
-				}
+			if err := ants.Submit(func() {
+				defer requestPool.Put(req)
+				doRequest()
+			}); err != nil {
+				logger.Error("submit request task", "error", err, "req", req)
 			}
 		}
 	}
@@ -464,7 +445,7 @@ func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 }
 
 //revive:disable-next-line:cyclomatic High complexity score but easy to understand
-func (p *Proxy) buildRequest(ctx context.Context, tracer *requestTracer, sess Session, req *nh.Request) (exec func(), pipeline string) {
+func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request) func() {
 	// 以status.Error()构造的错误，都会被下行通知到客户端
 	var err error
 	desc, ok := p.registry.GetGRPCDesc(req.ServiceCode)
@@ -479,31 +460,16 @@ func (p *Proxy) buildRequest(ctx context.Context, tracer *requestTracer, sess Se
 		start     = time.Now()
 	)
 	if err != nil {
-		pipeline = ""
-
 		doRequest = func() error {
 			p.logRequest(ctx, sess, req, start, nil, err)
 			return err
 		}
 	} else {
-		pipeline = desc.Pipeline
-
 		doRequest = func() (err error) {
 			var conn *grpc.ClientConn
 			defer func() {
 				p.logRequest(ctx, sess, req, start, conn, err)
 			}()
-
-			if lastID, lastReply, ok := tracer.LastReplyOf(pipeline); ok {
-				if req.GetId() < lastID {
-					return status.Errorf(codes.Aborted, "request id %d is less than last request id %d", req.GetId(), lastID)
-				} else if req.GetId() == lastID {
-					if req.GetNoReply() {
-						return nil
-					}
-					return sess.Send(lastReply)
-				}
-			}
 
 			conn, err = p.getUpstream(sess, req, desc)
 			if err != nil {
@@ -517,13 +483,7 @@ func (p *Proxy) buildRequest(ctx context.Context, tracer *requestTracer, sess Se
 
 			output := replyPool.Get()
 			nh.ResetReply(output)
-
-			defer func() {
-				if err != nil ||
-					!tracer.Save(pipeline, req, output) {
-					replyPool.Put(output)
-				}
-			}()
+			defer replyPool.Put(output)
 
 			md := sess.MetadataCopy()
 			md.Set(rpc.MDTransactionID, ulid.Make().String())
@@ -546,7 +506,7 @@ func (p *Proxy) buildRequest(ctx context.Context, tracer *requestTracer, sess Se
 		}
 	}
 
-	exec = func() {
+	return func() {
 		if err := doRequest(); err != nil {
 			if s, ok := status.FromError(err); ok {
 				// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
@@ -565,8 +525,6 @@ func (p *Proxy) buildRequest(ctx context.Context, tracer *requestTracer, sess Se
 			}
 		}
 	}
-
-	return
 }
 
 func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServiceDesc) (conn *grpc.ClientConn, err error) {
@@ -677,66 +635,6 @@ func (p *Proxy) logRequest(
 	}
 }
 
-type requestTask struct {
-	Pipeline string
-	Task     func()
-}
-
-// 把每个service的请求分发到不同的worker处理
-// 确保对同一个service的请求是顺序处理的
-func (p *Proxy) runTasks(ctx context.Context, reqC <-chan requestTask) {
-	type worker struct {
-		C          chan func()
-		ActiveTime time.Time
-	}
-
-	workers := map[string]*worker{}
-	defer func() {
-		for _, w := range workers {
-			close(w.C)
-		}
-	}()
-
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// 清除不活跃的worker
-			for key, w := range workers {
-				if time.Since(w.ActiveTime) > 5*time.Minute {
-					close(w.C)
-					delete(workers, key)
-				}
-			}
-		case task, ok := <-reqC:
-			if !ok {
-				return
-			}
-
-			w, ok := workers[task.Pipeline]
-			if !ok {
-				w = &worker{
-					C: make(chan func(), 100),
-				}
-				workers[task.Pipeline] = w
-
-				go func() {
-					for fn := range w.C {
-						fn() // 错误会被打印到请求日志中，这里就不需要再处理
-					}
-				}()
-			}
-
-			w.C <- task.Task
-			w.ActiveTime = time.Now()
-		}
-	}
-}
-
 // Option 网关配置选项
 type Option func(p *Proxy)
 
@@ -830,54 +728,4 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 		err = proto.Unmarshal(data, msg)
 	}
 	return
-}
-
-// 记录每个时序性管道的最后一次请求和响应结果
-// 如果request id小于最后一次的request id，说明顺序存在问题
-// 如果request id等于最后一次的request id，直接返回最后一次的响应结果
-type requestTracer struct {
-	lastID    *gokit.MapOf[string, uint32]
-	lastReply *gokit.MapOf[string, *nh.Reply]
-}
-
-func newRequestTracer() *requestTracer {
-	return &requestTracer{
-		lastID:    gokit.NewMapOf[string, uint32](),
-		lastReply: gokit.NewMapOf[string, *nh.Reply](),
-	}
-}
-
-func (r *requestTracer) Save(pipeline string, req *nh.Request, reply *nh.Reply) bool {
-	// 只有具备时序性的管道请求才会保存
-	// 非时序性请求，可能出现后发先至的情况，在处理过程中request id并不能保证递增，即使记录也没有意义
-	if pipeline == "" {
-		return false
-	}
-
-	r.lastID.Store(pipeline, req.GetId())
-
-	prev, ok := r.lastReply.Swap(pipeline, reply)
-	// 把保存的上一次响应结果放回对象池
-	if ok {
-		replyPool.Put(prev)
-	}
-	return true
-}
-
-func (r *requestTracer) LastReplyOf(pipeline string) (uint32, *nh.Reply, bool) {
-	if id, ok := r.lastID.Load(pipeline); ok {
-		if reply, ok := r.lastReply.Load(pipeline); ok {
-			return id, reply, true
-		}
-	}
-
-	return 0, nil, false
-}
-
-func (r *requestTracer) Release() {
-	r.lastReply.Range(func(key string, value *nh.Reply) bool {
-		replyPool.Put(value)
-		r.lastReply.Delete(key)
-		return true
-	})
 }

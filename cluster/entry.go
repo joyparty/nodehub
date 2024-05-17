@@ -116,11 +116,6 @@ type GRPCServiceDesc struct {
 
 	// Allocation 有状态节点分配方式
 	Allocation string `json:"allocation,omitempty"`
-
-	// Pipeline 声明管道名称的服务，请求会严格按照时序性顺序处理，没有声明管道的请求会被并发处理
-	//
-	// 多个服务可以声明同一个管道名称，这样请求会被分配到同一个管道中
-	Pipeline string `json:"pipeline,omitempty"`
 }
 
 // Validate 验证条目是否合法
