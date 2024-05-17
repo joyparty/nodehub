@@ -343,48 +343,40 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		case <-p.done:
 			return
 		default:
-			p.handleRequest(ctx, sess)
 		}
-	}
-}
 
-func (p *Proxy) handleRequest(ctx context.Context, sess Session) {
-	req := requestPool.Get()
-	nh.ResetRequest(req)
+		req := requestPool.Get()
+		nh.ResetRequest(req)
 
-	var dispatched bool
-	defer func() {
-		if !dispatched {
+		if err := sess.Recv(req); err != nil {
 			requestPool.Put(req)
-		}
-	}()
 
-	if err := sess.Recv(req); err != nil {
-		if !errors.Is(err, io.EOF) {
-			logger.Error("recv request", "error", err, "session", sess)
-		}
-		return
-	}
-
-	if pass, err := p.requestInterceptor(ctx, sess, req); err != nil {
-		logger.Error("request interceptor",
-			"error", err,
-			"session", sess,
-			"req", req,
-		)
-	} else if pass {
-		doRequest := p.buildRequest(ctx, sess, req)
-
-		if err := ants.Submit(func() {
-			defer requestPool.Put(req)
-
-			doRequest()
-		}); err != nil {
-			logger.Error("submit request task", "error", err, "session", sess, "req", req)
+			if !errors.Is(err, io.EOF) {
+				logger.Error("recv request", "error", err, "session", sess)
+			}
 			return
 		}
 
-		dispatched = true
+		if pass, err := p.requestInterceptor(ctx, sess, req); err != nil {
+			requestPool.Put(req)
+
+			logger.Error("request interceptor",
+				"error", err,
+				"session", sess,
+				"req", req,
+			)
+		} else if pass {
+			doRequest := p.buildRequest(ctx, sess, req)
+			if err := ants.Submit(func() {
+				defer requestPool.Put(req)
+
+				doRequest()
+			}); err != nil {
+				requestPool.Put(req)
+
+				logger.Error("submit request task", "error", err, "session", sess, "req", req)
+			}
+		}
 	}
 }
 
