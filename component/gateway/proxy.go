@@ -402,12 +402,13 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 // 以status.Error()构造的错误，都会被下行通知到客户端
 func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) (err error) {
 	var (
-		conn  *grpc.ClientConn
-		start = time.Now()
+		conn   *grpc.ClientConn
+		method string
+		start  = time.Now()
 	)
 
 	defer func() {
-		p.logRequest(ctx, sess, req, start, conn, err)
+		p.logRequest(ctx, sess, req, method, start, conn, err)
 	}()
 
 	desc, ok := p.registry.GetGRPCDesc(req.GetServiceCode())
@@ -437,7 +438,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	md.Set(rpc.MDGateway, p.nodeID.String())
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
-	method := path.Join(desc.Path, req.Method)
+	method = path.Join(desc.Path, req.Method)
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		return fmt.Errorf("invoke service: %w", err)
 	}
@@ -584,6 +585,7 @@ func (p *Proxy) logRequest(
 	ctx context.Context,
 	sess Session,
 	req *nh.Request,
+	method string,
 	start time.Time,
 	upstream *grpc.ClientConn,
 	err error,
@@ -594,12 +596,17 @@ func (p *Proxy) logRequest(
 
 	logValues := []any{
 		"session", sess,
-		"req", req,
+		"method", method,
+		"requestID", req.GetId(),
 		"duration", time.Since(start).String(),
 	}
 
 	if nodeID := req.GetNodeId(); nodeID != "" {
 		logValues = append(logValues, "nodeID", nodeID)
+	}
+
+	if noReply := req.GetNoReply(); noReply {
+		logValues = append(logValues, "noReply", true)
 	}
 
 	if upstream != nil {
