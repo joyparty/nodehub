@@ -70,6 +70,7 @@ type Session interface {
 	MetadataCopy() metadata.MD
 	Recv(*nh.Request) error
 	Send(*nh.Reply) error
+	SendPing() error
 	LocalAddr() string
 	RemoteAddr() string
 	LastRWTime() time.Time
@@ -93,6 +94,7 @@ func newSessionHub() *sessionHub {
 		closed:   &atomic.Bool{},
 	}
 
+	go hub.keepalive()
 	go hub.removeZombie()
 	return hub
 }
@@ -152,6 +154,25 @@ func (h *sessionHub) removeZombie() {
 
 					h.Delete(s.ID())
 					_ = s.Close()
+				}
+				return true
+			})
+		}
+	}
+}
+
+func (h *sessionHub) keepalive() {
+	t := time.NewTicker(DefaultHeartbeatDuration)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-h.done:
+			return
+		case <-t.C:
+			h.Range(func(s Session) bool {
+				if time.Since(s.LastRWTime()) > DefaultHeartbeatDuration {
+					_ = s.SendPing()
 				}
 				return true
 			})

@@ -157,6 +157,17 @@ func (ts *tcpSession) Send(reply *nh.Reply) error {
 	})
 }
 
+func (ts *tcpSession) SendPing() error {
+	return sendBytes(nil, func(data []byte) error {
+		_ = ts.conn.SetWriteDeadline(time.Now().Add(writeWait))
+		_, err := ts.conn.Write(data)
+		if err == nil {
+			ts.lastRWTime.Store(time.Now())
+		}
+		return err
+	})
+}
+
 func (ts *tcpSession) LocalAddr() string {
 	return ts.conn.LocalAddr().String()
 }

@@ -131,16 +131,12 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (sess Ses
 }
 
 type wsSession struct {
-	id   string
-	conn *websocket.Conn
-	md   metadata.MD
-
-	// 不允许并发写，因此用队列方式排队写
-	sendC chan []byte
-
-	// 最后一次读写时间
+	id         string
+	conn       *websocket.Conn
+	md         metadata.MD
 	lastRWTime gokit.ValueOf[time.Time]
 
+	writeMux  sync.Mutex
 	closeOnce sync.Once
 	done      chan struct{}
 }
@@ -149,7 +145,6 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 	ws := &wsSession{
 		id:         ulid.Make().String(),
 		conn:       conn,
-		sendC:      make(chan []byte, 3), // 为什么是三？因为事不过三
 		done:       make(chan struct{}),
 		lastRWTime: gokit.NewValueOf[time.Time](),
 	}
@@ -157,7 +152,6 @@ func newWsSession(conn *websocket.Conn) *wsSession {
 	ws.lastRWTime.Store(time.Now())
 	ws.setPingPongHandler()
 
-	go ws.sendLoop()
 	return ws
 }
 
@@ -231,49 +225,22 @@ func (ws *wsSession) Send(resp *nh.Reply) error {
 		return fmt.Errorf("marshal response, %w", err)
 	}
 
-	select {
-	case <-ws.done:
-		return io.EOF
-	case ws.sendC <- data:
+	ws.writeMux.Lock()
+	defer ws.writeMux.Unlock()
+
+	ws.conn.SetWriteDeadline(time.Now().Add(writeWait))
+	err = ws.conn.WriteMessage(websocket.BinaryMessage, data)
+	if err == nil {
+		ws.lastRWTime.Store(time.Now())
 	}
-	return nil
+	return err
 }
 
-func (ws *wsSession) sendLoop() {
-	ticker := time.NewTicker(DefaultHeartbeatDuration / 2)
-	defer ticker.Stop()
+func (ws *wsSession) SendPing() error {
+	ws.writeMux.Lock()
+	defer ws.writeMux.Unlock()
 
-	for {
-		select {
-		case <-ws.done:
-			return
-		case <-ticker.C:
-			if time.Since(ws.LastRWTime()) > DefaultHeartbeatDuration {
-				ws.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
-			}
-		case data := <-ws.sendC:
-			ws.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := ws.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-				args := []any{
-					"error", err,
-					"session", ws,
-				}
-
-				message := &nh.Reply{}
-				if err := proto.Unmarshal(data, message); err == nil {
-					args = append(args,
-						"requestID", message.GetRequestId(),
-						"fromService", message.GetFromService(),
-						"messageType", message.GetMessageType(),
-					)
-				}
-
-				logger.Error("send message", args...)
-			} else {
-				ws.lastRWTime.Store(time.Now())
-			}
-		}
-	}
+	return ws.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
 }
 
 func (ws *wsSession) LastRWTime() time.Time {

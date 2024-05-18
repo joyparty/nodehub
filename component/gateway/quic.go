@@ -245,6 +245,22 @@ func (qs *quicSession) Send(reply *nh.Reply) error {
 	})
 }
 
+func (qs *quicSession) SendPing() error {
+	s, ok := qs.streams.Pick(0)
+	if !ok {
+		return errors.New("no available stream")
+	}
+
+	return sendBytes(nil, func(data []byte) error {
+		_ = s.SetWriteDeadline(time.Now().Add(writeWait))
+		_, err := s.Write(data)
+		if err == nil {
+			qs.lastRWTime.Store(time.Now())
+		}
+		return err
+	})
+}
+
 func (qs *quicSession) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("id", qs.id),

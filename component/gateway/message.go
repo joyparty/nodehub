@@ -29,16 +29,23 @@ func sendReply(reply *nh.Reply, sender func([]byte) error) error {
 		return fmt.Errorf("marshal reply, %w", err)
 	}
 
+	return sendBytes(data, sender)
+}
+
+func sendBytes(data []byte, sender func([]byte) error) error {
 	buf := bbPool.Get()
 	defer bbPool.Put(buf)
 	buf.Reset()
 
 	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
 		return fmt.Errorf("write size frame, %w", err)
-	} else if err := binary.Write(buf, binary.BigEndian, data); err != nil {
-		return fmt.Errorf("write data frame, %w", err)
 	}
 
+	if len(data) > 0 {
+		if err := binary.Write(buf, binary.BigEndian, data); err != nil {
+			return fmt.Errorf("write data frame, %w", err)
+		}
+	}
 	return sender(buf.Bytes())
 }
 
