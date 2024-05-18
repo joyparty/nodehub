@@ -65,3 +65,12 @@ func (x *Request) LogValue() slog.Value {
 	}
 	return slog.GroupValue(attrs...)
 }
+
+// LogValue implements slog.LogValuer
+func (x *Reply) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("reqID", int(x.GetRequestId())),
+		slog.Int("service", int(x.GetFromService())),
+		slog.Int("msgType", int(x.GetMessageType())),
+	)
+}

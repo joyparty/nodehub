@@ -644,13 +644,9 @@ func (p *Proxy) logRequest(
 func (p *Proxy) sendReply(sess Session, reply *nh.Reply) {
 	if err := sess.Send(reply); err != nil {
 		logger.Error("send reply",
-			slog.Any("error", err),
-			slog.Any("session", sess),
-			slog.Group("reply",
-				slog.Int("requestID", int(reply.GetRequestId())),
-				slog.Int("fromService", int(reply.GetFromService())),
-				slog.Int("messageType", int(reply.GetMessageType())),
-			),
+			"error", err,
+			"session", sess,
+			"reply", reply,
 		)
 	}
 }
