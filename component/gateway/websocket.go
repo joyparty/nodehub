@@ -236,13 +236,6 @@ func (ws *wsSession) Send(resp *nh.Reply) error {
 	return err
 }
 
-func (ws *wsSession) SendPing() error {
-	ws.writeMux.Lock()
-	defer ws.writeMux.Unlock()
-
-	return ws.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
-}
-
 func (ws *wsSession) LastRWTime() time.Time {
 	return ws.lastRWTime.Load()
 }
