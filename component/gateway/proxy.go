@@ -357,39 +357,44 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 			return
 		}
 
-		if pass, err := p.requestInterceptor(ctx, sess, req); err != nil {
+		pass, err := p.requestInterceptor(ctx, sess, req)
+		if err != nil || !pass {
 			requestPool.Put(req)
 
-			logger.Error("request interceptor",
-				"error", err,
-				"session", sess,
-				"req", req,
-			)
-		} else if pass {
-			if err := ants.Submit(func() {
-				defer requestPool.Put(req)
-
-				if err := p.handleRequest(ctx, sess, req); err != nil {
-					if s, ok := status.FromError(err); ok {
-						if s.Code() == codes.Unknown {
-							// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
-							s = status.New(codes.Unknown, "unknown error")
-						}
-
-						reply, _ := nh.NewReply(int32(nh.Protocol_RPC_ERROR), &nh.RPCError{
-							RequestService: req.GetServiceCode(),
-							RequestMethod:  req.GetMethod(),
-							Status:         s.Proto(),
-						})
-						reply.RequestId = req.GetId()
-						p.sendReply(sess, reply)
-					}
-				}
-			}); err != nil {
-				requestPool.Put(req)
-
-				logger.Error("submit request task", "error", err, "session", sess, "req", req)
+			if err != nil {
+				logger.Error("request interceptor",
+					"error", err,
+					"session", sess,
+					"req", req,
+				)
 			}
+
+			continue
+		}
+
+		if err := ants.Submit(func() {
+			defer requestPool.Put(req)
+
+			if err := p.handleRequest(ctx, sess, req); err != nil {
+				if s, ok := status.FromError(err); ok {
+					if s.Code() == codes.Unknown {
+						// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
+						s = status.New(codes.Unknown, "unknown error")
+					}
+
+					reply, _ := nh.NewReply(int32(nh.Protocol_RPC_ERROR), &nh.RPCError{
+						RequestService: req.GetServiceCode(),
+						RequestMethod:  req.GetMethod(),
+						Status:         s.Proto(),
+					})
+					reply.RequestId = req.GetId()
+					p.sendReply(sess, reply)
+				}
+			}
+		}); err != nil {
+			requestPool.Put(req)
+
+			logger.Error("submit request task", "error", err, "session", sess, "req", req)
 		}
 	}
 }
