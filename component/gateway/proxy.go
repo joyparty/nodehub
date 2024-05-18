@@ -327,7 +327,7 @@ func (p *Proxy) init(ctx context.Context) {
 			for _, sessID := range msg.GetReceiver() {
 				if sess, ok := p.sessions.Load(sessID); ok {
 					ants.Submit(func() {
-						sess.Send(msg.Content)
+						p.sendReply(sess, msg.Content)
 					})
 				}
 			}
@@ -403,7 +403,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 							Status:         s.Proto(),
 						})
 						reply.RequestId = req.GetId()
-						_ = sess.Send(reply)
+						p.sendReply(sess, reply)
 					}
 				}
 			}); err != nil {
@@ -464,9 +464,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 
 	output.RequestId = req.GetId()
 	output.FromService = req.GetServiceCode()
-	if err := sess.Send(output); err != nil {
-		logger.Error("send reply", "error", err, "session", sess)
-	}
+	p.sendReply(sess, output)
 	return nil
 }
 
@@ -640,6 +638,20 @@ func (p *Proxy) logRequest(
 		}
 	} else {
 		p.requestLogger.Info("handle request", logValues...)
+	}
+}
+
+func (p *Proxy) sendReply(sess Session, reply *nh.Reply) {
+	if err := sess.Send(reply); err != nil {
+		logger.Error("send reply",
+			slog.Any("error", err),
+			slog.Any("session", sess),
+			slog.Group("reply",
+				slog.Int("requestID", int(reply.GetRequestId())),
+				slog.Int("fromService", int(reply.GetFromService())),
+				slog.Int("messageType", int(reply.GetMessageType())),
+			),
+		)
 	}
 }
 
