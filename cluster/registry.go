@@ -35,6 +35,7 @@ type Registry struct {
 	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
 	observable rxgo.Observable
+	watchMode  bool
 }
 
 // NewRegistry 创建服务注册表
@@ -44,14 +45,17 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		keyPrefix:    "/nodehub/node",
 		grpcResolver: newGRPCResolver(),
 		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
+		watchMode:    false,
 	}
 
 	for _, fn := range opt {
 		fn(r)
 	}
 
-	if err := r.runKeeper(); err != nil {
-		return nil, fmt.Errorf("run keeper, %w", err)
+	if !r.watchMode {
+		if err := r.runKeeper(); err != nil {
+			return nil, fmt.Errorf("run keeper, %w", err)
+		}
 	}
 
 	events := r.runWatcher()
@@ -149,14 +153,19 @@ func (r *Registry) runWatcher() <-chan rxgo.Item {
 		}
 
 		// 处理已有条目
-		resp, err := r.client.Get(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix())
-		if err != nil {
-			logger.Error("get exist entries", "error", err)
-			panic(fmt.Errorf("get exist entries, %w", err))
-		}
-		for _, kv := range resp.Kvs {
-			updateNodes(mvccpb.PUT, kv.Value)
-		}
+		func() {
+			ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+			defer cancel()
+
+			resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
+			if err != nil {
+				logger.Error("get exist entries", "error", err)
+				panic(fmt.Errorf("get exist entries, %w", err))
+			}
+			for _, kv := range resp.Kvs {
+				updateNodes(mvccpb.PUT, kv.Value)
+			}
+		}()
 
 		// 监听变更
 		wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
@@ -281,5 +290,12 @@ func WithKeyPrefix(prefix string) func(*Registry) {
 func WithGRPCDialOptions(options ...grpc.DialOption) func(*Registry) {
 	return func(r *Registry) {
 		r.grpcResolver = newGRPCResolver(options...)
+	}
+}
+
+// WithWatchMode 不使用服务注册，仅仅作为服务发现
+func WithWatchMode() func(*Registry) {
+	return func(r *Registry) {
+		r.watchMode = true
 	}
 }
