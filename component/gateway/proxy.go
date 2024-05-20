@@ -161,7 +161,7 @@ func (h *sessionHub) removeZombie() {
 
 // Proxy 客户端会话运行环境
 type Proxy struct {
-	nodeID        ulid.ULID
+	nodeID        string
 	transporter   Transporter
 	authorizer    Authorizer
 	registry      *cluster.Registry
@@ -182,7 +182,7 @@ type Proxy struct {
 // NewProxy 构造函数
 func NewProxy(nodeID ulid.ULID, opt ...Option) (*Proxy, error) {
 	p := &Proxy{
-		nodeID:     nodeID,
+		nodeID:     nodeID.String(),
 		sessions:   newSessionHub(),
 		stateTable: newStateTable(),
 		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
@@ -291,7 +291,7 @@ func (p *Proxy) init(ctx context.Context) {
 
 	// 禁止同一个用户同时连接多个网关
 	p.eventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
-		if ev.GatewayID != p.nodeID.String() {
+		if ev.GatewayID != p.nodeID {
 			if sess, ok := p.sessions.Load(ev.UserID); ok {
 				logger.Warn("close duplicate session, user connect to other gateway", "session", sess)
 				_ = sess.Close()
@@ -324,7 +324,7 @@ func (p *Proxy) init(ctx context.Context) {
 func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	logVars := []any{
 		"session", sess,
-		"gateway", p.nodeID.String(),
+		"gateway", p.nodeID,
 	}
 
 	logger.Info("session connected", logVars...)
@@ -437,7 +437,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	md := sess.MetadataCopy()
 	md.Set(rpc.MDTransactionID, ulid.Make().String())
 	md.Set(rpc.MDSessID, sess.ID())
-	md.Set(rpc.MDGateway, p.nodeID.String())
+	md.Set(rpc.MDGateway, p.nodeID)
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
 	method = path.Join(desc.Path, req.Method)
@@ -489,7 +489,7 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 
 	if err := p.eventBus.Publish(ctx, event.UserConnected{
 		UserID:     sess.ID(),
-		GatewayID:  p.nodeID.String(),
+		GatewayID:  p.nodeID,
 		RemoteAddr: sess.RemoteAddr(),
 	}); err != nil {
 		return fmt.Errorf("publish event, %w", err)
@@ -507,7 +507,7 @@ func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 	// 即使出错也不中断断开流程
 	_ = p.eventBus.Publish(ctx, event.UserDisconnected{
 		UserID:     sess.ID(),
-		GatewayID:  p.nodeID.String(),
+		GatewayID:  p.nodeID,
 		RemoteAddr: sess.RemoteAddr(),
 	})
 
@@ -597,7 +597,7 @@ func (p *Proxy) logRequest(
 	}
 
 	logValues := []any{
-		"gateway", p.nodeID.String(),
+		"gateway", p.nodeID,
 		"session", sess,
 		"method", method,
 		"requestID", req.GetId(),
