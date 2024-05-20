@@ -597,6 +597,7 @@ func (p *Proxy) logRequest(
 	}
 
 	logValues := []any{
+		"gateway", p.nodeID.String(),
 		"session", sess,
 		"method", method,
 		"requestID", req.GetId(),
