@@ -54,8 +54,14 @@ func (s *gwService) CloseSession(ctx context.Context, req *nh.CloseSessionReques
 }
 
 func (s *gwService) SetServiceRoute(ctx context.Context, req *nh.SetServiceRouteRequest) (*emptypb.Empty, error) {
-	nodeID, _ := ulid.Parse(req.GetNodeId())
-	s.stateTable.Store(req.GetSessionId(), req.GetServiceCode(), nodeID)
+	if _, ok := s.sessionHub.Load(req.GetSessionId()); ok {
+		nodeID, err := ulid.Parse(req.GetNodeId())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid node id, %v", err)
+		}
+
+		s.stateTable.Store(req.GetSessionId(), req.GetServiceCode(), nodeID)
+	}
 	return emptyReply, nil
 }
 
