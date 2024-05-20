@@ -20,12 +20,13 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Gateway_IsSessionExist_FullMethodName     = "/nodehub.Gateway/IsSessionExist"
-	Gateway_SessionCount_FullMethodName       = "/nodehub.Gateway/SessionCount"
-	Gateway_CloseSession_FullMethodName       = "/nodehub.Gateway/CloseSession"
-	Gateway_SetServiceRoute_FullMethodName    = "/nodehub.Gateway/SetServiceRoute"
-	Gateway_RemoveServiceRoute_FullMethodName = "/nodehub.Gateway/RemoveServiceRoute"
-	Gateway_PushMessage_FullMethodName        = "/nodehub.Gateway/PushMessage"
+	Gateway_IsSessionExist_FullMethodName      = "/nodehub.Gateway/IsSessionExist"
+	Gateway_SessionCount_FullMethodName        = "/nodehub.Gateway/SessionCount"
+	Gateway_CloseSession_FullMethodName        = "/nodehub.Gateway/CloseSession"
+	Gateway_SetServiceRoute_FullMethodName     = "/nodehub.Gateway/SetServiceRoute"
+	Gateway_RemoveServiceRoute_FullMethodName  = "/nodehub.Gateway/RemoveServiceRoute"
+	Gateway_ReplaceServiceRoute_FullMethodName = "/nodehub.Gateway/ReplaceServiceRoute"
+	Gateway_PushMessage_FullMethodName         = "/nodehub.Gateway/PushMessage"
 )
 
 // GatewayClient is the client API for Gateway service.
@@ -42,6 +43,8 @@ type GatewayClient interface {
 	SetServiceRoute(ctx context.Context, in *SetServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 删除状态服务路由
 	RemoveServiceRoute(ctx context.Context, in *RemoveServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// 替换状态服务路由节点
+	ReplaceServiceRoute(ctx context.Context, in *ReplaceServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 向指定会话推送消息
 	PushMessage(ctx context.Context, in *PushMessageRequest, opts ...grpc.CallOption) (*PushMessageResponse, error)
 }
@@ -99,6 +102,15 @@ func (c *gatewayClient) RemoveServiceRoute(ctx context.Context, in *RemoveServic
 	return out, nil
 }
 
+func (c *gatewayClient) ReplaceServiceRoute(ctx context.Context, in *ReplaceServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Gateway_ReplaceServiceRoute_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gatewayClient) PushMessage(ctx context.Context, in *PushMessageRequest, opts ...grpc.CallOption) (*PushMessageResponse, error) {
 	out := new(PushMessageResponse)
 	err := c.cc.Invoke(ctx, Gateway_PushMessage_FullMethodName, in, out, opts...)
@@ -122,6 +134,8 @@ type GatewayServer interface {
 	SetServiceRoute(context.Context, *SetServiceRouteRequest) (*emptypb.Empty, error)
 	// 删除状态服务路由
 	RemoveServiceRoute(context.Context, *RemoveServiceRouteRequest) (*emptypb.Empty, error)
+	// 替换状态服务路由节点
+	ReplaceServiceRoute(context.Context, *ReplaceServiceRouteRequest) (*emptypb.Empty, error)
 	// 向指定会话推送消息
 	PushMessage(context.Context, *PushMessageRequest) (*PushMessageResponse, error)
 	mustEmbedUnimplementedGatewayServer()
@@ -145,6 +159,9 @@ func (UnimplementedGatewayServer) SetServiceRoute(context.Context, *SetServiceRo
 }
 func (UnimplementedGatewayServer) RemoveServiceRoute(context.Context, *RemoveServiceRouteRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveServiceRoute not implemented")
+}
+func (UnimplementedGatewayServer) ReplaceServiceRoute(context.Context, *ReplaceServiceRouteRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReplaceServiceRoute not implemented")
 }
 func (UnimplementedGatewayServer) PushMessage(context.Context, *PushMessageRequest) (*PushMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PushMessage not implemented")
@@ -252,6 +269,24 @@ func _Gateway_RemoveServiceRoute_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gateway_ReplaceServiceRoute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReplaceServiceRouteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GatewayServer).ReplaceServiceRoute(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gateway_ReplaceServiceRoute_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GatewayServer).ReplaceServiceRoute(ctx, req.(*ReplaceServiceRouteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Gateway_PushMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PushMessageRequest)
 	if err := dec(in); err != nil {
@@ -296,6 +331,10 @@ var Gateway_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveServiceRoute",
 			Handler:    _Gateway_RemoveServiceRoute_Handler,
+		},
+		{
+			MethodName: "ReplaceServiceRoute",
+			Handler:    _Gateway_ReplaceServiceRoute_Handler,
 		},
 		{
 			MethodName: "PushMessage",

@@ -19,6 +19,8 @@ service Gateway {
 	rpc SetServiceRoute (SetServiceRouteRequest) returns (google.protobuf.Empty) {}
 	// 删除状态服务路由
 	rpc RemoveServiceRoute (RemoveServiceRouteRequest) returns (google.protobuf.Empty) {}
+	// 替换状态服务路由节点
+	rpc ReplaceServiceRoute (ReplaceServiceRouteRequest) returns (google.protobuf.Empty) {}
 	// 向指定会话推送消息
 	rpc PushMessage (PushMessageRequest) returns (PushMessageResponse) {}
 }
@@ -32,6 +34,11 @@ message SetServiceRouteRequest {
 message RemoveServiceRouteRequest {
 	int32 service_code = 1;
 	string session_id = 2;
+}
+
+message ReplaceServiceRouteRequest {
+	string old_node_id = 1;
+	string new_node_id = 2;
 }
 
 message IsSessionExistRequest {

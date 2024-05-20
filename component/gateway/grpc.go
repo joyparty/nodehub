@@ -64,6 +64,21 @@ func (s *gwService) RemoveServiceRoute(ctx context.Context, req *nh.RemoveServic
 	return emptyReply, nil
 }
 
+func (s *gwService) ReplaceServiceRoute(ctx context.Context, req *nh.ReplaceServiceRouteRequest) (*emptypb.Empty, error) {
+	oldID, err := ulid.Parse(req.GetOldNodeId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid node id, %v", err)
+	}
+
+	newID, err := ulid.Parse(req.GetNewNodeId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid node id, %v", err)
+	}
+
+	s.stateTable.ReplaceNode(oldID, newID)
+	return emptyReply, nil
+}
+
 func (s *gwService) PushMessage(ctx context.Context, req *nh.PushMessageRequest) (*nh.PushMessageResponse, error) {
 	sess, ok := s.sessionHub.Load(req.GetSessionId())
 	if !ok {
