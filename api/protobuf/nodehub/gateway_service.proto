@@ -22,7 +22,7 @@ service Gateway {
 	// 替换状态服务路由节点
 	rpc ReplaceServiceRoute (ReplaceServiceRouteRequest) returns (google.protobuf.Empty) {}
 	// 向指定会话推送消息
-	rpc PushMessage (PushMessageRequest) returns (PushMessageResponse) {}
+	rpc SendReply (SendReplyRequest) returns (SendReplyResponse) {}
 }
 
 message SetServiceRouteRequest {
@@ -46,23 +46,21 @@ message IsSessionExistRequest {
 }
 
 message IsSessionExistResponse {
-	string session_id = 1;
-	bool exist = 2;
+	bool exist = 1;
 }
 
 message SessionCountResponse {
 	int32 count = 1;
 }
 
-message PushMessageRequest {
+message SendReplyRequest {
 	string session_id = 1;
 	Reply reply = 2;
 }
 
-message PushMessageResponse {
-	string session_id = 1;
+message SendReplyResponse {
 	// success 为 false 时，表示会话不存在
-	bool success = 2;
+	bool success = 1;
 }
 
 message CloseSessionRequest {
@@ -70,7 +68,6 @@ message CloseSessionRequest {
 }
 
 message CloseSessionResponse {
-	string session_id = 1;
 	// success 为 false 时，表示会话不存在
-	bool success = 2;
+	bool success = 1;
 }

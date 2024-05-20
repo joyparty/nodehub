@@ -26,7 +26,7 @@ const (
 	Gateway_SetServiceRoute_FullMethodName     = "/nodehub.Gateway/SetServiceRoute"
 	Gateway_RemoveServiceRoute_FullMethodName  = "/nodehub.Gateway/RemoveServiceRoute"
 	Gateway_ReplaceServiceRoute_FullMethodName = "/nodehub.Gateway/ReplaceServiceRoute"
-	Gateway_PushMessage_FullMethodName         = "/nodehub.Gateway/PushMessage"
+	Gateway_SendReply_FullMethodName           = "/nodehub.Gateway/SendReply"
 )
 
 // GatewayClient is the client API for Gateway service.
@@ -46,7 +46,7 @@ type GatewayClient interface {
 	// 替换状态服务路由节点
 	ReplaceServiceRoute(ctx context.Context, in *ReplaceServiceRouteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// 向指定会话推送消息
-	PushMessage(ctx context.Context, in *PushMessageRequest, opts ...grpc.CallOption) (*PushMessageResponse, error)
+	SendReply(ctx context.Context, in *SendReplyRequest, opts ...grpc.CallOption) (*SendReplyResponse, error)
 }
 
 type gatewayClient struct {
@@ -111,9 +111,9 @@ func (c *gatewayClient) ReplaceServiceRoute(ctx context.Context, in *ReplaceServ
 	return out, nil
 }
 
-func (c *gatewayClient) PushMessage(ctx context.Context, in *PushMessageRequest, opts ...grpc.CallOption) (*PushMessageResponse, error) {
-	out := new(PushMessageResponse)
-	err := c.cc.Invoke(ctx, Gateway_PushMessage_FullMethodName, in, out, opts...)
+func (c *gatewayClient) SendReply(ctx context.Context, in *SendReplyRequest, opts ...grpc.CallOption) (*SendReplyResponse, error) {
+	out := new(SendReplyResponse)
+	err := c.cc.Invoke(ctx, Gateway_SendReply_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ type GatewayServer interface {
 	// 替换状态服务路由节点
 	ReplaceServiceRoute(context.Context, *ReplaceServiceRouteRequest) (*emptypb.Empty, error)
 	// 向指定会话推送消息
-	PushMessage(context.Context, *PushMessageRequest) (*PushMessageResponse, error)
+	SendReply(context.Context, *SendReplyRequest) (*SendReplyResponse, error)
 	mustEmbedUnimplementedGatewayServer()
 }
 
@@ -163,8 +163,8 @@ func (UnimplementedGatewayServer) RemoveServiceRoute(context.Context, *RemoveSer
 func (UnimplementedGatewayServer) ReplaceServiceRoute(context.Context, *ReplaceServiceRouteRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReplaceServiceRoute not implemented")
 }
-func (UnimplementedGatewayServer) PushMessage(context.Context, *PushMessageRequest) (*PushMessageResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PushMessage not implemented")
+func (UnimplementedGatewayServer) SendReply(context.Context, *SendReplyRequest) (*SendReplyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendReply not implemented")
 }
 func (UnimplementedGatewayServer) mustEmbedUnimplementedGatewayServer() {}
 
@@ -287,20 +287,20 @@ func _Gateway_ReplaceServiceRoute_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gateway_PushMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PushMessageRequest)
+func _Gateway_SendReply_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendReplyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GatewayServer).PushMessage(ctx, in)
+		return srv.(GatewayServer).SendReply(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gateway_PushMessage_FullMethodName,
+		FullMethod: Gateway_SendReply_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GatewayServer).PushMessage(ctx, req.(*PushMessageRequest))
+		return srv.(GatewayServer).SendReply(ctx, req.(*SendReplyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -337,8 +337,8 @@ var Gateway_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gateway_ReplaceServiceRoute_Handler,
 		},
 		{
-			MethodName: "PushMessage",
-			Handler:    _Gateway_PushMessage_Handler,
+			MethodName: "SendReply",
+			Handler:    _Gateway_SendReply_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

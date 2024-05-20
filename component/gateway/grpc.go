@@ -23,8 +23,7 @@ func (s *gwService) IsSessionExist(ctx context.Context, req *nh.IsSessionExistRe
 	_, exist := s.sessionHub.Load(req.GetSessionId())
 
 	return &nh.IsSessionExistResponse{
-		SessionId: req.GetSessionId(),
-		Exist:     exist,
+		Exist: exist,
 	}, nil
 }
 
@@ -43,14 +42,11 @@ func (s *gwService) CloseSession(ctx context.Context, req *nh.CloseSessionReques
 		s.sessionHub.Delete(sess.ID())
 
 		return &nh.CloseSessionResponse{
-			SessionId: req.GetSessionId(),
-			Success:   true,
+			Success: true,
 		}, nil
 	}
 
-	return &nh.CloseSessionResponse{
-		SessionId: req.GetSessionId(),
-	}, nil
+	return &nh.CloseSessionResponse{}, nil
 }
 
 func (s *gwService) SetServiceRoute(ctx context.Context, req *nh.SetServiceRouteRequest) (*emptypb.Empty, error) {
@@ -85,25 +81,22 @@ func (s *gwService) ReplaceServiceRoute(ctx context.Context, req *nh.ReplaceServ
 	return emptyReply, nil
 }
 
-func (s *gwService) PushMessage(ctx context.Context, req *nh.PushMessageRequest) (*nh.PushMessageResponse, error) {
+func (s *gwService) SendReply(ctx context.Context, req *nh.SendReplyRequest) (*nh.SendReplyResponse, error) {
 	sess, ok := s.sessionHub.Load(req.GetSessionId())
 	if !ok {
-		return &nh.PushMessageResponse{
-			SessionId: req.GetSessionId(),
-		}, nil
+		return &nh.SendReplyResponse{}, nil
 	}
 
 	if req.GetReply().GetFromService() == 0 {
-		return nil, status.Error(codes.InvalidArgument, "invalid content, from_service is required")
+		return nil, status.Error(codes.InvalidArgument, "invalid reply, from_service is empty")
 	} else if req.GetReply().GetMessageType() == 0 {
-		return nil, status.Error(codes.InvalidArgument, "invalid content, message_type is required")
+		return nil, status.Error(codes.InvalidArgument, "invalid reply, message_type is empty")
 	}
 
 	if err := sess.Send(req.GetReply()); err != nil {
 		return nil, err
 	}
-	return &nh.PushMessageResponse{
-		SessionId: req.GetSessionId(),
-		Success:   true,
+	return &nh.SendReplyResponse{
+		Success: true,
 	}, nil
 }
