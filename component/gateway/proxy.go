@@ -305,9 +305,11 @@ func (p *Proxy) init(ctx context.Context) {
 		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
 			for _, sessID := range msg.GetReceiver() {
 				if sess, ok := p.sessions.Load(sessID); ok {
-					ants.Submit(func() {
+					if err := ants.Submit(func() {
 						p.sendReply(sess, msg.Content)
-					})
+					}); err != nil {
+						logger.Error("submit multicast task", "error", err, "session", sess, "reply", msg.Content)
+					}
 				}
 			}
 		}
