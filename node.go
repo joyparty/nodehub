@@ -265,3 +265,10 @@ func WithGitVersion(version string) NodeOption {
 		n.entry.GitVersion = version
 	}
 }
+
+// WithState 设置节点初始状态
+func WithState(state cluster.NodeState) NodeOption {
+	return func(n *Node) {
+		n.entry.State = state
+	}
+}
