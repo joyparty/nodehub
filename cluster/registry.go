@@ -35,6 +35,7 @@ type Registry struct {
 	grpcResolver *grpcResolver
 
 	leaseID  clientv3.LeaseID
+	leaseTTL int64
 	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
 	observable rxgo.Observable
@@ -46,6 +47,7 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		client:       client,
 		keyPrefix:    "/nodehub/node",
 		grpcResolver: newGRPCResolver(),
+		leaseTTL:     10,
 		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
 	}
 
@@ -91,7 +93,7 @@ func (r *Registry) initLease(ctx context.Context) error {
 		return nil
 	}
 
-	lease, err := r.client.Grant(ctx, 10) // 10 seconds
+	lease, err := r.client.Grant(ctx, r.leaseTTL)
 	if err != nil {
 		return fmt.Errorf("grant lease, %w", err)
 	}
@@ -293,5 +295,14 @@ func WithKeyPrefix(prefix string) func(*Registry) {
 func WithGRPCDialOptions(options ...grpc.DialOption) func(*Registry) {
 	return func(r *Registry) {
 		r.grpcResolver = newGRPCResolver(options...)
+	}
+}
+
+// WithLeaseTTL 服务心跳超时，超过此时长未检测到服务心跳，即表明服务离线
+//
+// 单位 秒，默认10秒
+func WithLeaseTTL(seconds int) func(*Registry) {
+	return func(r *Registry) {
+		r.leaseTTL = int64(seconds)
 	}
 }
