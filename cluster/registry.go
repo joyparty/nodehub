@@ -97,26 +97,26 @@ func (r *Registry) initLease(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("grant lease, %w", err)
 	}
+
+	ch, err := r.client.KeepAlive(r.client.Ctx(), lease.ID)
+	if err != nil {
+		return fmt.Errorf("keep lease alive, %w", err)
+	}
 	r.leaseID = lease.ID
 
 	// 心跳维持
 	go func() {
-		ch, err := r.client.KeepAlive(r.client.Ctx(), r.leaseID)
-		if err != nil {
-			logger.Error("keep lease alive", "error", err)
-		} else {
-		Loop:
-			for {
-				select {
-				case v, ok := <-ch:
-					if !ok {
-						return
-					} else if v == nil { // etcd down
-						break Loop
-					}
-				case <-r.client.Ctx().Done():
+	Loop:
+		for {
+			select {
+			case v, ok := <-ch:
+				if !ok {
 					return
+				} else if v == nil { // etcd down
+					break Loop
 				}
+			case <-r.client.Ctx().Done():
+				return
 			}
 		}
 
