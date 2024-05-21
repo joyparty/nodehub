@@ -29,11 +29,11 @@ import (
 )
 
 var (
-	// DefaultHeartbeatDuration 心跳消息发送时间间隔，连接在超过这个时间没有收发消息，就会发送心跳消息
-	DefaultHeartbeatDuration = 1 * time.Minute
-
-	// DefaultHeartbeatTimeout 心跳消息超时时间，默认为心跳消息发送时间间隔的3倍
-	DefaultHeartbeatTimeout = 3 * DefaultHeartbeatDuration
+	// KeepaliveInterval 网络连接保持活跃时间，默认1分钟
+	//
+	// 客户端在没有业务消息的情况下，需要定时向服务器端发送心跳消息
+	// 服务器端如果检测到客户端连接超过这个时间还没有任何读写，就会认为此连接已断线，会触发主动断线操作
+	KeepaliveInterval = 1 * time.Minute
 
 	// MaxMessageSize 客户端消息最大长度，默认64KB
 	MaxMessageSize = 64 * 1024
@@ -147,7 +147,7 @@ func (h *sessionHub) removeZombie() {
 			return
 		case <-time.After(10 * time.Second):
 			h.Range(func(s Session) bool {
-				if time.Since(s.LastRWTime()) > DefaultHeartbeatTimeout {
+				if time.Since(s.LastRWTime()) > KeepaliveInterval {
 					logger.Info("remove heartbeat timeout session", "session", s)
 
 					h.Delete(s.ID())
