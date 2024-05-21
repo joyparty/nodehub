@@ -118,7 +118,7 @@ func (n *Node) Serve(ctx context.Context) error {
 	}
 
 	if err := n.ChangeState(cluster.NodeDown); err != nil {
-		return fmt.Errorf("cannot change node state, %w", err)
+		logger.Error("change node state", "error", err)
 	}
 
 	n.stopAll(ctx)
