@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/joyparty/gokit"
@@ -27,6 +28,8 @@ var (
 
 // Registry 服务注册表
 type Registry struct {
+	mutex sync.Mutex
+
 	client       *clientv3.Client
 	keyPrefix    string
 	grpcResolver *grpcResolver
@@ -35,7 +38,6 @@ type Registry struct {
 	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
 
 	observable rxgo.Observable
-	watchMode  bool
 }
 
 // NewRegistry 创建服务注册表
@@ -45,17 +47,10 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		keyPrefix:    "/nodehub/node",
 		grpcResolver: newGRPCResolver(),
 		allNodes:     gokit.NewMapOf[ulid.ULID, NodeEntry](),
-		watchMode:    false,
 	}
 
 	for _, fn := range opt {
 		fn(r)
-	}
-
-	if !r.watchMode {
-		if err := r.runKeeper(); err != nil {
-			return nil, fmt.Errorf("run keeper, %w", err)
-		}
 	}
 
 	events := r.runWatcher()
@@ -66,9 +61,7 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 
 // Put 注册服务
 func (r *Registry) Put(entry NodeEntry) error {
-	if r.leaseID == clientv3.NoLease {
-		return errors.New("lease not granted")
-	} else if err := entry.Validate(); err != nil {
+	if err := entry.Validate(); err != nil {
 		return fmt.Errorf("validate entry, %w", err)
 	}
 
@@ -77,8 +70,15 @@ func (r *Registry) Put(entry NodeEntry) error {
 		return fmt.Errorf("marshal entry, %w", err)
 	}
 
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
 	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
 	defer cancel()
+
+	if err := r.initLease(ctx); err != nil {
+		return fmt.Errorf("run keeper, %w", err)
+	}
 
 	key := path.Join(r.keyPrefix, entry.ID.String())
 	_, err = r.client.Put(ctx, key, string(value), clientv3.WithLease(r.leaseID))
@@ -86,9 +86,10 @@ func (r *Registry) Put(entry NodeEntry) error {
 }
 
 // 向etcd生成一个10秒过期的租约
-func (r *Registry) runKeeper() error {
-	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
-	defer cancel()
+func (r *Registry) initLease(ctx context.Context) error {
+	if r.leaseID != clientv3.NoLease {
+		return nil
+	}
 
 	lease, err := r.client.Grant(ctx, 10) // 10 seconds
 	if err != nil {
@@ -105,8 +106,10 @@ func (r *Registry) runKeeper() error {
 		Loop:
 			for {
 				select {
-				case v := <-ch:
-					if v == nil { // etcd down
+				case v, ok := <-ch:
+					if !ok {
+						return
+					} else if v == nil { // etcd down
 						break Loop
 					}
 				case <-r.client.Ctx().Done():
@@ -290,12 +293,5 @@ func WithKeyPrefix(prefix string) func(*Registry) {
 func WithGRPCDialOptions(options ...grpc.DialOption) func(*Registry) {
 	return func(r *Registry) {
 		r.grpcResolver = newGRPCResolver(options...)
-	}
-}
-
-// WithWatchMode 不使用服务注册，仅仅作为服务发现
-func WithWatchMode() func(*Registry) {
-	return func(r *Registry) {
-		r.watchMode = true
 	}
 }
