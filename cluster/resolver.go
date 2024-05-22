@@ -167,7 +167,7 @@ func (r *grpcResolver) getConn(endpoint string) (*grpc.ClientConn, error) {
 		return conn, nil
 	}
 
-	conn, err := grpc.Dial(endpoint, r.dialOptions...)
+	conn, err := grpc.NewClient(endpoint, r.dialOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("dial grpc, %w", err)
 	}
