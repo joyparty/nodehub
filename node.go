@@ -14,6 +14,7 @@ import (
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/lo"
 	"google.golang.org/grpc"
 )
 
@@ -86,18 +87,11 @@ func (n *Node) AddComponent(c ...Component) {
 func (n *Node) Serve(ctx context.Context) error {
 	// 确保node service一定被注册
 	entry := n.Entry()
-	if entry.GRPC.Endpoint != "" {
-		var found bool
-		for _, desc := range entry.GRPC.Services {
-			if desc.Code == nh.NodeServiceCode {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("node grpc service not register")
-		}
+	if entry.GRPC.Endpoint != "" &&
+		!lo.SomeBy(entry.GRPC.Services, func(desc cluster.GRPCServiceDesc) bool {
+			return desc.Code == nh.NodeServiceCode
+		}) {
+		return fmt.Errorf("node grpc service not register")
 	}
 
 	if err := n.startAll(ctx); err != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/lo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -82,14 +83,12 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 // updateServiceNodes 更新服务可用节点
 func (r *grpcResolver) updateServiceNodes(serviceCode int32) {
 	nodes := []NodeEntry{}
-	r.allNodes.Range(func(_ ulid.ULID, entry NodeEntry) bool {
-		if entry.State == NodeOK {
-			for _, desc := range entry.GRPC.Services {
-				if desc.Code == serviceCode {
-					nodes = append(nodes, entry)
-					break
-				}
-			}
+	r.allNodes.Range(func(_ ulid.ULID, node NodeEntry) bool {
+		if node.State == NodeOK &&
+			lo.SomeBy(node.GRPC.Services, func(desc GRPCServiceDesc) bool {
+				return desc.Code == serviceCode
+			}) {
+			nodes = append(nodes, node)
 		}
 		return true
 	})
