@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -21,14 +22,17 @@ import (
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/component/gateway"
 	"github.com/joyparty/nodehub/event"
+	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/multicast"
+	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/nats-io/nats.go"
 	"github.com/oklog/ulid/v2"
 	"github.com/redis/go-redis/v9"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -99,9 +103,7 @@ func main() {
 			gateway.WithTransporter(transporter),
 			gateway.WithEventBus(evBus),
 			gateway.WithMulticast(muBus),
-			gateway.WithAuthorizer(func(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
-				return ulid.Make().String(), metadata.MD{}, true
-			}),
+			gateway.WithAuthorizer(authorizer),
 		},
 
 		GRPCListener: gokit.MustReturn(newTCPListener(grpcListen, reuse)),
@@ -225,4 +227,57 @@ func newPacketConn(addr string, reuse bool) (net.PacketConn, error) {
 	}
 
 	return lc.ListenPacket(context.Background(), "udp", addr)
+}
+
+// 客户端在连接之后的5秒内需要发送鉴权消息，鉴权失败或超时都会断开连接
+func authorizer(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+	validToken := func(req *nh.Request) error {
+		if req.Method != "Authorize" {
+			return errors.New("invalid method")
+		}
+
+		token := &clusterpb.AuthorizeToken{}
+		if err := proto.Unmarshal(req.GetData(), token); err != nil {
+			return err
+		}
+
+		if token.Token != "0d8b750e-35e8-4f98-b032-f389d401213e" {
+			return errors.New("invalid token")
+		}
+
+		userID = ulid.Make().String()
+		md = metadata.New(nil)
+		return nil
+	}
+
+	errC := make(chan error, 1)
+	go func() {
+		defer close(errC)
+
+		req := &nh.Request{}
+		if err := sess.Recv(req); err != nil {
+			errC <- err
+			return
+		}
+
+		if err := validToken(req); err != nil {
+			errC <- err
+			return
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	select {
+	case err := <-errC:
+		if err != nil {
+			logger.Error("authorize", "error", err, "session", sess)
+		}
+		ok = err == nil
+	case <-ctx.Done():
+		ok = false
+	}
+
+	return
 }

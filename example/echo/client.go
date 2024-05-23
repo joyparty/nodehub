@@ -49,6 +49,13 @@ func main() {
 		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.Message)
 	})
 
+	// 连接后首先发送鉴权消息
+	gokit.Must(
+		client.Client.Call(0, "Authorize", &clusterpb.AuthorizeToken{
+			Token: "0d8b750e-35e8-4f98-b032-f389d401213e",
+		}),
+	)
+
 	for {
 		gokit.Must(
 			client.Call("Send", &echopb.Msg{
