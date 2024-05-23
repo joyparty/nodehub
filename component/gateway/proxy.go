@@ -47,11 +47,12 @@ var (
 	})
 )
 
-// Authorizer 身份认证
+// Initializer 连接初始化，会在客户端与网关建立网络连接后调用，初始化完成之后网关才会开始转发请求
 //
-// 返回的metadata会在此连接的所有grpc request中携带
-// 返回的userID会作为会话唯一标识使用，也会被自动加入到metadata中
-type Authorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, err error)
+// metadata用于网关转发的所有grpc request，
+// userID会作为session唯一标识使用，会被自动加入到metadata中，
+// 如果希望中断初始化且不打印错误日志，return io.EOF错误即可
+type Initializer func(ctx context.Context, sess Session) (userID string, md metadata.MD, err error)
 
 // Transporter 网关传输层接口
 type Transporter interface {
@@ -161,7 +162,7 @@ func (h *sessionHub) removeZombie() {
 type Proxy struct {
 	nodeID        string
 	transporter   Transporter
-	authorizer    Authorizer
+	initializer   Initializer
 	registry      *cluster.Registry
 	eventBus      *event.Bus
 	multicast     multicast.Subscriber
@@ -206,8 +207,8 @@ func (p *Proxy) validate() error {
 		return errors.New("registry is nil")
 	} else if p.transporter == nil {
 		return errors.New("transporter is nil")
-	} else if p.authorizer == nil {
-		return errors.New("authorizer is nil")
+	} else if p.initializer == nil {
+		return errors.New("initializer is nil")
 	} else if p.eventBus == nil {
 		return errors.New("eventBus is nil")
 	} else if p.multicast == nil {
@@ -333,7 +334,9 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	defer cancel()
 
 	if err := p.onConnect(ctx, sess); err != nil {
-		logger.Error("on connect", "error", err, "session", sess)
+		if !errors.Is(err, io.EOF) {
+			logger.Error("initialize connect", "error", err, "session", sess)
+		}
 		_ = sess.Close()
 		return
 	}
@@ -455,9 +458,9 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
-	userID, md, err := p.authorizer(ctx, sess)
+	userID, md, err := p.initializer(ctx, sess)
 	if err != nil {
-		return fmt.Errorf("deny by authorizer, %w", err)
+		return fmt.Errorf("deny by initializer, %w", err)
 	} else if userID == "" {
 		return errors.New("empty userID")
 	} else if md == nil {
@@ -661,10 +664,10 @@ func WithTransporter(transporter Transporter) Option {
 	}
 }
 
-// WithAuthorizer 设置身份验证
-func WithAuthorizer(authorizer Authorizer) Option {
+// WithInitializer 设置连接初始化逻辑
+func WithInitializer(initializer Initializer) Option {
 	return func(p *Proxy) {
-		p.authorizer = authorizer
+		p.initializer = initializer
 	}
 }
 

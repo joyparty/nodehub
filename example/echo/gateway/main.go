@@ -103,7 +103,7 @@ func main() {
 			gateway.WithTransporter(transporter),
 			gateway.WithEventBus(evBus),
 			gateway.WithMulticast(muBus),
-			gateway.WithAuthorizer(authorizer),
+			gateway.WithInitializer(initializer),
 		},
 
 		GRPCListener: gokit.MustReturn(newTCPListener(grpcListen, reuse)),
@@ -230,7 +230,7 @@ func newPacketConn(addr string, reuse bool) (net.PacketConn, error) {
 }
 
 // 客户端在连接之后的5秒内需要发送鉴权消息，鉴权失败或超时都会断开连接
-func authorizer(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, err error) {
+func initializer(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, err error) {
 	validToken := func(req *nh.Request) error {
 		if req.Method != "Authorize" {
 			return errors.New("invalid method")
