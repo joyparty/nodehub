@@ -51,9 +51,7 @@ var (
 //
 // 返回的metadata会在此连接的所有grpc request中携带
 // 返回的userID会作为会话唯一标识使用，也会被自动加入到metadata中
-// 如果返回ok为false，会直接关闭连接
-// 因此如果验证不通过之类的错误，需要在这个函数里面自行处理
-type Authorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, ok bool)
+type Authorizer func(ctx context.Context, sess Session) (userID string, md metadata.MD, err error)
 
 // Transporter 网关传输层接口
 type Transporter interface {
@@ -456,9 +454,9 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
-	userID, md, ok := p.authorizer(ctx, sess)
-	if !ok {
-		return errors.New("deny by authorizer")
+	userID, md, err := p.authorizer(ctx, sess)
+	if err != nil {
+		return fmt.Errorf("deny by authorizer, %w", err)
 	} else if userID == "" {
 		return errors.New("empty userID")
 	} else if md == nil {

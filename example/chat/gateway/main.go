@@ -70,10 +70,9 @@ func main() {
 			gateway.WithRequestLogger(slog.Default()),
 			gateway.WithEventBus(evBus),
 			gateway.WithMulticast(muBus),
-			gateway.WithAuthorizer(func(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, ok bool) {
+			gateway.WithAuthorizer(func(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, err error) {
 				userID = fmt.Sprintf("%d", uid.Add(1))
 				md = metadata.MD{}
-				ok = true
 				return
 			}),
 		},
