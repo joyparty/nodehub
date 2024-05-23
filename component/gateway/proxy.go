@@ -250,6 +250,7 @@ func (p *Proxy) Start(ctx context.Context) error {
 					p.handleSession(ctx, sess)
 				}); err != nil {
 					logger.Error("handle session", "error", err, "session", sess)
+					_ = sess.Close()
 				}
 			}
 		}
