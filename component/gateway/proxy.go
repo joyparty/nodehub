@@ -29,12 +29,6 @@ import (
 )
 
 var (
-	// KeepaliveInterval 网络连接保持活跃时间，默认1分钟
-	//
-	// 客户端在没有业务消息的情况下，需要定时向服务器端发送心跳消息
-	// 服务器端如果检测到客户端连接超过这个时间还没有任何读写，就会认为此连接已断线，会触发主动断线操作
-	KeepaliveInterval = 1 * time.Minute
-
 	// MaxMessageSize 客户端消息最大长度，默认64KB
 	MaxMessageSize = 64 * 1024
 
@@ -80,7 +74,6 @@ type Session interface {
 type sessionHub struct {
 	sessions *gokit.MapOf[string, Session]
 	count    *atomic.Int32
-	done     chan struct{}
 	closed   *atomic.Bool
 }
 
@@ -88,11 +81,9 @@ func newSessionHub() *sessionHub {
 	hub := &sessionHub{
 		sessions: gokit.NewMapOf[string, Session](),
 		count:    &atomic.Int32{},
-		done:     make(chan struct{}),
 		closed:   &atomic.Bool{},
 	}
 
-	go hub.removeZombie()
 	return hub
 }
 
@@ -127,8 +118,6 @@ func (h *sessionHub) Range(f func(s Session) bool) {
 
 func (h *sessionHub) Close() {
 	if h.closed.CompareAndSwap(false, true) {
-		close(h.done)
-
 		h.Range(func(s Session) bool {
 			_ = s.Close()
 
@@ -138,35 +127,16 @@ func (h *sessionHub) Close() {
 	}
 }
 
-// 定时移除心跳超时的客户端
-func (h *sessionHub) removeZombie() {
-	for {
-		select {
-		case <-h.done:
-			return
-		case <-time.After(10 * time.Second):
-			h.Range(func(s Session) bool {
-				if time.Since(s.LastRWTime()) > KeepaliveInterval {
-					logger.Info("remove heartbeat timeout session", "session", s)
-
-					h.Delete(s.ID())
-					_ = s.Close()
-				}
-				return true
-			})
-		}
-	}
-}
-
 // Proxy 客户端会话运行环境
 type Proxy struct {
-	nodeID        string
-	transporter   Transporter
-	initializer   Initializer
-	registry      *cluster.Registry
-	eventBus      *event.Bus
-	multicast     multicast.Subscriber
-	requestLogger logger.Logger
+	nodeID            string
+	transporter       Transporter
+	initializer       Initializer
+	registry          *cluster.Registry
+	eventBus          *event.Bus
+	multicast         multicast.Subscriber
+	requestLogger     logger.Logger
+	keepaliveInterval time.Duration
 
 	sessions   *sessionHub
 	stateTable *stateTable
@@ -181,11 +151,12 @@ type Proxy struct {
 // NewProxy 构造函数
 func NewProxy(nodeID ulid.ULID, opt ...Option) (*Proxy, error) {
 	p := &Proxy{
-		nodeID:     nodeID.String(),
-		sessions:   newSessionHub(),
-		stateTable: newStateTable(),
-		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
-		done:       make(chan struct{}),
+		nodeID:            nodeID.String(),
+		sessions:          newSessionHub(),
+		stateTable:        newStateTable(),
+		cleanJobs:         gokit.NewMapOf[string, *time.Timer](),
+		done:              make(chan struct{}),
+		keepaliveInterval: 1 * time.Minute,
 
 		requestInterceptor:    defaultRequestInterceptor,
 		connectInterceptor:    defaultConnectInterceptor,
@@ -318,6 +289,8 @@ func (p *Proxy) init(ctx context.Context) {
 	p.registry.SubscribeDelete(func(entry cluster.NodeEntry) {
 		p.stateTable.CleanNode(entry.ID)
 	})
+
+	go p.removeZombie()
 }
 
 // Handle 处理客户端连接
@@ -647,6 +620,26 @@ func (p *Proxy) sendReply(sess Session, reply *nh.Reply) {
 	}
 }
 
+// 定时移除心跳超时的连接
+func (p *Proxy) removeZombie() {
+	for {
+		select {
+		case <-p.done:
+			return
+		case <-time.After(10 * time.Second):
+			p.sessions.Range(func(s Session) bool {
+				if time.Since(s.LastRWTime()) > p.keepaliveInterval {
+					logger.Info("remove heartbeat timeout session", "session", s)
+
+					p.sessions.Delete(s.ID())
+					_ = s.Close()
+				}
+				return true
+			})
+		}
+	}
+}
+
 // Option 网关配置选项
 type Option func(p *Proxy)
 
@@ -740,4 +733,14 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 		err = proto.Unmarshal(data, msg)
 	}
 	return
+}
+
+// WithKeepaliveInterval 设置网络连接保持活跃时间，默认1分钟
+//
+// 客户端在没有业务消息的情况下，需要定时向服务器端发送心跳消息
+// 服务器端如果检测到客户端连接超过这个时间还没有任何读写，就会认为此连接已断线，会触发主动断线操作
+func WithKeepaliveInterval(interval time.Duration) Option {
+	return func(p *Proxy) {
+		p.keepaliveInterval = interval.Abs()
+	}
 }
