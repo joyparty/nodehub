@@ -205,6 +205,7 @@ func (qs *quicSession) handleRequest() {
 
 					select {
 					case <-qs.done:
+						return
 					case qs.msgC <- msg:
 					}
 				}
