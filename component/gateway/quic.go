@@ -202,7 +202,11 @@ func (qs *quicSession) handleRequest() {
 						return err
 					}
 					qs.lastRWTime.Store(time.Now())
-					qs.msgC <- msg
+
+					select {
+					case <-qs.done:
+					case qs.msgC <- msg:
+					}
 				}
 			}
 		}()
