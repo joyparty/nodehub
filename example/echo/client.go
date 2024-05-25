@@ -56,6 +56,11 @@ func main() {
 		}),
 	)
 
+	// QUIC连接时，Authorize和后面的Send请求会通过不同的QUIC stream发送
+	// 会出现Send消息先于Authorize处理的情况，导致连接初始化失败
+	// 因此在发送鉴权消息后，必须等待一下，确保Authorize消息一定先被处理
+	time.Sleep(1 * time.Second)
+
 	for {
 		gokit.Must(
 			client.Call("Send", &echopb.Msg{
