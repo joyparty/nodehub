@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -47,21 +46,10 @@ func newTCPClient(addr string) (*tcpClient, error) {
 }
 
 func (tc *tcpClient) send(service int32, data []byte) error {
-	buf := bytes.NewBuffer(nil)
-
-	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
-		return fmt.Errorf("write size frame, %w", err)
-	}
-
-	if len(data) > 0 {
-		if err := binary.Write(buf, binary.BigEndian, data); err != nil {
-			return fmt.Errorf("write data frame, %w", err)
-		}
-	}
-
-	// tc.conn.SetWriteDeadline(time.Now().Add(writeWait))
-	_, err := tc.conn.Write(buf.Bytes())
-	return err
+	return sendBytes(data, func(data []byte) error {
+		_, err := tc.conn.Write(data)
+		return err
+	})
 }
 
 func (tc *tcpClient) ping() error {
@@ -152,20 +140,10 @@ func newQUICClient(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) 
 func (qc *quicClient) send(service int32, data []byte) error {
 	s := qc.streams[int(service)%len(qc.streams)]
 
-	buf := bytes.NewBuffer(nil)
-
-	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
-		return fmt.Errorf("write size frame, %w", err)
-	}
-
-	if len(data) > 0 {
-		if err := binary.Write(buf, binary.BigEndian, data); err != nil {
-			return fmt.Errorf("write data frame, %w", err)
-		}
-	}
-
-	_, err := s.Write(buf.Bytes())
-	return err
+	return sendBytes(data, func(data []byte) error {
+		_, err := s.Write(data)
+		return err
+	})
 }
 
 func (qc *quicClient) ping() error {
