@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "github.com/joyparty/nodehub/example/echo/proto/authpb";
+
+enum Protocol {
+	UNSPECIFIED = 0;
+	AUTHORIZE_ACK = 1;
+}
+
+message AuthorizeToken {
+	string token = 1;
+}
+
+message AuthorizeAck {
+	string user_id = 1;
+}

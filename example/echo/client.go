@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/component/gateway"
+	"github.com/joyparty/nodehub/example/echo/proto/authpb"
 	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/echo/proto/echopb"
+	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
@@ -30,6 +34,12 @@ func init() {
 	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
 	flag.BoolVar(&useQUIC, "quic", false, "use quic")
 	flag.Parse()
+
+	logger.SetLogger(
+		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})),
+	)
 }
 
 func main() {
@@ -49,26 +59,30 @@ func main() {
 		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.Message)
 	})
 
+	// 收到鉴权成功消息后开始正式发送消息
+	client.Client.OnReceive(
+		int32(clusterpb.Services_AUTH),
+		int32(authpb.Protocol_AUTHORIZE_ACK),
+		func(requestID uint32, msg *authpb.AuthorizeAck) {
+			for {
+				gokit.Must(
+					client.Call("Send", &echopb.Msg{
+						Message: "hello world!",
+					}),
+				)
+				time.Sleep(1 * time.Second)
+			}
+		},
+	)
+
 	// 连接后首先发送鉴权消息
 	gokit.Must(
-		client.Client.Call(0, "Authorize", &clusterpb.AuthorizeToken{
+		client.Client.Call(0, "Authorize", &authpb.AuthorizeToken{
 			Token: "0d8b750e-35e8-4f98-b032-f389d401213e",
 		}),
 	)
 
-	// QUIC连接时，Authorize和后面的Send请求会通过不同的QUIC stream发送
-	// 会出现Send消息先于Authorize处理的情况，导致连接初始化失败
-	// 因此在发送鉴权消息后，必须等待一下，确保Authorize消息一定先被处理
-	time.Sleep(1 * time.Second)
-
-	for {
-		gokit.Must(
-			client.Call("Send", &echopb.Msg{
-				Message: "hello world!",
-			}),
-		)
-		time.Sleep(1 * time.Second)
-	}
+	<-context.Background().Done()
 }
 
 type echoClient struct {
@@ -101,8 +115,8 @@ func newEchoClient(endpoint string) *echoClient {
 			requestID,
 			reply.GetRequestService(),
 			reply.GetRequestMethod(),
-			codes.Code(reply.Status.Code),
-			reply.Status.Message,
+			codes.Code(reply.GetStatus().GetCode()),
+			reply.GetStatus().GetMessage(),
 		)
 		os.Exit(1) // revive:disable-line:deep-exit
 	})

@@ -219,8 +219,8 @@ func (ws *wsSession) Recv(req *nh.Request) error {
 	}
 }
 
-func (ws *wsSession) Send(resp *nh.Reply) error {
-	data, err := proto.Marshal(resp)
+func (ws *wsSession) Send(reply *nh.Reply) error {
+	data, err := proto.Marshal(reply)
 	if err != nil {
 		return fmt.Errorf("marshal response, %w", err)
 	}

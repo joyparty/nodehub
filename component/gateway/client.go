@@ -445,10 +445,15 @@ func (c *Client) run() {
 			if !ok {
 				return
 			}
+			logger.Debug("receive reply",
+				"requestID", reply.GetRequestId(),
+				"fromService", reply.GetFromService(),
+				"messageType", reply.GetMessageType(),
+			)
 
 			if handlers, ok := c.handlers.Load(reply.GetFromService()); ok {
 				if handler, ok := handlers.Load(reply.GetMessageType()); ok {
-					handler(reply)
+					go handler(reply)
 					continue
 				}
 			}

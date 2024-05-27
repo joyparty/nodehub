@@ -22,6 +22,7 @@ import (
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/component/gateway"
 	"github.com/joyparty/nodehub/event"
+	"github.com/joyparty/nodehub/example/echo/proto/authpb"
 	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/multicast"
@@ -236,7 +237,7 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 			return errors.New("invalid method")
 		}
 
-		token := &clusterpb.AuthorizeToken{}
+		token := &authpb.AuthorizeToken{}
 		if err := proto.Unmarshal(req.GetData(), token); err != nil {
 			return err
 		}
@@ -273,6 +274,17 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 	case err = <-errC:
 	case <-ctx.Done():
 		err = ctx.Err()
+	}
+
+	if err == nil {
+		reply := gokit.MustReturn(
+			nh.NewReply(int32(authpb.Protocol_AUTHORIZE_ACK), &authpb.AuthorizeAck{
+				UserId: userID,
+			}),
+		)
+		reply.FromService = int32(clusterpb.Services_AUTH)
+
+		gokit.Must(sess.Send(reply))
 	}
 
 	return
