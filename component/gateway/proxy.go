@@ -115,7 +115,7 @@ func (p *Proxy) Start(ctx context.Context) error {
 					return
 				}
 
-				if err := ants.Submit(func() {
+				if err := p.submitTask(func() {
 					p.handleSession(ctx, sess)
 				}); err != nil {
 					logger.Error("handle session", "error", err, "session", sess)
@@ -173,7 +173,7 @@ func (p *Proxy) init(ctx context.Context) {
 		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
 			for _, sessID := range msg.GetReceiver() {
 				if sess, ok := p.sessions.Load(sessID); ok {
-					if err := ants.Submit(func() {
+					if err := p.submitTask(func() {
 						p.sendReply(sess, msg.Content)
 					}); err != nil {
 						logger.Error("submit multicast task", "error", err, "session", sess, "reply", msg.Content)
@@ -247,7 +247,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 			continue
 		}
 
-		if err := ants.Submit(func() {
+		if err := p.submitTask(func() {
 			defer requestPool.Put(req)
 
 			if err := p.handleRequest(ctx, sess, req); err != nil {
@@ -506,6 +506,13 @@ func (p *Proxy) logRequest(
 	} else {
 		p.opts.requestLogger.Info("handle request", logValues...)
 	}
+}
+
+func (p *Proxy) submitTask(task func()) error {
+	if pool := p.opts.goPool; pool != nil {
+		return pool.Submit(task)
+	}
+	return ants.Submit(task)
 }
 
 func (p *Proxy) sendReply(sess Session, reply *nh.Reply) {

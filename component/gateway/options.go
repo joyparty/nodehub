@@ -21,6 +21,7 @@ type Options struct {
 	eventBus          *event.Bus
 	multicast         multicast.Subscriber
 	requestLogger     logger.Logger
+	goPool            GoPool
 	keepaliveInterval time.Duration
 
 	requestInterceptor    RequestInterceptor
@@ -163,5 +164,17 @@ func WithRequestLogger(logger logger.Logger) Option {
 func WithKeepaliveInterval(interval time.Duration) Option {
 	return func(opt *Options) {
 		opt.keepaliveInterval = interval.Abs()
+	}
+}
+
+// GoPool goroutine pool
+type GoPool interface {
+	Submit(task func()) error
+}
+
+// WithGoPool 设置goroutine pool
+func WithGoPool(pool GoPool) Option {
+	return func(opt *Options) {
+		opt.goPool = pool
 	}
 }
