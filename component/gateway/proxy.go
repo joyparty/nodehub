@@ -295,6 +295,19 @@ func (p *Proxy) init(ctx context.Context) {
 
 // Handle 处理客户端连接
 func (p *Proxy) handleSession(ctx context.Context, sess Session) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	logger.Info("handle connection", "addr", sess.RemoteAddr())
+	if err := p.onConnect(ctx, sess); err != nil {
+		if !errors.Is(err, io.EOF) {
+			logger.Error("initialize connect", "error", err, "addr", sess.RemoteAddr())
+		}
+		_ = sess.Close()
+		return
+	}
+	defer p.onDisconnect(ctx, sess)
+
 	logVars := []any{
 		"session", sess,
 		"gateway", p.nodeID,
@@ -302,18 +315,6 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 
 	logger.Info("session connected", logVars...)
 	defer logger.Info("session disconnected", logVars...)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	if err := p.onConnect(ctx, sess); err != nil {
-		if !errors.Is(err, io.EOF) {
-			logger.Error("initialize connect", "error", err, "session", sess)
-		}
-		_ = sess.Close()
-		return
-	}
-	defer p.onDisconnect(ctx, sess)
 
 	for {
 		select {
