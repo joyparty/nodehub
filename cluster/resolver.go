@@ -3,7 +3,6 @@ package cluster
 import (
 	"fmt"
 	"math/rand"
-	"runtime"
 
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
@@ -77,6 +76,10 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 	for _, desc := range node.GRPC.Services {
 		r.updateServiceNodes(desc.Code)
 		r.updateBalancer(desc.Code)
+	}
+
+	if conn, ok := r.conns.LoadAndDelete(node.GRPC.Endpoint); ok {
+		conn.Close()
 	}
 }
 
@@ -171,9 +174,6 @@ func (r *grpcResolver) getConn(endpoint string) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial grpc, %w", err)
 	}
-	runtime.SetFinalizer(conn, func(conn *grpc.ClientConn) {
-		_ = conn.Close()
-	})
 
 	r.conns.Store(endpoint, conn)
 	return conn, nil
