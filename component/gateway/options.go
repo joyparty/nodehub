@@ -23,6 +23,7 @@ type Options struct {
 	requestLogger     logger.Logger
 	goPool            GoPool
 	keepaliveInterval time.Duration
+	requestDeadline   time.Duration
 
 	requestInterceptor    RequestInterceptor
 	connectInterceptor    ConnectInterceptor
@@ -32,6 +33,7 @@ type Options struct {
 func newOptions() *Options {
 	return &Options{
 		keepaliveInterval: 1 * time.Minute,
+		requestDeadline:   5 * time.Second,
 
 		requestInterceptor:    defaultRequestInterceptor,
 		connectInterceptor:    defaultConnectInterceptor,
@@ -176,5 +178,12 @@ type GoPool interface {
 func WithGoPool(pool GoPool) Option {
 	return func(opt *Options) {
 		opt.goPool = pool
+	}
+}
+
+// WithRequestDeadline 设置每个请求的超时时间，默认5秒
+func WithRequestDeadline(deadline time.Duration) Option {
+	return func(opt *Options) {
+		opt.requestDeadline = deadline
 	}
 }

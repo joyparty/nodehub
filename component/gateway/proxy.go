@@ -313,6 +313,9 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	md.Set(rpc.MDGateway, p.nodeID)
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
+	ctx, cancel := context.WithTimeout(ctx, p.opts.requestDeadline)
+	defer cancel()
+
 	method = path.Join(desc.Path, req.Method)
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		return fmt.Errorf("invoke service: %w", err)
