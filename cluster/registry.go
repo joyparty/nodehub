@@ -10,13 +10,14 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/logger"
-	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
 	"github.com/reactivex/rxgo/v2"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/proto/nh"
 )
 
 var (
@@ -55,8 +56,9 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 		fn(r)
 	}
 
-	events := r.runWatcher()
-	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
+	if err := r.runWatcher(); err != nil {
+		return nil, err
+	}
 
 	return r, nil
 }
@@ -128,51 +130,48 @@ func (r *Registry) initLease(ctx context.Context) error {
 }
 
 // 监听服务条目变更
-func (r *Registry) runWatcher() <-chan rxgo.Item {
+func (r *Registry) runWatcher() error {
 	events := make(chan rxgo.Item)
-
-	go func() {
-		defer close(events)
-
-		updateNodes := func(event mvccpb.Event_EventType, value []byte) {
-			var entry NodeEntry
-			if err := json.Unmarshal(value, &entry); err != nil {
-				logger.Error("unmarshal entry", "error", err)
-				return
-			}
-
-			logger.Info("update cluster nodes", "event", event.String(), "entry", entry)
-
-			switch event {
-			case mvccpb.PUT:
-				r.grpcResolver.Update(entry)
-				r.allNodes.Store(entry.ID, entry)
-
-				events <- rxgo.Of(eventUpdateNode{Entry: entry})
-			case mvccpb.DELETE:
-				r.grpcResolver.Remove(entry)
-				r.allNodes.Delete(entry.ID)
-
-				events <- rxgo.Of(eventDeleteNode{Entry: entry})
-			}
+	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
+	updateNodes := func(event mvccpb.Event_EventType, value []byte) {
+		var entry NodeEntry
+		if err := json.Unmarshal(value, &entry); err != nil {
+			logger.Error("unmarshal entry", "error", err)
+			return
 		}
 
-		// 处理已有条目
-		func() {
-			ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
-			defer cancel()
+		logger.Info("update cluster nodes", "event", event.String(), "entry", entry)
 
-			resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
-			if err != nil {
-				logger.Error("get exist entries", "error", err)
-				panic(fmt.Errorf("get exist entries, %w", err))
-			}
-			for _, kv := range resp.Kvs {
-				updateNodes(mvccpb.PUT, kv.Value)
-			}
-		}()
+		switch event {
+		case mvccpb.PUT:
+			r.grpcResolver.Update(entry)
+			r.allNodes.Store(entry.ID, entry)
 
-		// 监听变更
+			events <- rxgo.Of(eventUpdateNode{Entry: entry})
+		case mvccpb.DELETE:
+			r.grpcResolver.Remove(entry)
+			r.allNodes.Delete(entry.ID)
+
+			events <- rxgo.Of(eventDeleteNode{Entry: entry})
+		}
+	}
+	// 处理已有条目
+	func() {
+		ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+		defer cancel()
+
+		resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
+		if err != nil {
+			logger.Error("get exist entries", "error", err)
+			panic(fmt.Errorf("get exist entries, %w", err))
+		}
+		for _, kv := range resp.Kvs {
+			updateNodes(mvccpb.PUT, kv.Value)
+		}
+	}()
+	// 监听变更
+	go func() {
+		defer close(events)
 		wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
 		for {
 			select {
@@ -192,8 +191,7 @@ func (r *Registry) runWatcher() <-chan rxgo.Item {
 			}
 		}
 	}()
-
-	return events
+	return nil
 }
 
 // GetGRPCDesc 获取grpc服务描述
