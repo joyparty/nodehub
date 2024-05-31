@@ -57,7 +57,7 @@ func NewRegistry(client *clientv3.Client, opt ...func(*Registry)) (*Registry, er
 	}
 
 	if err := r.runWatcher(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("run watcher, %w", err)
 	}
 
 	return r, nil
@@ -133,6 +133,7 @@ func (r *Registry) initLease(ctx context.Context) error {
 func (r *Registry) runWatcher() error {
 	events := make(chan rxgo.Item)
 	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
+
 	updateNodes := func(event mvccpb.Event_EventType, value []byte) {
 		var entry NodeEntry
 		if err := json.Unmarshal(value, &entry); err != nil {
@@ -155,23 +156,23 @@ func (r *Registry) runWatcher() error {
 			events <- rxgo.Of(eventDeleteNode{Entry: entry})
 		}
 	}
-	// 处理已有条目
-	func() {
-		ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
-		defer cancel()
 
-		resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
-		if err != nil {
-			logger.Error("get exist entries", "error", err)
-			panic(fmt.Errorf("get exist entries, %w", err))
-		}
-		for _, kv := range resp.Kvs {
-			updateNodes(mvccpb.PUT, kv.Value)
-		}
-	}()
+	// 处理已有条目
+	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+	defer cancel()
+
+	resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return fmt.Errorf("get exist entries, %w", err)
+	}
+	for _, kv := range resp.Kvs {
+		updateNodes(mvccpb.PUT, kv.Value)
+	}
+
 	// 监听变更
 	go func() {
 		defer close(events)
+
 		wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
 		for {
 			select {
@@ -191,6 +192,7 @@ func (r *Registry) runWatcher() error {
 			}
 		}
 	}()
+
 	return nil
 }
 
