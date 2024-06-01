@@ -583,10 +583,7 @@ func (h *sessionHub) Store(sess Session) {
 }
 
 func (h *sessionHub) Load(id string) (Session, bool) {
-	if sess, ok := h.sessions.Load(id); ok {
-		return sess, true
-	}
-	return nil, false
+	return h.sessions.Load(id)
 }
 
 func (h *sessionHub) Delete(sess Session) {
