@@ -30,7 +30,7 @@ func (s *gwService) IsSessionExist(ctx context.Context, req *nh.IsSessionExistRe
 // 会话数量
 func (s *gwService) SessionCount(context.Context, *emptypb.Empty) (*nh.SessionCountResponse, error) {
 	return &nh.SessionCountResponse{
-		Count: s.sessionHub.Count(),
+		Count: int32(s.sessionHub.Count()),
 	}, nil
 }
 
@@ -39,7 +39,6 @@ func (s *gwService) CloseSession(ctx context.Context, req *nh.CloseSessionReques
 		if err := sess.Close(); err != nil {
 			return nil, err
 		}
-		s.sessionHub.Delete(sess.ID())
 
 		return &nh.CloseSessionResponse{
 			Success: true,

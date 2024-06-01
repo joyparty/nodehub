@@ -378,7 +378,7 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 	defer sess.Close()
 	p.opts.disconnectInterceptor(ctx, sess)
-	p.sessions.Delete(sess.ID())
+	p.sessions.Delete(sess)
 
 	// 即使出错也不中断断开流程
 	_ = p.opts.eventBus.Publish(ctx, event.UserDisconnected{
@@ -538,8 +538,6 @@ func (p *Proxy) removeZombie() {
 			p.sessions.Range(func(s Session) bool {
 				if time.Since(s.LastRWTime()) > p.opts.keepaliveInterval {
 					logger.Info("remove heartbeat timeout session", "session", s)
-
-					p.sessions.Delete(s.ID())
 					_ = s.Close()
 				}
 				return true
@@ -559,41 +557,40 @@ func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
 // sessionHub 会话集合
 type sessionHub struct {
 	sessions *gokit.MapOf[string, Session]
-	count    *atomic.Int32
 	closed   *atomic.Bool
 }
 
 func newSessionHub() *sessionHub {
 	hub := &sessionHub{
 		sessions: gokit.NewMapOf[string, Session](),
-		count:    &atomic.Int32{},
 		closed:   &atomic.Bool{},
 	}
 
 	return hub
 }
 
-func (h *sessionHub) Count() int32 {
-	return h.count.Load()
+func (h *sessionHub) Count() int {
+	var count int
+	h.sessions.Range(func(_ string, _ Session) bool {
+		count++
+		return true
+	})
+	return count
 }
 
-func (h *sessionHub) Store(c Session) {
-	h.sessions.Store(c.ID(), c)
-	h.count.Add(1)
+func (h *sessionHub) Store(sess Session) {
+	h.sessions.Store(sess.ID(), sess)
 }
 
 func (h *sessionHub) Load(id string) (Session, bool) {
-	if c, ok := h.sessions.Load(id); ok {
-		return c.(Session), true
+	if sess, ok := h.sessions.Load(id); ok {
+		return sess, true
 	}
 	return nil, false
 }
 
-func (h *sessionHub) Delete(id string) {
-	if _, ok := h.sessions.Load(id); ok {
-		h.sessions.Delete(id)
-		h.count.Add(-1)
-	}
+func (h *sessionHub) Delete(sess Session) {
+	h.sessions.CompareAndDelete(sess.ID(), sess)
 }
 
 func (h *sessionHub) Range(f func(s Session) bool) {
@@ -604,10 +601,9 @@ func (h *sessionHub) Range(f func(s Session) bool) {
 
 func (h *sessionHub) Close() {
 	if h.closed.CompareAndSwap(false, true) {
-		h.Range(func(s Session) bool {
-			_ = s.Close()
-
-			h.Delete(s.ID())
+		h.sessions.Range(func(id string, sess Session) bool {
+			_ = sess.Close()
+			h.sessions.Delete(id)
 			return true
 		})
 	}
