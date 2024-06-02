@@ -149,16 +149,24 @@ func (p *Proxy) NewGRPCService() nh.GatewayServer {
 func (p *Proxy) init(ctx context.Context) {
 	// 有状态路由更新
 	p.opts.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
-		for _, userID := range ev.UserID {
-			if _, ok := p.sessions.Load(userID); ok {
-				p.stateTable.Store(userID, ev.ServiceCode, ev.NodeID)
+		if err := p.submitTask(func() {
+			for _, userID := range ev.UserID {
+				if _, ok := p.sessions.Load(userID); ok {
+					p.stateTable.Store(userID, ev.ServiceCode, ev.NodeID)
+				}
 			}
+		}); err != nil {
+			logger.Error("handle NodeAssign event", "error", err, "event", ev)
 		}
 	})
 
 	p.opts.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-		for _, userID := range ev.UserID {
-			p.stateTable.Remove(userID, ev.ServiceCode)
+		if err := p.submitTask(func() {
+			for _, userID := range ev.UserID {
+				p.stateTable.Remove(userID, ev.ServiceCode)
+			}
+		}); err != nil {
+			logger.Error("handle NodeUnassign event", "error", err, "event", ev)
 		}
 	})
 
