@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/joyparty/nodehub/logger"
 	"github.com/nats-io/nats.go"
 	"github.com/reactivex/rxgo/v2"
 )
@@ -35,22 +34,16 @@ func (mq *natsMQ) Publish(ctx context.Context, payload []byte) error {
 func (mq *natsMQ) Subscribe(ctx context.Context, handler func([]byte)) {
 	mq.subscribe()
 
-	mq.observer.ForEach(
-		func(item any) {
+	mq.observer.
+		DoOnNext(func(item any) {
 			handler(item.([]byte))
-		},
-		func(err error) {
-			logger.Error("nats observer", "error", err, "subject", mq.subject)
-		},
-		func() {},
-	)
+		})
 }
 
 func (mq *natsMQ) subscribe() {
 	mq.subscribeOnce.Do(func() {
 		msgC := make(chan *nats.Msg, 64)
 		sub, err := mq.conn.ChanSubscribe(mq.subject, msgC)
-
 		if err != nil {
 			mq.observer = rxgo.Defer([]rxgo.Producer{func(ctx context.Context, next chan<- rxgo.Item) {
 				next <- rxgo.Error(err)
@@ -76,6 +69,7 @@ func (mq *natsMQ) subscribe() {
 
 					select {
 					case <-mq.done:
+						return
 					case items <- rxgo.Of(msg.Data):
 					}
 				}

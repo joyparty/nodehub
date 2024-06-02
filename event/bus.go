@@ -76,7 +76,7 @@ func (bus *Bus) Publish(ctx context.Context, event any) error {
 //	 bus.Subscribe(ctx, func(ev event.UserDisconnected, t time.Time) {
 //			// ...
 //	 })
-func (bus *Bus) Subscribe(ctx context.Context, handler any) error {
+func (bus *Bus) Subscribe(ctx context.Context, handler any) {
 	fn := reflect.ValueOf(handler)
 
 	fnType := fn.Type()
@@ -120,8 +120,6 @@ func (bus *Bus) Subscribe(ctx context.Context, handler any) error {
 			})
 		}
 	})
-
-	return nil
 }
 
 // Close 关闭事件总线连接
