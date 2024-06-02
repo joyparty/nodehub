@@ -149,12 +149,17 @@ func (p *Proxy) NewGRPCService() nh.GatewayServer {
 func (p *Proxy) init(ctx context.Context) {
 	// 有状态路由更新
 	p.opts.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
-		if _, ok := p.sessions.Load(ev.UserID); ok {
-			p.stateTable.Store(ev.UserID, ev.ServiceCode, ev.NodeID)
+		for _, userID := range ev.UserID {
+			if _, ok := p.sessions.Load(userID); ok {
+				p.stateTable.Store(userID, ev.ServiceCode, ev.NodeID)
+			}
 		}
 	})
+
 	p.opts.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-		p.stateTable.Remove(ev.UserID, ev.ServiceCode)
+		for _, userID := range ev.UserID {
+			p.stateTable.Remove(userID, ev.ServiceCode)
+		}
 	})
 
 	// 禁止同一个用户同时连接多个网关
