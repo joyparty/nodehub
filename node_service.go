@@ -6,6 +6,7 @@ import (
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
+	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -36,4 +37,14 @@ func (ns *nodeService) Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty
 	ns.node.Shutdown()
 
 	return emptyReply, nil
+}
+
+// NewNodeClient 节点管理服务客户端
+func NewNodeClient(registry *cluster.Registry, nodeID ulid.ULID) (nh.NodeClient, error) {
+	conn, err := registry.GetGRPCConn(nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	return nh.NewNodeClient(conn), nil
 }

@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 
+	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc/codes"
@@ -98,4 +99,14 @@ func (s *gwService) SendReply(ctx context.Context, req *nh.SendReplyRequest) (*n
 	return &nh.SendReplyResponse{
 		Success: true,
 	}, nil
+}
+
+// NewGatewayClient 网关管理接口客户端
+func NewGatewayClient(registry *cluster.Registry, nodeID ulid.ULID) (nh.GatewayClient, error) {
+	conn, err := registry.GetGRPCConn(nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	return nh.NewGatewayClient(conn), nil
 }
