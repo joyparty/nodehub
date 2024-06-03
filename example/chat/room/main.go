@@ -69,23 +69,19 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		members:   gokit.NewMapOf[string, string](),
 	}
 
-	if err := evBus.Subscribe(context.Background(), func(ev event.UserConnected, _ time.Time) {
+	evBus.Subscribe(context.Background(), func(ev event.UserConnected, _ time.Time) {
 		service.boardcast(&roompb.News{
 			Content: fmt.Sprintf("EVENT: #%s connected", ev.UserID),
 		})
-	}); err != nil {
-		panic(err)
-	}
+	})
 
-	if err := evBus.Subscribe(context.Background(), func(ev event.UserDisconnected, _ time.Time) {
+	evBus.Subscribe(context.Background(), func(ev event.UserDisconnected, _ time.Time) {
 		service.members.Delete(ev.UserID)
 
 		service.boardcast(&roompb.News{
 			Content: fmt.Sprintf("EVENT: #%s disconnected", ev.UserID),
 		})
-	}); err != nil {
-		panic(err)
-	}
+	})
 
 	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
 	err := server.RegisterService(
