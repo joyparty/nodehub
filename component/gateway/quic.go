@@ -235,7 +235,7 @@ func (qs *quicSession) Recv(req *nh.Request) error {
 }
 
 func (qs *quicSession) Send(reply *nh.Reply) error {
-	s, ok := qs.streams.Pick(reply.FromService)
+	s, ok := qs.streams.Pick(reply.GetServiceCode())
 	if !ok {
 		return errors.New("no available stream")
 	}

@@ -14,7 +14,6 @@ import (
 	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/echo/proto/echopb"
 	"github.com/joyparty/nodehub/logger"
-	"github.com/joyparty/nodehub/proto/nh"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 )
@@ -54,7 +53,7 @@ func init() {
 func main() {
 	node := nodehub.NewNode("echo", registry)
 
-	grpcServer, err := newGRPCServer(node)
+	grpcServer, err := newGRPCServer()
 	if err != nil {
 		panic(err)
 	}
@@ -65,8 +64,13 @@ func main() {
 	}
 }
 
-func newGRPCServer(node *nodehub.Node) (*rpc.GRPCServer, error) {
-	gs := rpc.NewGRPCServer(listen, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
+func newGRPCServer() (*rpc.GRPCServer, error) {
+	gs := rpc.NewGRPCServer(listen,
+		grpc.ChainUnaryInterceptor(
+			rpc.LogUnary(slog.Default()),
+			rpc.PackReply(echopb.Echo_ReplyCodes),
+		),
+	)
 
 	options := []rpc.Option{
 		rpc.WithPublic(),
@@ -93,8 +97,8 @@ type echoService struct {
 	echopb.UnimplementedEchoServer
 }
 
-func (es *echoService) Send(ctx context.Context, msg *echopb.Msg) (*nh.Reply, error) {
-	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), listen, msg.GetMessage())
+func (es *echoService) Send(ctx context.Context, msg *echopb.Msg) (*echopb.Msg, error) {
+	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), listen, msg.GetContent())
 
-	return nh.NewReply(int32(echopb.Protocol_MSG), msg)
+	return msg, nil
 }

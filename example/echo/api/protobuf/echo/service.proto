@@ -4,9 +4,28 @@ package echo;
 
 option go_package = "github.com/joyparty/nodehub/example/echo/proto/echopb";
 
-import "nodehub/client.proto";
-import "echo/message.proto";
+import "google/protobuf/descriptor.proto";
+import "cluster/services.proto";
+
+// rpc方法自定义配置
+// 如果配置了reply_code，中间件会把返回值自动打包为nodehub.Reply
+extend google.protobuf.MethodOptions {
+	ReplyCode reply_code = 60000;
+}
+
+enum ReplyCode {
+	UNSPECIFIED = 0;
+	MSG = 1;
+}
 
 service Echo {
-	rpc Send(Msg) returns (nodehub.Reply);
+	option (cluster.service_code) = ECHO;
+
+	rpc Send(Msg) returns (Msg) {
+		option (reply_code) = MSG;
+	}
+}
+
+message Msg {
+	string content = 1;
 }

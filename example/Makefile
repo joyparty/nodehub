@@ -12,6 +12,8 @@ build_protobuf:
 		--go_opt=module=github.com/joyparty/nodehub/example/chat/proto \
 		--go-grpc_out=./chat/proto \
 		--go-grpc_opt=module=github.com/joyparty/nodehub/example/chat/proto \
+		--go-nodehub_out=./chat/proto \
+		--go-nodehub_opt=module=github.com/joyparty/nodehub/example/chat/proto \
 		./chat/api/protobuf/**/*.proto)
 
 	(cd $(ROOT_DIR) && protoc \
@@ -21,6 +23,8 @@ build_protobuf:
 		--go_opt=module=github.com/joyparty/nodehub/example/echo/proto \
 		--go-grpc_out=./echo/proto \
 		--go-grpc_opt=module=github.com/joyparty/nodehub/example/echo/proto \
+		--go-nodehub_out=./echo/proto \
+		--go-nodehub_opt=module=github.com/joyparty/nodehub/example/echo/proto \
 		./echo/api/protobuf/**/*.proto)
 
 .PHONY: run_echo_gateway

@@ -50,7 +50,7 @@ func NewRedisBus(client *redis.Client) *Bus {
 
 // Publish 把消息发布到消息队列
 func (bus *Bus) Publish(ctx context.Context, message *nh.Multicast) error {
-	if message.GetContent().GetFromService() == 0 {
+	if message.GetContent().GetServiceCode() == 0 {
 		return errors.New("invalid content, from_service is required")
 	}
 

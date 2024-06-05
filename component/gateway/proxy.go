@@ -339,7 +339,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	}
 
 	output.RequestId = req.GetId()
-	output.FromService = req.GetServiceCode()
+	output.ServiceCode = req.GetServiceCode()
 	p.sendReply(sess, output)
 	return nil
 }
@@ -413,7 +413,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	var nodeID ulid.ULID
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
-		nodeID, err = p.opts.registry.AllocGRPCNode(req.ServiceCode, sess)
+		nodeID, err = p.opts.registry.AllocGRPCNode(req.GetServiceCode(), sess)
 		if err != nil {
 			err = status.Errorf(codes.Aborted, "pick grpc node, %v", err)
 			return
@@ -433,7 +433,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 
 			defer func() {
 				if err == nil {
-					p.stateTable.Store(sess.ID(), req.ServiceCode, nodeID)
+					p.stateTable.Store(sess.ID(), req.GetServiceCode(), nodeID)
 				}
 			}()
 			goto FINISH
@@ -441,7 +441,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	}
 
 	// 从状态路由表查询节点ID
-	if v, ok := p.stateTable.Find(sess.ID(), req.ServiceCode); ok {
+	if v, ok := p.stateTable.Find(sess.ID(), req.GetServiceCode()); ok {
 		nodeID = v
 		goto FINISH
 	}
@@ -453,14 +453,14 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	}
 
 	// 自动分配策略，根据负载均衡策略选择一个节点发送
-	nodeID, err = p.opts.registry.AllocGRPCNode(req.ServiceCode, sess)
+	nodeID, err = p.opts.registry.AllocGRPCNode(req.GetServiceCode(), sess)
 	if err != nil {
 		err = status.Errorf(codes.Aborted, "pick grpc node, %v", err)
 		return
 	}
 	defer func() {
 		if err == nil {
-			p.stateTable.Store(sess.ID(), req.ServiceCode, nodeID)
+			p.stateTable.Store(sess.ID(), req.GetServiceCode(), nodeID)
 		}
 	}()
 

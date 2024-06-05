@@ -8,15 +8,15 @@ import (
 )
 
 // NewReply 把proto message打包Reply
-func NewReply(msgType int32, msg proto.Message) (*Reply, error) {
+func NewReply(code int32, msg proto.Message) (*Reply, error) {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Reply{
-		MessageType: msgType,
-		Data:        data,
+		Code: code,
+		Data: data,
 	}, nil
 }
 
@@ -44,8 +44,8 @@ func ResetRequest(req *Request) {
 // ResetReply 重置响应对象
 func ResetReply(resp *Reply) {
 	resp.RequestId = 0
-	resp.FromService = 0
-	resp.MessageType = 0
+	resp.ServiceCode = 0
+	resp.Code = 0
 
 	if len(resp.Data) > 0 {
 		resp.Data = resp.Data[:0]
@@ -70,7 +70,7 @@ func (x *Request) LogValue() slog.Value {
 func (x *Reply) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.Int("reqID", int(x.GetRequestId())),
-		slog.Int("service", int(x.GetFromService())),
-		slog.Int("msgType", int(x.GetMessageType())),
+		slog.Int("service", int(x.GetServiceCode())),
+		slog.Int("code", int(x.GetCode())),
 	)
 }

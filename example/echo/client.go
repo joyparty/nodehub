@@ -55,8 +55,8 @@ func main() {
 	client := newEchoClient(endpoint)
 	defer client.Close()
 
-	client.OnReceive(int32(echopb.Protocol_MSG), func(requestID uint32, reply *echopb.Msg) {
-		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.Message)
+	client.OnReceive(int32(echopb.ReplyCode_MSG), func(requestID uint32, reply *echopb.Msg) {
+		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.GetContent())
 	})
 
 	// 收到鉴权成功消息后开始正式发送消息
@@ -67,7 +67,7 @@ func main() {
 			for {
 				gokit.Must(
 					client.Call("Send", &echopb.Msg{
-						Message: "hello world!",
+						Content: "hello world!",
 					}),
 				)
 				time.Sleep(1 * time.Second)
