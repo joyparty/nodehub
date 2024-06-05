@@ -88,7 +88,7 @@ func genReplyCodes(g *protogen.GeneratedFile, s *protogen.Service, codes map[str
 
 func getReplyCodes(s *protogen.Service, extTypes *protoregistry.Types) map[string]protoreflect.EnumNumber {
 	getCode := func(method *protogen.Method, extTypes *protoregistry.Types) (code protoreflect.EnumNumber, ok bool) {
-		options := method.Desc.Options().(*descriptorpb.MethodOptions)
+		options := method.Output.Desc.Options().(*descriptorpb.MessageOptions)
 		if options == nil {
 			return
 		}
