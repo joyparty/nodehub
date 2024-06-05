@@ -46,7 +46,7 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 	"id": "",	// ulid，每次启动后自动生成
 	"name": "",	// 节点名称
 	"state": "ok",	// 节点状态
-	"entrace": "ws://host:port/grpc",	// 网关入口地址，非网关节点没有值
+	"entrace": "ws://host:port",	// 网关入口地址，非网关节点没有值
 	"grpc": {
 		"endpoint": "ip:port",	// grpc服务监听地址
 		"services": [
@@ -102,7 +102,7 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 面向客户端的gRPC方法的返回结果，只能是`nodehub.Reply`和[google.protobuf.Empty](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/empty.proto)两种类型，否则会导致客户端无法解析。
 
-凡是要下行到客户端解析的真正message类型，需要单独定义类型枚举值，这样客户端才能根据`nodehub.Reply.message_type`的值，使用正确的类型把`nodehub.Reply.data`内的数据解码使用。
+凡是要下行到客户端解析的真正message类型，需要单独定义类型枚举值，这样客户端才能根据`nodehub.Reply.code`的值，使用正确的类型把`nodehub.Reply.data`内的数据解码使用。
 
 内部服务的gRPC方法没有任何这种限制，因为内部节点间是通过正常的gRPC方式直接通讯。
 

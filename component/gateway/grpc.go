@@ -87,9 +87,9 @@ func (s *gwService) SendReply(ctx context.Context, req *nh.SendReplyRequest) (*n
 		return &nh.SendReplyResponse{}, nil
 	}
 
-	if req.GetReply().GetFromService() == 0 {
+	if req.GetReply().GetServiceCode() == 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid reply, from_service is empty")
-	} else if req.GetReply().GetMessageType() == 0 {
+	} else if req.GetReply().GetCode() == 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid reply, message_type is empty")
 	}
 

@@ -11,22 +11,22 @@ message Request {
 	// 网关会在每个request对应的reply.request_id内原样返回这个值
 	uint32 id = 1;
 
-	// 节点ID
-	// 如果有值，网关会把本次请求直接转发到指定的节点
-	// 仅仅在有状态服务的allocation配置为client时有效
-	string node_id = 2;
-
 	// 服务ID，对应内部节点的每种grpc服务
 	// 内部节点在注册服务发现时，会将服务ID注册到etcd中
-	// 网关根据service_code字段将请求转发到对应的内部服务
-	int32 service_code = 3;
+	// 网关根据service字段将请求转发到对应的内部服务
+	int32 service_code = 2;
 
 	// grpc方法名，大小写敏感，例如: SayHello
-	string method = 4;
+	string method = 3;
 
 	// grpc方法对应的protobuf message序列化之后的数据
 	// 具体对应关系需要自行查看grpc服务的protobuf文件
-	bytes data = 5;
+	bytes data = 4;
+
+	// 节点ID
+	// 如果有值，网关会把本次请求直接转发到指定的节点
+	// 仅仅在有状态服务的allocation配置为client时有效
+	string node_id = 5;
 
 	// 是否需要网关返回response
 	bool no_reply = 6;
@@ -43,13 +43,12 @@ message Reply {
 	// 标识这个消息来自于哪个内部服务
 	// grpc调用返回结果，网关会自动给这个字段赋值
 	// 如果是服务器端主动下发，需要自行赋值
-	// from_service = 0，表示这个消息来自于网关本身
-	int32 from_service = 2;
+	// service_code = 0，表示这个消息来自于网关本身
+	int32 service_code = 2;
 
-	// 消息类型ID，可以是集群范围唯一，也可以是服务范围唯一
-	// 需要下发时自行指定
-	// message_type = 0，表示这是google.protobuf.Empty类型的空消息
-	int32 message_type = 3;
+	// 消息类型代码
+	// code = 0，表示这是google.protobuf.Empty类型的空消息
+	int32 code = 3;
 
 	// 下行protobuf message序列化之后的数据
 	// 客户端需要根据message_type字段判断具体反序列化成哪个protobuf message

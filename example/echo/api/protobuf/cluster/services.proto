@@ -4,6 +4,12 @@ package cluster;
 
 option go_package = "github.com/joyparty/nodehub/example/echo/proto/clusterpb";
 
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.ServiceOptions {
+	Services service_code = 50000;
+}
+
 enum Services {
 	UNSPECIFIED = 0;
 	AUTH = 1;

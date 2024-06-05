@@ -1,6 +1,6 @@
 module github.com/joyparty/nodehub
 
-go 1.21.4
+go 1.21.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0

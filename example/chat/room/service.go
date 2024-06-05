@@ -77,7 +77,7 @@ func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptyp
 
 func (rs *roomService) boardcast(news *roompb.News) {
 	response, _ := nh.NewReply(int32(roompb.Protocol_NEWS), news)
-	response.FromService = int32(clusterpb.Services_ROOM)
+	response.ServiceCode = int32(clusterpb.Services_ROOM)
 
 	receiver := []string{}
 	rs.members.Range(func(id, name string) bool {
@@ -93,7 +93,7 @@ func (rs *roomService) boardcast(news *roompb.News) {
 
 func (rs *roomService) unicast(toName string, news *roompb.News) {
 	response, _ := nh.NewReply(int32(roompb.Protocol_NEWS), news)
-	response.FromService = int32(clusterpb.Services_ROOM)
+	response.ServiceCode = int32(clusterpb.Services_ROOM)
 
 	rs.members.Range(func(id, name string) bool {
 		if name == toName {

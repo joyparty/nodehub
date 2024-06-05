@@ -282,7 +282,7 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 				UserId: userID,
 			}),
 		)
-		reply.FromService = int32(clusterpb.Services_AUTH)
+		reply.ServiceCode = int32(clusterpb.Services_AUTH)
 
 		gokit.Must(sess.Send(reply))
 	}
