@@ -47,7 +47,7 @@ func main() {
 	client := newChatClient(gwClient)
 	// defer client.Close()
 
-	client.OnReceive(int32(roompb.Protocol_NEWS), func(requestID uint32, reply *roompb.News) {
+	client.OnReceive(int32(roompb.ReplyCode_NEWS), func(requestID uint32, reply *roompb.News) {
 		if reply.FromId == "" {
 			fmt.Printf(">>> %s\n", reply.Content)
 		} else {
@@ -60,6 +60,7 @@ func main() {
 			&roompb.JoinRequest{Name: name},
 			gateway.WithNoReply(),
 			gateway.WithNode(node),
+			gateway.WithServerStream(),
 		),
 	)
 
