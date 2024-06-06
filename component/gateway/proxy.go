@@ -38,6 +38,10 @@ var (
 	replyPool = gokit.NewPoolOf(func() *nh.Reply {
 		return &nh.Reply{}
 	})
+
+	streamDesc = &grpc.StreamDesc{
+		ServerStreams: true,
+	}
 )
 
 // Session 连接会话
@@ -311,27 +315,35 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 		return
 	}
 
-	input, err := newEmptyMessage(req.Data)
-	if err != nil {
-		return fmt.Errorf("unmarshal request data: %w", err)
-	}
-
-	output := replyPool.Get()
-	nh.ResetReply(output)
-	defer replyPool.Put(output)
-
 	md := sess.MetadataCopy()
 	md.Set(rpc.MDTransactionID, ulid.Make().String())
 	md.Set(rpc.MDSessID, sess.ID())
 	md.Set(rpc.MDGateway, p.nodeID)
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
+	method = path.Join(desc.Path, req.Method)
+
+	if req.GetServerStream() {
+		return p.doStreamRPC(ctx, sess, req, conn, method)
+	}
+	return p.doSimpleRPC(ctx, sess, req, conn, method)
+}
+
+func (p *Proxy) doSimpleRPC(ctx context.Context, sess Session, req *nh.Request, conn *grpc.ClientConn, method string) error {
+	input, err := newEmptyMessage(req.Data)
+	if err != nil {
+		return fmt.Errorf("unmarshal request data, %w", err)
+	}
+
+	output := replyPool.Get()
+	nh.ResetReply(output)
+	defer replyPool.Put(output)
+
 	ctx, cancel := context.WithTimeout(ctx, p.opts.requestDeadline)
 	defer cancel()
 
-	method = path.Join(desc.Path, req.Method)
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
-		return fmt.Errorf("invoke service: %w", err)
+		return fmt.Errorf("call unary method, %w", err)
 	}
 
 	if req.GetNoReply() {
@@ -342,6 +354,42 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	output.ServiceCode = req.GetServiceCode()
 	p.sendReply(sess, output)
 	return nil
+}
+
+func (p *Proxy) doStreamRPC(ctx context.Context, sess Session, req *nh.Request, conn *grpc.ClientConn, method string) error {
+	stream, err := conn.NewStream(ctx, streamDesc, method)
+	if err != nil {
+		return fmt.Errorf("call stream method, %w", err)
+	}
+
+	input, err := newEmptyMessage(req.Data)
+	if err != nil {
+		return fmt.Errorf("unmarshal request data, %w", err)
+	}
+
+	if err := stream.SendMsg(input); err != nil {
+		return fmt.Errorf("send request, %w", err)
+	} else if err := stream.CloseSend(); err != nil {
+		return err
+	}
+
+	output := replyPool.Get()
+	defer replyPool.Put(output)
+
+	for {
+		nh.ResetReply(output)
+
+		if err := stream.RecvMsg(output); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+
+		output.RequestId = req.GetId()
+		output.ServiceCode = req.GetServiceCode()
+		p.sendReply(sess, output)
+	}
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
@@ -488,17 +536,9 @@ func (p *Proxy) logRequest(
 	logValues := []any{
 		"gateway", p.nodeID,
 		"session", sess,
+		"req", req,
 		"method", method,
-		"requestID", req.GetId(),
 		"duration", time.Since(start).String(),
-	}
-
-	if nodeID := req.GetNodeId(); nodeID != "" {
-		logValues = append(logValues, "nodeID", nodeID)
-	}
-
-	if noReply := req.GetNoReply(); noReply {
-		logValues = append(logValues, "noReply", true)
 	}
 
 	if upstream != nil {

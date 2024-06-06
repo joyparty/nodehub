@@ -21,7 +21,6 @@ var (
 	serverAddr string
 	name       string
 	say        string
-	node       string
 	useTCP     bool
 
 	chatServiceCode = int32(clusterpb.Services_ROOM)
@@ -31,7 +30,6 @@ func init() {
 	flag.StringVar(&serverAddr, "server", "127.0.0.1:9000", "server address")
 	flag.StringVar(&name, "name", "", "user name")
 	flag.StringVar(&say, "say", "", "words send after join")
-	flag.StringVar(&node, "node", "", "node id")
 	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
 	flag.Parse()
 }
@@ -47,7 +45,7 @@ func main() {
 	client := newChatClient(gwClient)
 	// defer client.Close()
 
-	client.OnReceive(int32(roompb.Protocol_NEWS), func(requestID uint32, reply *roompb.News) {
+	client.OnReceive(int32(roompb.ReplyCode_NEWS), func(requestID uint32, reply *roompb.News) {
 		if reply.FromId == "" {
 			fmt.Printf(">>> %s\n", reply.Content)
 		} else {
@@ -59,7 +57,7 @@ func main() {
 		client.Call("Join",
 			&roompb.JoinRequest{Name: name},
 			gateway.WithNoReply(),
-			gateway.WithNode(node),
+			gateway.WithServerStream(),
 		),
 	)
 
@@ -93,10 +91,6 @@ func newChatClient(gc *gateway.Client) *chatClient {
 	cc := &chatClient{
 		Client: gc,
 	}
-
-	cc.Client.SetDefaultHandler(func(resp *nh.Reply) {
-		fmt.Printf("[%s] response: %s\n", time.Now().Format(time.RFC3339), resp.String())
-	})
 
 	cc.Client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
 		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",

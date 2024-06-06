@@ -100,11 +100,11 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 ## gRPC使用约束
 
-面向客户端的gRPC方法的返回结果，只能是`nodehub.Reply`和[google.protobuf.Empty](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/empty.proto)两种类型，否则会导致客户端无法解析。
+面向客户端的服务，只能使用[Unary](https://grpc.io/docs/what-is-grpc/core-concepts/#unary-rpc)和[Server streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)两种风格的方法。
 
 凡是要下行到客户端解析的真正message类型，需要单独定义类型枚举值，这样客户端才能根据`nodehub.Reply.code`的值，使用正确的类型把`nodehub.Reply.data`内的数据解码使用。
 
-内部服务的gRPC方法没有任何这种限制，因为内部节点间是通过正常的gRPC方式直接通讯。
+内部服务的gRPC方法没有以上限制，因为内部节点间是通过正常的gRPC方式直接通讯。
 
 ## 示例 (echo server)
 

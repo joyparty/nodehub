@@ -1,15 +1,40 @@
-
 syntax = "proto3";
 
 package room;
 
 option go_package = "github.com/joyparty/nodehub/example/chat/proto/roompb";
 
+import "google/protobuf/descriptor.proto";
 import "google/protobuf/empty.proto";
-import "room/message.proto";
+
+extend google.protobuf.MessageOptions {
+	ReplyCode reply_code = 60000;
+}
+
+enum ReplyCode {
+	UNSPECIFIED = 0;
+	NEWS = 1;
+}
 
 service Room {
-	rpc Join(JoinRequest) returns (google.protobuf.Empty) {}
-	rpc Leave(google.protobuf.Empty) returns (google.protobuf.Empty) {}
-	rpc Say(SayRequest) returns (google.protobuf.Empty) {}
+	rpc Join(JoinRequest) returns (stream News);
+	rpc Say(SayRequest) returns (google.protobuf.Empty);
+	rpc Leave(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+message JoinRequest {
+	string name = 1;
+}
+
+message SayRequest {
+	string to = 1;
+	string content = 2;
+}
+
+message News {
+	option (reply_code) = NEWS;
+
+	string from_id = 1;
+	string from_name = 2;
+	string content = 3;
 }

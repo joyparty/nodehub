@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub"
@@ -43,73 +42,49 @@ func init() {
 
 	logger.SetLogger(slog.Default())
 
-	client := mustReturn(clientv3.New(clientv3.Config{
+	client := gokit.MustReturn(clientv3.New(clientv3.Config{
 		Endpoints: []string{"127.0.0.1:2379"},
 	}))
 
-	registry = mustReturn(cluster.NewRegistry(client))
+	registry = gokit.MustReturn(cluster.NewRegistry(client))
 }
 
 func main() {
-	server := mustReturn(newGRPCServer())
+	server := newGRPCServer()
 
 	node := nodehub.NewNode("room", registry)
 	node.AddComponent(server)
 
 	logger.Info("room server start", "listen", listenAddr)
-	mustDo(node.Serve(context.Background()))
+	gokit.Must(node.Serve(context.Background()))
 }
 
-func newGRPCServer() (*rpc.GRPCServer, error) {
+func newGRPCServer() *rpc.GRPCServer {
 	// evBus, muBus := newRedisBus()
-	evBus, muBus := newNatsBus()
+	evBus, _ := newNatsBus()
 
-	service := &roomService{
-		publisher: muBus,
-		members:   gokit.NewMapOf[string, string](),
-	}
+	server := rpc.NewGRPCServer(listenAddr,
+		grpc.ChainUnaryInterceptor(
+			rpc.LogUnary(slog.Default()),
+			rpc.PackReply(roompb.Room_ReplyCodes),
+		),
+		grpc.ChainStreamInterceptor(
+			rpc.LogStream(slog.Default()),
+			rpc.PackReplyStream(roompb.Room_ReplyCodes),
+		),
+	)
 
-	evBus.Subscribe(context.Background(), func(ev event.UserConnected, _ time.Time) {
-		service.boardcast(&roompb.News{
-			Content: fmt.Sprintf("EVENT: #%s connected", ev.UserID),
-		})
-	})
-
-	evBus.Subscribe(context.Background(), func(ev event.UserDisconnected, _ time.Time) {
-		service.members.Delete(ev.UserID)
-
-		service.boardcast(&roompb.News{
-			Content: fmt.Sprintf("EVENT: #%s disconnected", ev.UserID),
-		})
-	})
-
-	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
-	err := server.RegisterService(
+	gokit.Must(server.RegisterService(
 		int32(clusterpb.Services_ROOM),
 		roompb.Room_ServiceDesc,
-		service,
+		NewRoomService(evBus),
+
 		rpc.WithPublic(),
 		rpc.WithStateful(),
 		rpc.WithAllocation(cluster.AutoAllocate),
-	)
-	if err != nil {
-		return nil, err
-	}
+	))
 
-	return server, nil
-}
-
-func mustDo(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func mustReturn[T any](t T, er error) T {
-	if er != nil {
-		panic(er)
-	}
-	return t
+	return server
 }
 
 func newRedisBus() (*event.Bus, *multicast.Bus) {
