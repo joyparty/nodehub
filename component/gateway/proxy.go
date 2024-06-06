@@ -38,6 +38,10 @@ var (
 	replyPool = gokit.NewPoolOf(func() *nh.Reply {
 		return &nh.Reply{}
 	})
+
+	streamDesc = &grpc.StreamDesc{
+		ServerStreams: true,
+	}
 )
 
 // Session 连接会话
@@ -353,12 +357,7 @@ func (p *Proxy) doSimpleRPC(ctx context.Context, sess Session, req *nh.Request, 
 }
 
 func (p *Proxy) doStreamRPC(ctx context.Context, sess Session, req *nh.Request, conn *grpc.ClientConn, method string) error {
-	sd := &grpc.StreamDesc{
-		ServerStreams: true,
-		ClientStreams: true,
-	}
-
-	stream, err := conn.NewStream(ctx, sd, method)
+	stream, err := conn.NewStream(ctx, streamDesc, method)
 	if err != nil {
 		return fmt.Errorf("call stream method, %w", err)
 	}
