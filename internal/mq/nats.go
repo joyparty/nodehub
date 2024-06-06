@@ -35,9 +35,12 @@ func (mq *natsMQ) Subscribe(ctx context.Context, handler func([]byte)) {
 	mq.subscribe()
 
 	mq.observer.
-		DoOnNext(func(item any) {
-			handler(item.([]byte))
-		})
+		DoOnNext(
+			func(item any) {
+				handler(item.([]byte))
+			},
+			rxgo.WithContext(ctx),
+		)
 }
 
 func (mq *natsMQ) subscribe() {
