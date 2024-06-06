@@ -13,44 +13,49 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func logRequest(ctx context.Context, l logger.Logger, method string) func(err error) {
+	start := time.Now()
+
+	return func(err error) {
+		vars := []any{
+			"method", method,
+			"duration", time.Since(start).String(),
+		}
+
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if v := md.Get(MDSessID); len(v) > 0 {
+				vars = append(vars, "userID", v[0])
+			}
+
+			if v := md.Get(MDTransactionID); len(v) > 0 {
+				vars = append(vars, "transID", v[0])
+			}
+		}
+
+		if err != nil {
+			vars = append(vars, "error", err)
+			l.Info("grpc request", vars...)
+		} else {
+			l.Info("grpc request", vars...)
+		}
+	}
+}
+
 // LogUnary 打印unary请求日志
 func LogUnary(l logger.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		start := time.Now()
-		defer func() {
-			vals := []any{
-				"method", info.FullMethod,
-				"duration", time.Since(start).String(),
-			}
-
-			if md, ok := metadata.FromIncomingContext(ctx); ok {
-				if v := md.Get(MDSessID); len(v) > 0 {
-					vals = append(vals, "userID", v[0])
-				}
-
-				if v := md.Get(MDTransactionID); len(v) > 0 {
-					vals = append(vals, "transID", v[0])
-				}
-			}
-
-			if v, ok := req.(proto.Message); ok {
-				vals = append(vals, "reqType", v.ProtoReflect().Descriptor().FullName())
-			}
-
-			if err != nil {
-				vals = append(vals, "error", err)
-
-				l.Error("grpc request", vals...)
-			} else {
-				if v, ok := resp.(*nh.Reply); ok && proto.Size(v) > 0 {
-					vals = append(vals, "respType", v.GetCode())
-				}
-
-				l.Info("grpc request", vals...)
-			}
-		}()
+		defer logRequest(ctx, l, info.FullMethod)(err)
 
 		return handler(ctx, req)
+	}
+}
+
+// LogStream 打印stream接口请求日志
+func LogStream(l logger.Logger) grpc.StreamServerInterceptor {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
+		defer logRequest(ss.Context(), l, info.FullMethod)(err)
+
+		return handler(srv, ss)
 	}
 }
 
@@ -74,5 +79,36 @@ func PackReply(replyCodes ...map[string]int32) grpc.UnaryServerInterceptor {
 		}
 
 		return
+	}
+}
+
+type replyStream struct {
+	grpc.ServerStream
+
+	replyCode int32
+}
+
+func (s *replyStream) SendMsg(m any) error {
+	reply, err := nh.NewReply(s.replyCode, m.(proto.Message))
+	if err != nil {
+		return err
+	}
+
+	return s.ServerStream.SendMsg(reply)
+}
+
+// PackReplyStream 把server side stream返回值转换为nodehub.Reply
+func PackReplyStream(replyCodes ...map[string]int32) grpc.StreamServerInterceptor {
+	codes := lo.Assign(replyCodes...)
+
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if code, ok := codes[info.FullMethod]; ok {
+			return handler(srv, &replyStream{
+				ServerStream: ss,
+				replyCode:    code,
+			})
+		}
+
+		return handler(srv, ss)
 	}
 }

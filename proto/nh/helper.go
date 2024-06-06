@@ -60,9 +60,16 @@ func (x *Request) LogValue() slog.Value {
 		slog.String("method", x.GetMethod()),
 	}
 
+	if nodeID := x.GetNodeId(); nodeID != "" {
+		attrs = append(attrs, slog.String("nodeID", nodeID))
+	}
+
 	if x.GetNoReply() {
 		attrs = append(attrs, slog.Bool("noReply", true))
+	} else if x.GetServerStream() {
+		attrs = append(attrs, slog.Bool("serverStream", true))
 	}
+
 	return slog.GroupValue(attrs...)
 }
 

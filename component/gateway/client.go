@@ -306,10 +306,17 @@ func NewClient(dialURL string) (*Client, error) {
 	}
 
 	c := &Client{
-		client:         cc,
-		idSeq:          &atomic.Uint32{},
-		handlers:       gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
-		defaultHandler: func(reply *nh.Reply) {},
+		client:   cc,
+		idSeq:    &atomic.Uint32{},
+		handlers: gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
+		defaultHandler: func(reply *nh.Reply) {
+			fmt.Printf("%s REPLY: requestID=%d service=%d code=%d\n",
+				time.Now().Format(time.RFC3339),
+				reply.GetRequestId(),
+				reply.GetServiceCode(),
+				reply.GetCode(),
+			)
+		},
 	}
 
 	go c.run()
@@ -331,10 +338,17 @@ func NewQUICClient(dialURL string, tlsConfig *tls.Config, quicConfig *quic.Confi
 	}
 
 	c := &Client{
-		client:         qc,
-		idSeq:          &atomic.Uint32{},
-		handlers:       gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
-		defaultHandler: func(reply *nh.Reply) {},
+		client:   qc,
+		idSeq:    &atomic.Uint32{},
+		handlers: gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
+		defaultHandler: func(reply *nh.Reply) {
+			fmt.Printf("%s REPLY: requestID=%d service=%d code=%d\n",
+				time.Now().Format(time.RFC3339),
+				reply.GetRequestId(),
+				reply.GetServiceCode(),
+				reply.GetCode(),
+			)
+		},
 	}
 
 	go c.run()
@@ -361,6 +375,12 @@ func (c *Client) Call(serviceCode int32, method string, arg proto.Message, optio
 	}
 
 	return c.send(serviceCode, data)
+}
+
+// CallStream 调用server-side stream接口
+func (c *Client) CallStream(serviceCode int32, method string, arg proto.Message, options ...CallOption) error {
+	options = append(options, WithServerStream())
+	return c.Call(serviceCode, method, arg, options...)
 }
 
 // OnReceive 注册消息处理器
@@ -476,5 +496,12 @@ func WithNode(nodeID string) CallOption {
 func WithNoReply() CallOption {
 	return func(req *nh.Request) {
 		req.NoReply = true
+	}
+}
+
+// WithServerStream 发起server-side stream方法请求
+func WithServerStream() CallOption {
+	return func(req *nh.Request) {
+		req.ServerStream = true
 	}
 }
