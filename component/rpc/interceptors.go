@@ -24,7 +24,7 @@ func logRequest(ctx context.Context, l logger.Logger, method string) func(err er
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			if v := md.Get(MDSessID); len(v) > 0 {
-				vars = append(vars, "userID", v[0])
+				vars = append(vars, "sessID", v[0])
 			}
 
 			if v := md.Get(MDTransactionID); len(v) > 0 {
@@ -34,7 +34,7 @@ func logRequest(ctx context.Context, l logger.Logger, method string) func(err er
 
 		if err != nil {
 			vars = append(vars, "error", err)
-			l.Info("grpc request", vars...)
+			l.Error("grpc request", vars...)
 		} else {
 			l.Info("grpc request", vars...)
 		}
