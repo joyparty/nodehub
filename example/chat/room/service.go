@@ -60,13 +60,16 @@ func (rs *roomService) Join(req *roompb.JoinRequest, stream roompb.Room_JoinServ
 	})
 
 	// 收到自己的离开事件，执行cancel ctx
-	rs.observer.DoOnNext(func(item any) {
-		if v, ok := item.(eventLeave); ok {
-			if v.UserID == userID {
-				cancel()
+	rs.observer.DoOnNext(
+		func(item any) {
+			if v, ok := item.(eventLeave); ok {
+				if v.UserID == userID {
+					cancel()
+				}
 			}
-		}
-	})
+		},
+		rxgo.WithContext(ctx),
+	)
 
 	<-rs.observer.DoOnNext(
 		func(item any) {
