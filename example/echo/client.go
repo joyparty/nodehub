@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/component/gateway"
+	"github.com/joyparty/nodehub/client"
 	"github.com/joyparty/nodehub/example/echo/proto/authpb"
 	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/echo/proto/echopb"
@@ -52,11 +52,11 @@ func main() {
 		endpoint = fmt.Sprintf("ws://%s/", serverAddr)
 	}
 
-	client := newClient(endpoint)
-	defer client.Close()
+	cli := newClient(endpoint)
+	defer cli.Close()
 
 	// 网关返回的RPC错误
-	client.OnReceive(0, int32(nh.ReplyCode_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
+	cli.OnReceive(0, int32(nh.ReplyCode_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
 		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
 			time.Now().Format(time.RFC3339),
 			requestID,
@@ -69,15 +69,15 @@ func main() {
 	})
 
 	// echo接口返回
-	client.OnReceive(echoServiceCode, int32(echopb.ReplyCode_MSG), func(requestID uint32, reply *echopb.Msg) {
+	cli.OnReceive(echoServiceCode, int32(echopb.ReplyCode_MSG), func(requestID uint32, reply *echopb.Msg) {
 		logger.Info("receive reply", "requestID", requestID, "content", reply.GetContent())
 	})
 
 	// 收到鉴权成功消息后开始正式发送消息
-	client.OnReceive(authServiceCode, int32(authpb.Protocol_AUTHORIZE_ACK),
+	cli.OnReceive(authServiceCode, int32(authpb.Protocol_AUTHORIZE_ACK),
 		func(requestID uint32, msg *authpb.AuthorizeAck) {
 			for {
-				client.Call(echoServiceCode, "Send", &echopb.Msg{
+				cli.Call(echoServiceCode, "Send", &echopb.Msg{
 					Content: "hello world!",
 				})
 				time.Sleep(1 * time.Second)
@@ -86,24 +86,24 @@ func main() {
 	)
 
 	// 连接后首先发送鉴权消息
-	client.Call(0, "Authorize", &authpb.AuthorizeToken{
+	cli.Call(0, "Authorize", &authpb.AuthorizeToken{
 		Token: "0d8b750e-35e8-4f98-b032-f389d401213e",
 	})
 
 	<-context.Background().Done()
 }
 
-func newClient(endpoint string) *gateway.MustClient {
-	var client *gateway.Client
+func newClient(endpoint string) *client.MustClient {
+	var cli *client.Client
 	if strings.HasPrefix(endpoint, "quic://") {
 		tlsConfig := &tls.Config{
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"quic-echo-example"},
 		}
-		client = gokit.MustReturn(gateway.NewQUICClient(endpoint, tlsConfig, nil))
+		cli = gokit.MustReturn(client.NewQUIC(endpoint, tlsConfig, nil))
 	} else {
-		client = gokit.MustReturn(gateway.NewClient(endpoint))
+		cli = gokit.MustReturn(client.New(endpoint))
 	}
 
-	return &gateway.MustClient{Client: client}
+	return &client.MustClient{Client: cli}
 }

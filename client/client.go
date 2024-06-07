@@ -1,4 +1,4 @@
-package gateway
+package client
 
 import (
 	"context"
@@ -21,6 +21,8 @@ import (
 	"github.com/quic-go/quic-go"
 	"google.golang.org/protobuf/proto"
 )
+
+var writeTimeout = 5 * time.Second
 
 type client interface {
 	send(service int32, data []byte) error
@@ -220,12 +222,12 @@ func newWSClient(url string) (*wsClient, error) {
 }
 
 func (wc *wsClient) send(service int32, data []byte) error {
-	wc.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
+	wc.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	return wc.conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
 func (wc *wsClient) ping() error {
-	return wc.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(WriteTimeout))
+	return wc.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeTimeout))
 }
 
 func (wc *wsClient) replyStream() <-chan *nh.Reply {
@@ -283,8 +285,8 @@ type Client struct {
 	defaultHandler func(*nh.Reply)
 }
 
-// NewClient 创建客户端
-func NewClient(dialURL string) (*Client, error) {
+// New 创建客户端
+func New(dialURL string) (*Client, error) {
 	l, err := url.Parse(dialURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse dial url, %w", err)
@@ -324,8 +326,8 @@ func NewClient(dialURL string) (*Client, error) {
 	return c, nil
 }
 
-// NewQUICClient 创建QUIC客户端
-func NewQUICClient(dialURL string, tlsConfig *tls.Config, quicConfig *quic.Config) (*Client, error) {
+// NewQUIC 创建QUIC客户端
+func NewQUIC(dialURL string, tlsConfig *tls.Config, quicConfig *quic.Config) (*Client, error) {
 	l, err := url.Parse(dialURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse dial url, %w", err)

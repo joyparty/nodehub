@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/component/gateway"
+	"github.com/joyparty/nodehub/client"
 	"github.com/joyparty/nodehub/example/chat/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/chat/proto/roompb"
 	"github.com/joyparty/nodehub/proto/nh"
@@ -34,17 +34,17 @@ func init() {
 }
 
 func main() {
-	var gwClient *gateway.Client
+	var gwClient *client.Client
 	if useTCP {
-		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("tcp://%s", serverAddr)))
+		gwClient = gokit.MustReturn(client.New(fmt.Sprintf("tcp://%s", serverAddr)))
 	} else {
-		gwClient = gokit.MustReturn(gateway.NewClient(fmt.Sprintf("ws://%s", serverAddr)))
+		gwClient = gokit.MustReturn(client.New(fmt.Sprintf("ws://%s", serverAddr)))
 	}
 
-	client := &gateway.MustClient{Client: gwClient}
+	cli := &client.MustClient{Client: gwClient}
 	// defer client.Close()
 
-	client.OnReceive(0, int32(nh.ReplyCode_RPC_ERROR),
+	cli.OnReceive(0, int32(nh.ReplyCode_RPC_ERROR),
 		func(requestID uint32, reply *nh.RPCError) {
 			fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
 				time.Now().Format(time.RFC3339),
@@ -57,7 +57,7 @@ func main() {
 			os.Exit(1) // revive:disable-line:deep-exit
 		})
 
-	client.OnReceive(chatServiceCode, int32(roompb.ReplyCode_NEWS),
+	cli.OnReceive(chatServiceCode, int32(roompb.ReplyCode_NEWS),
 		func(requestID uint32, reply *roompb.News) {
 			if reply.FromId == "" {
 				fmt.Printf(">>> %s\n", reply.Content)
@@ -66,24 +66,24 @@ func main() {
 			}
 		})
 
-	client.Call(chatServiceCode, "Join",
+	cli.Call(chatServiceCode, "Join",
 		&roompb.JoinRequest{Name: name},
-		gateway.WithNoReply(),
-		gateway.WithServerStream(),
+		client.WithNoReply(),
+		client.WithServerStream(),
 	)
 
 	defer func() {
-		client.Call(chatServiceCode, "Leave",
+		cli.Call(chatServiceCode, "Leave",
 			&emptypb.Empty{},
-			gateway.WithNoReply(),
+			client.WithNoReply(),
 		)
 		time.Sleep(1 * time.Second)
 	}()
 
 	if say != "" {
-		client.Call(chatServiceCode, "Say",
+		cli.Call(chatServiceCode, "Say",
 			&roompb.SayRequest{Content: say},
-			gateway.WithNoReply(),
+			client.WithNoReply(),
 		)
 		time.Sleep(1 * time.Second)
 		return
