@@ -31,6 +31,9 @@ var (
 	// MaxMessageSize 客户端消息最大长度，默认64KB
 	MaxMessageSize = 64 * 1024
 
+	// WriteTimeout 网络连接写超时时间
+	WriteTimeout = 5 * time.Second
+
 	requestPool = gokit.NewPoolOf(func() *nh.Request {
 		return &nh.Request{}
 	})

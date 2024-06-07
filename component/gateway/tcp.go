@@ -148,7 +148,7 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 
 func (ts *tcpSession) Send(reply *nh.Reply) error {
 	return sendReply(reply, func(data []byte) error {
-		_ = ts.conn.SetWriteDeadline(time.Now().Add(writeWait))
+		_ = ts.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
 		_, err := ts.conn.Write(data)
 		if err == nil {
 			ts.lastRWTime.Store(time.Now())

@@ -219,12 +219,12 @@ func newWSClient(url string) (*wsClient, error) {
 }
 
 func (wc *wsClient) send(service int32, data []byte) error {
-	wc.conn.SetWriteDeadline(time.Now().Add(writeWait))
+	wc.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
 	return wc.conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
 func (wc *wsClient) ping() error {
-	return wc.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait))
+	return wc.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(WriteTimeout))
 }
 
 func (wc *wsClient) replyStream() <-chan *nh.Reply {

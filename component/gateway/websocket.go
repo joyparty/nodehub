@@ -21,17 +21,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var (
-	// Upgrader websocket upgrader
-	Upgrader = websocket.Upgrader{
-		HandshakeTimeout: 10 * time.Second,
-		ReadBufferSize:   1024,
-		WriteBufferSize:  1024,
-		WriteBufferPool:  &sync.Pool{},
-	}
-
-	writeWait = 5 * time.Second
-)
+// Upgrader websocket upgrader
+var Upgrader = websocket.Upgrader{
+	HandshakeTimeout: 10 * time.Second,
+	ReadBufferSize:   1024,
+	WriteBufferSize:  1024,
+	WriteBufferPool:  &sync.Pool{},
+}
 
 // wsServer websocket网关服务器
 //
@@ -228,7 +224,7 @@ func (ws *wsSession) Send(reply *nh.Reply) error {
 	ws.writeMux.Lock()
 	defer ws.writeMux.Unlock()
 
-	ws.conn.SetWriteDeadline(time.Now().Add(writeWait))
+	ws.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
 	err = ws.conn.WriteMessage(websocket.BinaryMessage, data)
 	if err == nil {
 		ws.lastRWTime.Store(time.Now())
