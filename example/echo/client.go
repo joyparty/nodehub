@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/client"
+	"github.com/joyparty/nodehub/component/gateway/client"
 	"github.com/joyparty/nodehub/example/echo/proto/authpb"
 	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/echo/proto/echopb"

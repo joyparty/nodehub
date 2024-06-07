@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/client"
+	"github.com/joyparty/nodehub/component/gateway/client"
 	"github.com/joyparty/nodehub/example/chat/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/chat/proto/roompb"
 	"github.com/joyparty/nodehub/proto/nh"
