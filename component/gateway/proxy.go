@@ -255,19 +255,6 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		if err := p.submitTask(func() {
 			defer requestPool.Put(req)
 
-			pass, err := p.opts.requestInterceptor(ctx, sess, req)
-			if err != nil || !pass {
-				if err != nil {
-					logger.Error("request interceptor",
-						"error", err,
-						"session", sess,
-						"req", req,
-					)
-				}
-
-				return
-			}
-
 			if err := p.handleRequest(ctx, sess, req); err != nil {
 				if s, ok := status.FromError(err); ok {
 					if s.Code() == codes.Unknown {
@@ -297,12 +284,17 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	var (
 		conn   *grpc.ClientConn
 		method string
-		start  = time.Now()
 	)
 
-	defer func() {
-		p.logRequest(ctx, sess, req, method, start, conn, err)
-	}()
+	logRequest := p.logRequest(ctx, sess, req)
+	defer func() { logRequest(conn, method, err) }()
+
+	pass, err := p.opts.requestInterceptor(ctx, sess, req)
+	if err != nil {
+		return fmt.Errorf("request interceptor, %w", err)
+	} else if !pass {
+		return errors.New("request interceptor denied")
+	}
 
 	desc, ok := p.opts.registry.GetGRPCDesc(req.GetServiceCode())
 	if !ok {
@@ -521,47 +513,43 @@ FINISH:
 	return
 }
 
-func (p *Proxy) logRequest(
-	ctx context.Context,
-	sess Session,
-	req *nh.Request,
-	method string,
-	start time.Time,
-	upstream *grpc.ClientConn,
-	err error,
-) {
-	if err == nil && p.opts.requestLogger == nil {
-		return
-	}
+func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) func(*grpc.ClientConn, string, error) {
+	start := time.Now()
 
-	logValues := []any{
-		"gateway", p.nodeID,
-		"session", sess,
-		"req", req,
-		"method", method,
-		"duration", time.Since(start).String(),
-	}
-
-	if upstream != nil {
-		logValues = append(logValues, "upstream", upstream.Target())
-	}
-
-	if md, ok := metadata.FromOutgoingContext(ctx); ok {
-		if v := md.Get(rpc.MDTransactionID); len(v) > 0 {
-			logValues = append(logValues, "transID", v[0])
+	return func(upstream *grpc.ClientConn, method string, err error) {
+		if err == nil && p.opts.requestLogger == nil {
+			return
 		}
-	}
 
-	if err != nil {
-		logValues = append(logValues, "error", err)
+		logValues := []any{
+			"gateway", p.nodeID,
+			"session", sess,
+			"req", req,
+			"method", method,
+			"duration", time.Since(start).String(),
+		}
 
-		if p.opts.requestLogger == nil {
-			logger.Error("handle request", logValues...)
+		if upstream != nil {
+			logValues = append(logValues, "upstream", upstream.Target())
+		}
+
+		if md, ok := metadata.FromOutgoingContext(ctx); ok {
+			if v := md.Get(rpc.MDTransactionID); len(v) > 0 {
+				logValues = append(logValues, "transID", v[0])
+			}
+		}
+
+		if err != nil {
+			logValues = append(logValues, "error", err)
+
+			if p.opts.requestLogger == nil {
+				logger.Error("handle request", logValues...)
+			} else {
+				p.opts.requestLogger.Error("handle request", logValues...)
+			}
 		} else {
-			p.opts.requestLogger.Error("handle request", logValues...)
+			p.opts.requestLogger.Info("handle request", logValues...)
 		}
-	} else {
-		p.opts.requestLogger.Info("handle request", logValues...)
 	}
 }
 
