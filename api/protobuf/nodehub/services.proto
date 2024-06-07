@@ -8,19 +8,26 @@ import "google/protobuf/empty.proto";
 import "nodehub/client.proto";
 
 // 网关功能接口，供内部服务调用
+// 每个网关节点都会自动内置此服务
 service Gateway {
 	// 会话是否存在
 	rpc IsSessionExist (IsSessionExistRequest) returns (IsSessionExistResponse) {}
+
 	// 会话数量
 	rpc SessionCount (google.protobuf.Empty) returns (SessionCountResponse) {}
+
 	// 关闭会话连接，踢下线
 	rpc CloseSession (CloseSessionRequest) returns (CloseSessionResponse) {}
+
 	// 修改状态服务路由
 	rpc SetServiceRoute (SetServiceRouteRequest) returns (google.protobuf.Empty) {}
+
 	// 删除状态服务路由
 	rpc RemoveServiceRoute (RemoveServiceRouteRequest) returns (google.protobuf.Empty) {}
+
 	// 替换状态服务路由节点
 	rpc ReplaceServiceRoute (ReplaceServiceRouteRequest) returns (google.protobuf.Empty) {}
+
 	// 向指定会话推送消息
 	rpc SendReply (SendReplyRequest) returns (SendReplyResponse) {}
 }
@@ -70,4 +77,18 @@ message CloseSessionRequest {
 message CloseSessionResponse {
 	// success 为 false 时，表示会话不存在
 	bool success = 1;
+}
+
+// 节点管理接口，供内部服务调用
+// 每个内部服务节点都会内置此服务
+service Node {
+	// 改变节点状态
+	rpc ChangeState (ChangeStateRequest) returns (google.protobuf.Empty) {}
+
+	// 关闭服务
+	rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+message ChangeStateRequest {
+	string state = 1;
 }
