@@ -18,7 +18,6 @@ import (
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -27,6 +26,7 @@ var (
 	useQUIC    bool
 
 	echoServiceCode = int32(clusterpb.Services_ECHO)
+	authServiceCode = int32(clusterpb.Services_AUTH)
 )
 
 func init() {
@@ -52,44 +52,48 @@ func main() {
 		endpoint = fmt.Sprintf("ws://%s/", serverAddr)
 	}
 
-	client := newEchoClient(endpoint)
+	client := newClient(endpoint)
 	defer client.Close()
 
-	client.OnReceive(int32(echopb.ReplyCode_MSG), func(requestID uint32, reply *echopb.Msg) {
-		fmt.Printf("[%s] #%03d receive: %s\n", time.Now().Format(time.RFC3339), requestID, reply.GetContent())
+	// 网关返回的RPC错误
+	client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
+		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
+			time.Now().Format(time.RFC3339),
+			requestID,
+			reply.GetRequestService(),
+			reply.GetRequestMethod(),
+			codes.Code(reply.GetStatus().GetCode()),
+			reply.GetStatus().GetMessage(),
+		)
+		os.Exit(1)
+	})
+
+	// echo接口返回
+	client.OnReceive(echoServiceCode, int32(echopb.ReplyCode_MSG), func(requestID uint32, reply *echopb.Msg) {
+		logger.Info("receive reply", "requestID", requestID, "content", reply.GetContent())
 	})
 
 	// 收到鉴权成功消息后开始正式发送消息
-	client.Client.OnReceive(
-		int32(clusterpb.Services_AUTH),
-		int32(authpb.Protocol_AUTHORIZE_ACK),
+	client.OnReceive(authServiceCode, int32(authpb.Protocol_AUTHORIZE_ACK),
 		func(requestID uint32, msg *authpb.AuthorizeAck) {
 			for {
-				gokit.Must(
-					client.Call("Send", &echopb.Msg{
-						Content: "hello world!",
-					}),
-				)
+				client.Call(echoServiceCode, "Send", &echopb.Msg{
+					Content: "hello world!",
+				})
 				time.Sleep(1 * time.Second)
 			}
 		},
 	)
 
 	// 连接后首先发送鉴权消息
-	gokit.Must(
-		client.Client.Call(0, "Authorize", &authpb.AuthorizeToken{
-			Token: "0d8b750e-35e8-4f98-b032-f389d401213e",
-		}),
-	)
+	client.Call(0, "Authorize", &authpb.AuthorizeToken{
+		Token: "0d8b750e-35e8-4f98-b032-f389d401213e",
+	})
 
 	<-context.Background().Done()
 }
 
-type echoClient struct {
-	*gateway.Client
-}
-
-func newEchoClient(endpoint string) *echoClient {
+func newClient(endpoint string) *gateway.MustClient {
 	var client *gateway.Client
 	if strings.HasPrefix(endpoint, "quic://") {
 		tlsConfig := &tls.Config{
@@ -101,29 +105,5 @@ func newEchoClient(endpoint string) *echoClient {
 		client = gokit.MustReturn(gateway.NewClient(endpoint))
 	}
 
-	ec := &echoClient{
-		Client: client,
-	}
-
-	ec.Client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
-		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
-			time.Now().Format(time.RFC3339),
-			requestID,
-			reply.GetRequestService(),
-			reply.GetRequestMethod(),
-			codes.Code(reply.GetStatus().GetCode()),
-			reply.GetStatus().GetMessage(),
-		)
-		os.Exit(1) // revive:disable-line:deep-exit
-	})
-
-	return ec
-}
-
-func (c *echoClient) Call(method string, arg proto.Message, options ...gateway.CallOption) error {
-	return c.Client.Call(echoServiceCode, method, arg, options...)
-}
-
-func (c *echoClient) OnReceive(messageType int32, handler any) {
-	c.Client.OnReceive(echoServiceCode, messageType, handler)
+	return &gateway.MustClient{Client: client}
 }

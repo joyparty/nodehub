@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/joyparty/nodehub"
 	"github.com/joyparty/nodehub/cluster"
@@ -98,7 +97,5 @@ type echoService struct {
 }
 
 func (es *echoService) Send(ctx context.Context, msg *echopb.Msg) (*echopb.Msg, error) {
-	fmt.Printf("%s [%s]: receive msg: %s\n", time.Now().Format(time.RFC3339), listen, msg.GetContent())
-
 	return msg, nil
 }

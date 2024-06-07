@@ -482,6 +482,21 @@ func (c *Client) run() {
 	}
 }
 
+// MustClient 使用must方法处理错误的客户端
+type MustClient struct {
+	*Client
+}
+
+// Call 发送请求
+func (c *MustClient) Call(serviceCode int32, method string, arg proto.Message, options ...CallOption) {
+	gokit.Must(c.Client.Call(serviceCode, method, arg, options...))
+}
+
+// CallStream 调用stream接口
+func (c *MustClient) CallStream(serviceCode int32, method string, arg proto.Message, options ...CallOption) {
+	gokit.Must(c.Client.CallStream(serviceCode, method, arg, options...))
+}
+
 // CallOption 调用选项
 type CallOption func(req *nh.Request)
 
