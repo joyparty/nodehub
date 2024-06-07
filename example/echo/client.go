@@ -56,7 +56,7 @@ func main() {
 	defer client.Close()
 
 	// 网关返回的RPC错误
-	client.OnReceive(0, int32(nh.Protocol_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
+	client.OnReceive(0, int32(nh.ReplyCode_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
 		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
 			time.Now().Format(time.RFC3339),
 			requestID,

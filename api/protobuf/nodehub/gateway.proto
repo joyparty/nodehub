@@ -8,7 +8,7 @@ import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 import "nodehub/client.proto";
 
-enum Protocol {
+enum ReplyCode {
 	UNSPECIFIED = 0;
 	RPC_ERROR = 1;
 }

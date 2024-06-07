@@ -262,7 +262,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 						s = status.New(codes.Unknown, "unknown error")
 					}
 
-					reply, _ := nh.NewReply(int32(nh.Protocol_RPC_ERROR), &nh.RPCError{
+					reply, _ := nh.NewReply(int32(nh.ReplyCode_RPC_ERROR), &nh.RPCError{
 						RequestService: req.GetServiceCode(),
 						RequestMethod:  req.GetMethod(),
 						Status:         s.Proto(),
