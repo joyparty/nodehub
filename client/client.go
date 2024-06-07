@@ -3,10 +3,7 @@ package client
 import (
 	"context"
 	"crypto/tls"
-	"encoding/binary"
-	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"reflect"
@@ -65,6 +62,9 @@ func (tc *tcpClient) replyStream() <-chan *nh.Reply {
 	go func() {
 		defer close(ch)
 
+		msg := codec.GetMessage()
+		defer codec.PutMessage(msg)
+
 		for {
 			select {
 			case <-tc.done:
@@ -72,25 +72,12 @@ func (tc *tcpClient) replyStream() <-chan *nh.Reply {
 			default:
 			}
 
-			sizeFrame := make([]byte, codec.SizeLen)
-			if _, err := io.ReadFull(tc.conn, sizeFrame); err != nil {
-				if errors.Is(err, net.ErrClosed) {
-					return
-				}
-				panic(fmt.Errorf("read size frame, %w", err))
-			}
-			size := int(binary.BigEndian.Uint32(sizeFrame))
-			if size == 0 { // ping
-				continue
-			}
-
-			data := make([]byte, size)
-			if _, err := io.ReadFull(tc.conn, data); err != nil {
-				panic(fmt.Errorf("read data frame, %w", err))
+			if err := codec.ReadMessage(tc.conn, msg); err != nil {
+				panic(err)
 			}
 
 			reply := &nh.Reply{}
-			if err := proto.Unmarshal(data, reply); err != nil {
+			if err := proto.Unmarshal(msg.Bytes(), reply); err != nil {
 				panic(fmt.Errorf("unmarshal reply, %w", err))
 			}
 
@@ -158,6 +145,9 @@ func (qc *quicClient) replyStream() <-chan *nh.Reply {
 
 	for _, s := range qc.streams {
 		go func(s quic.Stream) {
+			msg := codec.GetMessage()
+			defer codec.PutMessage(msg)
+
 			for {
 				select {
 				case <-qc.done:
@@ -165,25 +155,12 @@ func (qc *quicClient) replyStream() <-chan *nh.Reply {
 				default:
 				}
 
-				sizeFrame := make([]byte, codec.SizeLen)
-				if _, err := io.ReadFull(s, sizeFrame); err != nil {
-					if errors.Is(err, net.ErrClosed) {
-						return
-					}
-					panic(fmt.Errorf("read size frame, %w", err))
-				}
-				size := int(binary.BigEndian.Uint32(sizeFrame))
-				if size == 0 { // ping
-					continue
-				}
-
-				data := make([]byte, size)
-				if _, err := io.ReadFull(s, data); err != nil {
-					panic(fmt.Errorf("read data frame, %w", err))
+				if err := codec.ReadMessage(s, msg); err != nil {
+					panic(err)
 				}
 
 				reply := &nh.Reply{}
-				if err := proto.Unmarshal(data, reply); err != nil {
+				if err := proto.Unmarshal(msg.Bytes(), reply); err != nil {
 					panic(fmt.Errorf("unmarshal reply, %w", err))
 				}
 

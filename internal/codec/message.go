@@ -71,6 +71,11 @@ func (msg Message) Len() int {
 	return msg.size
 }
 
+// Reset 重置
+func (msg *Message) Reset() {
+	msg.size = 0
+}
+
 // ReadMessage 读消息
 func ReadMessage(r io.Reader, msg *Message) error {
 	if _, err := io.ReadFull(r, msg.data[:SizeLen]); err != nil {
@@ -111,7 +116,7 @@ type messagePool struct {
 func (p *messagePool) Get() *Message {
 	select {
 	case msg := <-p.pool:
-		msg.size = 0
+		msg.Reset()
 		return msg
 	default:
 		return &Message{
