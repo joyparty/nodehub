@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/cluster"
+	"github.com/joyparty/nodehub/internal/codec"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
@@ -122,7 +123,7 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (sess Ses
 		return nil, fmt.Errorf("upgrade websocket, %w", err)
 	}
 
-	wsConn.SetReadLimit(int64(MaxMessageSize))
+	wsConn.SetReadLimit(int64(codec.MaxMessageSize))
 	return newWsSession(wsConn), nil
 }
 

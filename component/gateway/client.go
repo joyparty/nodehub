@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/joyparty/gokit"
+	"github.com/joyparty/nodehub/internal/codec"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/quic-go/quic-go"
@@ -46,7 +47,7 @@ func newTCPClient(addr string) (*tcpClient, error) {
 }
 
 func (tc *tcpClient) send(service int32, data []byte) error {
-	return sendBytes(data, func(data []byte) error {
+	return codec.SendBytes(data, func(data []byte) error {
 		_, err := tc.conn.Write(data)
 		return err
 	})
@@ -69,7 +70,7 @@ func (tc *tcpClient) replyStream() <-chan *nh.Reply {
 			default:
 			}
 
-			sizeFrame := make([]byte, sizeLen)
+			sizeFrame := make([]byte, codec.SizeLen)
 			if _, err := io.ReadFull(tc.conn, sizeFrame); err != nil {
 				if errors.Is(err, net.ErrClosed) {
 					return
@@ -140,7 +141,7 @@ func newQUICClient(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) 
 func (qc *quicClient) send(service int32, data []byte) error {
 	s := qc.streams[int(service)%len(qc.streams)]
 
-	return sendBytes(data, func(data []byte) error {
+	return codec.SendBytes(data, func(data []byte) error {
 		_, err := s.Write(data)
 		return err
 	})
@@ -162,7 +163,7 @@ func (qc *quicClient) replyStream() <-chan *nh.Reply {
 				default:
 				}
 
-				sizeFrame := make([]byte, sizeLen)
+				sizeFrame := make([]byte, codec.SizeLen)
 				if _, err := io.ReadFull(s, sizeFrame); err != nil {
 					if errors.Is(err, net.ErrClosed) {
 						return

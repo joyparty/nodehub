@@ -7,6 +7,7 @@ import (
 
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/event"
+	"github.com/joyparty/nodehub/internal/codec"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/multicast"
 	"github.com/joyparty/nodehub/proto/nh"
@@ -186,4 +187,9 @@ func WithRequestDeadline(deadline time.Duration) Option {
 	return func(opt *Options) {
 		opt.requestDeadline = deadline
 	}
+}
+
+// SetMaxMessageSize 设置客户端消息最大长度，在网关启动之前调用才有效
+func SetMaxMessageSize(size int) {
+	codec.MaxMessageSize = size
 }

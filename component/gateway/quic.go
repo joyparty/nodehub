@@ -14,6 +14,7 @@ import (
 
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/cluster"
+	"github.com/joyparty/nodehub/internal/codec"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
@@ -101,7 +102,7 @@ type quicSession struct {
 	id         string
 	conn       quic.Connection
 	streams    *quicStreams
-	msgC       chan *message
+	msgC       chan *codec.Message
 	md         metadata.MD
 	lastRWTime gokit.ValueOf[time.Time]
 	closeOnce  sync.Once
@@ -117,7 +118,7 @@ func newQuicSession(conn quic.Connection) *quicSession {
 		lastRWTime: gokit.NewValueOf[time.Time](),
 		done:       make(chan struct{}),
 
-		msgC: make(chan *message),
+		msgC: make(chan *codec.Message),
 	}
 	qs.lastRWTime.Store(time.Now())
 
@@ -197,8 +198,8 @@ func (qs *quicSession) handleRequest() {
 				case <-qs.done:
 					return
 				default:
-					msg := msgPool.Get()
-					if err := readMessage(s, msg); err != nil {
+					msg := codec.GetMessage()
+					if err := codec.ReadMessage(s, msg); err != nil {
 						return err
 					}
 					qs.lastRWTime.Store(time.Now())
@@ -221,12 +222,12 @@ func (qs *quicSession) Recv(req *nh.Request) error {
 			return io.EOF
 		}
 
-		if msg.size == 0 { // ping
-			msgPool.Put(msg)
+		if msg.Len() == 0 { // ping
+			codec.PutMessage(msg)
 			continue
 		}
 
-		defer msgPool.Put(msg)
+		defer codec.PutMessage(msg)
 		if err := proto.Unmarshal(msg.Bytes(), req); err != nil {
 			return fmt.Errorf("unmarshal request, %w", err)
 		}
@@ -240,7 +241,7 @@ func (qs *quicSession) Send(reply *nh.Reply) error {
 		return errors.New("no available stream")
 	}
 
-	return sendReply(reply, func(data []byte) error {
+	return codec.SendReply(reply, func(data []byte) error {
 		_ = s.SetWriteDeadline(time.Now().Add(WriteTimeout))
 		_, err := s.Write(data)
 		if err == nil {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/cluster"
+	"github.com/joyparty/nodehub/internal/codec"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
@@ -128,16 +129,16 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 		}
 	}()
 
-	msg := msgPool.Get()
-	defer msgPool.Put(msg)
+	msg := codec.GetMessage()
+	defer codec.PutMessage(msg)
 
 	for {
-		if err = readMessage(ts.conn, msg); err != nil {
+		if err = codec.ReadMessage(ts.conn, msg); err != nil {
 			return fmt.Errorf("read message, %w", err)
 		}
 		ts.lastRWTime.Store(time.Now())
 
-		if msg.size > 0 {
+		if msg.Len() > 0 {
 			if err := proto.Unmarshal(msg.Bytes(), req); err != nil {
 				return fmt.Errorf("unmarshal request, %w", err)
 			}
@@ -147,7 +148,7 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 }
 
 func (ts *tcpSession) Send(reply *nh.Reply) error {
-	return sendReply(reply, func(data []byte) error {
+	return codec.SendReply(reply, func(data []byte) error {
 		_ = ts.conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
 		_, err := ts.conn.Write(data)
 		if err == nil {
