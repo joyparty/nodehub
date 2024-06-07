@@ -252,23 +252,21 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 			return
 		}
 
-		pass, err := p.opts.requestInterceptor(ctx, sess, req)
-		if err != nil || !pass {
-			requestPool.Put(req)
-
-			if err != nil {
-				logger.Error("request interceptor",
-					"error", err,
-					"session", sess,
-					"req", req,
-				)
-			}
-
-			continue
-		}
-
 		if err := p.submitTask(func() {
 			defer requestPool.Put(req)
+
+			pass, err := p.opts.requestInterceptor(ctx, sess, req)
+			if err != nil || !pass {
+				if err != nil {
+					logger.Error("request interceptor",
+						"error", err,
+						"session", sess,
+						"req", req,
+					)
+				}
+
+				return
+			}
 
 			if err := p.handleRequest(ctx, sess, req); err != nil {
 				if s, ok := status.FromError(err); ok {
