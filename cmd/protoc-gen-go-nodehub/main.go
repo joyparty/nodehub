@@ -43,7 +43,7 @@ func generateFile(
 		return nil
 	}
 
-	services := map[*protogen.Service]map[string]protoreflect.EnumNumber{}
+	services := map[*protogen.Service]map[string]protoreflect.Value{}
 	for _, s := range file.Services {
 		codes := getReplyCodes(s, extTypes)
 		if len(codes) > 0 {
@@ -77,17 +77,17 @@ func generateFile(
 	return g
 }
 
-func genReplyCodes(g *protogen.GeneratedFile, s *protogen.Service, codes map[string]protoreflect.EnumNumber) {
+func genReplyCodes(g *protogen.GeneratedFile, s *protogen.Service, codes map[string]protoreflect.Value) {
 	g.P("// ", s.GoName, "_ReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code")
 	g.P("var ", s.GoName, "_ReplyCodes = map[string]int32{")
 	for methodFullname, code := range codes {
-		g.P(fmt.Sprintf("\t%q: %d,", methodFullname, code))
+		g.P(fmt.Sprintf("\t%q: %v,", methodFullname, code.Interface()))
 	}
 	g.P("}")
 }
 
-func getReplyCodes(s *protogen.Service, extTypes *protoregistry.Types) map[string]protoreflect.EnumNumber {
-	getCode := func(method *protogen.Method, extTypes *protoregistry.Types) (code protoreflect.EnumNumber, ok bool) {
+func getReplyCodes(s *protogen.Service, extTypes *protoregistry.Types) map[string]protoreflect.Value {
+	getCode := func(method *protogen.Method, extTypes *protoregistry.Types) (code protoreflect.Value, ok bool) {
 		options := method.Output.Desc.Options().(*descriptorpb.MessageOptions)
 		if options == nil {
 			return
@@ -101,7 +101,7 @@ func getReplyCodes(s *protogen.Service, extTypes *protoregistry.Types) map[strin
 		options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 			if fd.IsExtension() &&
 				strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionName)) {
-				code = v.Enum()
+				code = v
 				ok = true
 
 				return false
@@ -112,7 +112,7 @@ func getReplyCodes(s *protogen.Service, extTypes *protoregistry.Types) map[strin
 		return
 	}
 
-	codes := make(map[string]protoreflect.EnumNumber)
+	codes := make(map[string]protoreflect.Value)
 
 	for _, method := range s.Methods {
 		if code, ok := getCode(method, extTypes); ok {
