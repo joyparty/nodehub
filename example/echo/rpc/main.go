@@ -67,7 +67,7 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 	gs := rpc.NewGRPCServer(listen,
 		grpc.ChainUnaryInterceptor(
 			rpc.LogUnary(slog.Default()),
-			rpc.PackReply(echopb.Echo_ReplyCodes),
+			rpc.PackReply(echopb.Echo_MethodReplyCodes),
 		),
 	)
 

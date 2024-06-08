@@ -6,6 +6,7 @@ option go_package = "github.com/joyparty/nodehub/example/chat/proto/roompb";
 
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/empty.proto";
+import "cluster/services.proto";
 
 extend google.protobuf.MessageOptions {
 	ReplyCode reply_code = 60000;
@@ -17,6 +18,8 @@ enum ReplyCode {
 }
 
 service Room {
+	option (cluster.service_code) = ROOM;
+
 	rpc Join(JoinRequest) returns (stream News);
 	rpc Say(SayRequest) returns (google.protobuf.Empty);
 	rpc Leave(google.protobuf.Empty) returns (google.protobuf.Empty);

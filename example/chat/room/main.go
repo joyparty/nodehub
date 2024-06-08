@@ -66,11 +66,11 @@ func newGRPCServer() *rpc.GRPCServer {
 	server := rpc.NewGRPCServer(listenAddr,
 		grpc.ChainUnaryInterceptor(
 			rpc.LogUnary(slog.Default()),
-			rpc.PackReply(roompb.Room_ReplyCodes),
+			rpc.PackReply(roompb.Room_MethodReplyCodes),
 		),
 		grpc.ChainStreamInterceptor(
 			rpc.LogStream(slog.Default()),
-			rpc.PackReplyStream(roompb.Room_ReplyCodes),
+			rpc.PackReplyStream(roompb.Room_MethodReplyCodes),
 		),
 	)
 

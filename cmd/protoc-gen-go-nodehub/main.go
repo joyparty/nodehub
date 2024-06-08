@@ -13,8 +13,23 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// optionName 自定义配置名称
-const optionName = "reply_code"
+const (
+	optionReplyCode   = "reply_code"
+	optionServiceCode = "service_code"
+
+	reflectPackage = protogen.GoImportPath("reflect")
+)
+
+type Method struct {
+	M         *protogen.Method
+	ReplyCode protoreflect.Value
+}
+
+type Service struct {
+	S       *protogen.Service
+	Code    protoreflect.Value
+	Methods []Method
+}
 
 func main() {
 	protogen.Options{}.Run(func(gen *protogen.Plugin) error {
@@ -34,23 +49,12 @@ func main() {
 	})
 }
 
-func generateFile(
-	gen *protogen.Plugin,
-	file *protogen.File,
-	extTypes *protoregistry.Types,
-) *protogen.GeneratedFile {
+func generateFile(gen *protogen.Plugin, file *protogen.File, extTypes *protoregistry.Types) *protogen.GeneratedFile {
 	if len(file.Services) == 0 {
 		return nil
 	}
 
-	services := map[*protogen.Service]map[string]protoreflect.Value{}
-	for _, s := range file.Services {
-		codes := getReplyCodes(s, extTypes)
-		if len(codes) > 0 {
-			services[s] = codes
-		}
-	}
-
+	services := parseServices(file, extTypes)
 	if len(services) == 0 {
 		return nil
 	}
@@ -70,58 +74,125 @@ func generateFile(
 	g.P("package ", file.GoPackageName)
 	g.P()
 
-	for s, codes := range services {
-		genReplyCodes(g, s, codes)
-	}
+	genReplyCodes(g, services)
+	genReplyTypes(g, services)
 
 	return g
 }
 
-func genReplyCodes(g *protogen.GeneratedFile, s *protogen.Service, codes map[string]protoreflect.Value) {
-	g.P("// ", s.GoName, "_ReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code")
-	g.P("var ", s.GoName, "_ReplyCodes = map[string]int32{")
-	for methodFullname, code := range codes {
-		g.P(fmt.Sprintf("\t%q: %v,", methodFullname, code.Interface()))
-	}
-	g.P("}")
-}
+func genReplyCodes(g *protogen.GeneratedFile, services []Service) {
+	for _, s := range services {
+		g.P("// ", s.S.GoName, "_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code")
+		g.P("var ", s.S.GoName, "_MethodReplyCodes = map[string]int32{")
 
-func getReplyCodes(s *protogen.Service, extTypes *protoregistry.Types) map[string]protoreflect.Value {
-	getCode := func(method *protogen.Method, extTypes *protoregistry.Types) (code protoreflect.Value, ok bool) {
-		options := method.Output.Desc.Options().(*descriptorpb.MessageOptions)
-		if options == nil {
-			return
+		for _, m := range s.Methods {
+			methodName := fmt.Sprintf("/%s/%s", s.S.Desc.FullName(), m.M.GoName)
+			g.P(fmt.Sprintf("\t%q: %v,", methodName, m.ReplyCode.Interface()))
 		}
 
-		data := gokit.MustReturn(proto.Marshal(options))
+		g.P("}")
+	}
+}
 
-		options.Reset()
-		gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
+func genReplyTypes(g *protogen.GeneratedFile, services []Service) {
+	for _, s := range services {
+		done := map[protogen.GoIdent]struct{}{}
 
-		options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-			if fd.IsExtension() &&
-				strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionName)) {
-				code = v
-				ok = true
+		g.P()
+		g.P("// ", s.S.GoName, "_ReplyTypes 每个返回值类型的service_code和reply_code")
+		g.P("var ", s.S.GoName, "_ReplyTypes = map[", reflectPackage.Ident("Type"), "][2]int32{")
 
-				return false
+		for _, m := range s.Methods {
+			outputType := m.M.Output.GoIdent
+			if _, ok := done[outputType]; !ok {
+				g.P(reflectPackage.Ident("TypeOf"), "(&", outputType, "{}): {", s.Code.Interface(), ", ", m.ReplyCode.Interface(), "},")
+				done[outputType] = struct{}{}
 			}
-			return true
-		})
+		}
 
+		g.P("}")
+	}
+}
+
+func parseServices(f *protogen.File, extTypes *protoregistry.Types) []Service {
+	services := make([]Service, 0, len(f.Services))
+
+	for _, s := range f.Services {
+		serviceCode, ok := getServiceCode(s, extTypes)
+		if !ok {
+			panic(fmt.Sprintf("service %q request service_code option", s.Desc.FullName()))
+		}
+
+		methods := make([]Method, 0, len(s.Methods))
+		for _, m := range s.Methods {
+			if replyCode, ok := getReplyCode(m, extTypes); ok {
+				methods = append(methods, Method{
+					M:         m,
+					ReplyCode: replyCode,
+				})
+			}
+		}
+
+		if len(methods) > 0 {
+			services = append(services, Service{
+				S:       s,
+				Code:    serviceCode,
+				Methods: methods,
+			})
+		}
+	}
+
+	return services
+}
+
+func getServiceCode(s *protogen.Service, extTypes *protoregistry.Types) (val protoreflect.Value, ok bool) {
+	options := s.Desc.Options().(*descriptorpb.ServiceOptions)
+	if options == nil {
+		return protoreflect.ValueOf(nil), false
+	}
+
+	data := gokit.MustReturn(proto.Marshal(options))
+
+	options.Reset()
+	gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
+
+	options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		if fd.IsExtension() &&
+			strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionServiceCode)) {
+			val = v
+			ok = true
+
+			return false
+		}
+		return true
+	})
+
+	return
+}
+
+func getReplyCode(m *protogen.Method, extTypes *protoregistry.Types) (code protoreflect.Value, ok bool) {
+	options := m.Output.Desc.Options().(*descriptorpb.MessageOptions)
+	if options == nil {
 		return
 	}
 
-	codes := make(map[string]protoreflect.Value)
+	data := gokit.MustReturn(proto.Marshal(options))
 
-	for _, method := range s.Methods {
-		if code, ok := getCode(method, extTypes); ok {
-			methodFullname := fmt.Sprintf("/%s/%s", s.Desc.FullName(), method.Desc.Name())
-			codes[methodFullname] = code
+	options.Reset()
+	gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
+
+	options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		if fd.IsExtension() &&
+			strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionReplyCode)) {
+			code = v
+			ok = true
+
+			return false
 		}
-	}
+		return true
+	})
 
-	return codes
+	return
 }
 
 func registerAllExtensions(extTypes *protoregistry.Types, descs interface {
