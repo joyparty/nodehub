@@ -7,7 +7,11 @@ option go_package = "github.com/joyparty/nodehub/example/echo/proto/clusterpb";
 import "google/protobuf/descriptor.proto";
 
 extend google.protobuf.ServiceOptions {
-	Services service_code = 50000;
+	Services service_code = 51000;
+}
+
+extend google.protobuf.MessageOptions {
+	Services m_service_code = 51001;
 }
 
 enum Services {

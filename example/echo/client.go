@@ -74,7 +74,7 @@ func main() {
 	})
 
 	// 收到鉴权成功消息后开始正式发送消息
-	cli.OnReceive(authServiceCode, int32(authpb.Protocol_AUTHORIZE_ACK),
+	cli.OnReceive(authServiceCode, int32(authpb.ReplyCode_AUTHORIZE_ACK),
 		func(requestID uint32, msg *authpb.AuthorizeAck) {
 			for {
 				cli.Call(echoServiceCode, "Send", &echopb.Msg{

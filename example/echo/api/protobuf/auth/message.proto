@@ -4,7 +4,14 @@ package auth;
 
 option go_package = "github.com/joyparty/nodehub/example/echo/proto/authpb";
 
-enum Protocol {
+import "cluster/services.proto";
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MessageOptions {
+	ReplyCode reply_code = 60000;
+}
+
+enum ReplyCode {
 	UNSPECIFIED = 0;
 	AUTHORIZE_ACK = 1;
 }
@@ -14,5 +21,8 @@ message AuthorizeToken {
 }
 
 message AuthorizeAck {
+	option (cluster.m_service_code) = AUTH;
+	option (reply_code) = AUTHORIZE_ACK;
+
 	string user_id = 1;
 }

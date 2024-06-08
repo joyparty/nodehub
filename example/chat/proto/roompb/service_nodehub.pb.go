@@ -3,16 +3,7 @@
 
 package roompb
 
-import (
-	reflect "reflect"
-)
-
 // Room_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code
 var Room_MethodReplyCodes = map[string]int32{
 	"/room.Room/Join": 1,
-}
-
-// Room_ReplyTypes 每个返回值类型的service_code和reply_code
-var Room_ReplyTypes = map[reflect.Type][2]int32{
-	reflect.TypeOf(&News{}): {1, 1},
 }

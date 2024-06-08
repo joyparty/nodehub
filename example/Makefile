@@ -7,16 +7,6 @@ ROOT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 .PHONY: build_protobuf
 build_protobuf:
 	(cd $(ROOT_DIR) && protoc \
-		--proto_path=./chat/api/protobuf \
-		--go_out=./chat/proto \
-		--go_opt=module=github.com/joyparty/nodehub/example/chat/proto \
-		--go-grpc_out=./chat/proto \
-		--go-grpc_opt=module=github.com/joyparty/nodehub/example/chat/proto \
-		--go-nodehub_out=./chat/proto \
-		--go-nodehub_opt=module=github.com/joyparty/nodehub/example/chat/proto \
-		./chat/api/protobuf/**/*.proto)
-
-	(cd $(ROOT_DIR) && protoc \
 		--proto_path=./echo/api/protobuf \
 		--proto_path=./../api/protobuf \
 		--go_out=./echo/proto \
@@ -26,6 +16,16 @@ build_protobuf:
 		--go-nodehub_out=./echo/proto \
 		--go-nodehub_opt=module=github.com/joyparty/nodehub/example/echo/proto \
 		./echo/api/protobuf/**/*.proto)
+
+	(cd $(ROOT_DIR) && protoc \
+		--proto_path=./chat/api/protobuf \
+		--go_out=./chat/proto \
+		--go_opt=module=github.com/joyparty/nodehub/example/chat/proto \
+		--go-grpc_out=./chat/proto \
+		--go-grpc_opt=module=github.com/joyparty/nodehub/example/chat/proto \
+		--go-nodehub_out=./chat/proto \
+		--go-nodehub_opt=module=github.com/joyparty/nodehub/example/chat/proto \
+		./chat/api/protobuf/**/*.proto)
 
 .PHONY: run_echo_gateway
 run_echo_gateway:

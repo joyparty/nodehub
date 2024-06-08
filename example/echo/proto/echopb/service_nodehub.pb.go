@@ -3,16 +3,7 @@
 
 package echopb
 
-import (
-	reflect "reflect"
-)
-
 // Echo_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code
 var Echo_MethodReplyCodes = map[string]int32{
 	"/echo.Echo/Send": 1,
-}
-
-// Echo_ReplyTypes 每个返回值类型的service_code和reply_code
-var Echo_ReplyTypes = map[reflect.Type][2]int32{
-	reflect.TypeOf(&Msg{}): {2, 1},
 }

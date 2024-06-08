@@ -23,7 +23,6 @@ import (
 	"github.com/joyparty/nodehub/component/gateway"
 	"github.com/joyparty/nodehub/event"
 	"github.com/joyparty/nodehub/example/echo/proto/authpb"
-	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/multicast"
 	"github.com/joyparty/nodehub/proto/nh"
@@ -277,12 +276,9 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 	}
 
 	if err == nil {
-		reply := gokit.MustReturn(
-			nh.NewReply(int32(authpb.Protocol_AUTHORIZE_ACK), &authpb.AuthorizeAck{
-				UserId: userID,
-			}),
-		)
-		reply.ServiceCode = int32(clusterpb.Services_AUTH)
+		reply := gokit.MustReturn(authpb.PackAuthorizeAck(&authpb.AuthorizeAck{
+			UserId: userID,
+		}))
 
 		gokit.Must(sess.Send(reply))
 	}

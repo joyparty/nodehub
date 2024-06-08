@@ -9,7 +9,7 @@ import "cluster/services.proto";
 
 // 如果配置了reply_code，中间件会把返回值自动打包为nodehub.Reply
 extend google.protobuf.MessageOptions {
-	ReplyCode reply_code = 60000;
+	ReplyCode reply_code = 60001;
 }
 
 enum ReplyCode {
