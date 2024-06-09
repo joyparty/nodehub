@@ -8,7 +8,8 @@ import "cluster/services.proto";
 import "google/protobuf/descriptor.proto";
 
 extend google.protobuf.MessageOptions {
-	ReplyCode reply_code = 60000;
+	cluster.Services reply_service = 60000;
+	ReplyCode reply_code = 60001;
 }
 
 enum ReplyCode {
@@ -21,7 +22,7 @@ message AuthorizeToken {
 }
 
 message AuthorizeAck {
-	option (cluster.m_service_code) = AUTH;
+	option (reply_service) = AUTH;
 	option (reply_code) = AUTHORIZE_ACK;
 
 	string user_id = 1;

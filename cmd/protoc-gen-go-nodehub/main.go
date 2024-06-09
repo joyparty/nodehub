@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	optionReplyCode          = "reply_code"
-	optionServiceCode        = "service_code"
-	optionMessageServiceCode = "m_service_code"
+	optionServiceCode  = "service_code"
+	optionReplyCode    = "reply_code"
+	optionReplyService = "reply_service"
 )
 
 var extTypes = new(protoregistry.Types)
@@ -52,8 +52,8 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 	g.P()
 
 	var ok bool
-	ok = genReplyCodes(file, g) || ok
-	ok = genMessagePacker(file, g) || ok
+	ok = genMethodReplyCodes(file, g) || ok
+	ok = genPackMessages(file, g) || ok
 	if !ok {
 		g.Skip()
 	}

@@ -10,10 +10,6 @@ extend google.protobuf.ServiceOptions {
 	Services service_code = 51000;
 }
 
-extend google.protobuf.MessageOptions {
-	Services m_service_code = 51001;
-}
-
 enum Services {
 	UNSPECIFIED = 0;
 	AUTH = 1;

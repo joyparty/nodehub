@@ -19,11 +19,11 @@ const (
 
 type Message struct {
 	*protogen.Message
-	ServiceCode protoreflect.Value
-	ReplyCode   protoreflect.Value
+	ReplyService protoreflect.Value
+	ReplyCode    protoreflect.Value
 }
 
-func genMessagePacker(file *protogen.File, g *protogen.GeneratedFile) bool {
+func genPackMessages(file *protogen.File, g *protogen.GeneratedFile) bool {
 	messages := lo.Filter(
 		lo.Map(file.Messages, func(m *protogen.Message, _ int) Message {
 			options := m.Desc.Options().(*descriptorpb.MessageOptions)
@@ -35,11 +35,11 @@ func genMessagePacker(file *protogen.File, g *protogen.GeneratedFile) bool {
 			options.Reset()
 			gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
 
-			var serviceCode, replyCode protoreflect.Value
+			var replyService, replyCode protoreflect.Value
 			options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 				if fd.IsExtension() {
-					if strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionMessageServiceCode)) {
-						serviceCode = v
+					if strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionReplyService)) {
+						replyService = v
 					} else if strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionReplyCode)) {
 						replyCode = v
 					}
@@ -48,13 +48,13 @@ func genMessagePacker(file *protogen.File, g *protogen.GeneratedFile) bool {
 			})
 
 			return Message{
-				Message:     m,
-				ServiceCode: serviceCode,
-				ReplyCode:   replyCode,
+				Message:      m,
+				ReplyService: replyService,
+				ReplyCode:    replyCode,
 			}
 		}),
 		func(m Message, _ int) bool {
-			return m.ServiceCode.IsValid() && m.ReplyCode.IsValid()
+			return m.ReplyService.IsValid() && m.ReplyCode.IsValid()
 		},
 	)
 
@@ -65,7 +65,7 @@ func genMessagePacker(file *protogen.File, g *protogen.GeneratedFile) bool {
 		g.P("if err != nil { return nil, err}")
 		g.P()
 		g.P("return &", nhPackage.Ident("Reply"), "{")
-		g.P("ServiceCode:", m.ServiceCode.Interface(), ",")
+		g.P("ServiceCode:", m.ReplyService.Interface(), ",")
 		g.P("Code:", m.ReplyCode.Interface(), ",")
 		g.P("Data: data,")
 		g.P("}, nil")

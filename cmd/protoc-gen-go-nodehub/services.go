@@ -23,7 +23,7 @@ type Service struct {
 	Methods []Method
 }
 
-func genReplyCodes(file *protogen.File, g *protogen.GeneratedFile) bool {
+func genMethodReplyCodes(file *protogen.File, g *protogen.GeneratedFile) bool {
 	services := lo.Map(file.Services, func(s *protogen.Service, _ int) Service {
 		serviceCode, ok := getServiceCode(s)
 		if !ok {
