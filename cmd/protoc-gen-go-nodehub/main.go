@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	optionServiceCode  = "service_code"
-	optionReplyCode    = "reply_code"
-	optionReplyService = "reply_service"
+	optionServiceCode  = protoreflect.Name("service_code")
+	optionReplyCode    = protoreflect.Name("reply_code")
+	optionReplyService = protoreflect.Name("reply_service")
 )
 
 var extTypes = new(protoregistry.Types)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/joyparty/gokit"
 	"github.com/samber/lo"
@@ -77,10 +76,8 @@ func getServiceCode(s *protogen.Service) (val protoreflect.Value, ok bool) {
 	gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
 
 	options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		if fd.IsExtension() &&
-			strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionServiceCode)) {
+		if fd.IsExtension() && fd.Name() == optionServiceCode {
 			val = v
-
 			return false
 		}
 		return true
@@ -102,10 +99,8 @@ func getReplyCode(m *protogen.Method) (code protoreflect.Value, ok bool) {
 	gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
 
 	options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		if fd.IsExtension() &&
-			strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionReplyCode)) {
+		if fd.IsExtension() && fd.Name() == optionReplyCode {
 			code = v
-
 			return false
 		}
 		return true

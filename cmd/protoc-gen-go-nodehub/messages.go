@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/joyparty/gokit"
 	"github.com/samber/lo"
 	"google.golang.org/protobuf/compiler/protogen"
@@ -38,9 +35,10 @@ func genPackMessages(file *protogen.File, g *protogen.GeneratedFile) bool {
 			var replyService, replyCode protoreflect.Value
 			options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 				if fd.IsExtension() {
-					if strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionReplyService)) {
+					switch fd.Name() {
+					case optionReplyService:
 						replyService = v
-					} else if strings.HasSuffix(string(fd.FullName()), fmt.Sprintf(".%s", optionReplyCode)) {
+					case optionReplyCode:
 						replyCode = v
 					}
 				}
