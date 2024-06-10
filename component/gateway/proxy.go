@@ -596,12 +596,16 @@ func (p *Proxy) removeZombie() {
 	}
 }
 
-func newEmptyMessage(data []byte) (msg *emptypb.Empty, err error) {
-	msg = &emptypb.Empty{}
-	if len(data) > 0 {
-		err = proto.Unmarshal(data, msg)
+var emptyMessage = &emptypb.Empty{}
+
+func newEmptyMessage(data []byte) (*emptypb.Empty, error) {
+	if len(data) == 0 {
+		return emptyMessage, nil
 	}
-	return
+
+	msg := &emptypb.Empty{}
+	err := proto.Unmarshal(data, msg)
+	return msg, err
 }
 
 // sessionHub 会话集合
