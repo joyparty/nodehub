@@ -23,6 +23,25 @@ type Service struct {
 }
 
 func genMethodReplyCodes(file *protogen.File, g *protogen.GeneratedFile) bool {
+	services := parseServices(file)
+
+	lo.ForEach(services, func(s Service, _ int) {
+		g.P()
+		g.P("// ", s.GoName, "_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code")
+		g.P("var ", s.GoName, "_MethodReplyCodes = map[string]int32{")
+
+		for _, m := range s.Methods {
+			methodName := fmt.Sprintf("/%s/%s", s.Desc.FullName(), m.GoName)
+			g.P(fmt.Sprintf("\t%q: %v,", methodName, m.ReplyCode.Interface()))
+		}
+
+		g.P("}")
+	})
+
+	return len(services) > 0
+}
+
+func parseServices(file *protogen.File) []Service {
 	services := lo.Map(file.Services, func(s *protogen.Service, _ int) Service {
 		serviceCode, ok := getServiceCode(s)
 		if !ok {
@@ -44,24 +63,10 @@ func genMethodReplyCodes(file *protogen.File, g *protogen.GeneratedFile) bool {
 			Methods: methods,
 		}
 	})
-	services = lo.Filter(services, func(s Service, _ int) bool {
+
+	return lo.Filter(services, func(s Service, _ int) bool {
 		return s.Code.IsValid()
 	})
-
-	lo.ForEach(services, func(s Service, _ int) {
-		g.P()
-		g.P("// ", s.GoName, "_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code")
-		g.P("var ", s.GoName, "_MethodReplyCodes = map[string]int32{")
-
-		for _, m := range s.Methods {
-			methodName := fmt.Sprintf("/%s/%s", s.Desc.FullName(), m.GoName)
-			g.P(fmt.Sprintf("\t%q: %v,", methodName, m.ReplyCode.Interface()))
-		}
-
-		g.P("}")
-	})
-
-	return len(services) > 0
 }
 
 func getServiceCode(s *protogen.Service) (val protoreflect.Value, ok bool) {

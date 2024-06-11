@@ -13,7 +13,7 @@ build_protobuf:
 		--go_opt=module=github.com/joyparty/nodehub/example/echo/proto \
 		--go-grpc_out=./echo/proto \
 		--go-grpc_opt=module=github.com/joyparty/nodehub/example/echo/proto \
-		--go-nodehub_out=./echo/proto \
+		--go-nodehub_out=replyMessages=true:./echo/proto \
 		--go-nodehub_opt=module=github.com/joyparty/nodehub/example/echo/proto \
 		./echo/api/protobuf/**/*.proto)
 

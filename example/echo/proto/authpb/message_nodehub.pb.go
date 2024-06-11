@@ -6,6 +6,7 @@ package authpb
 import (
 	nh "github.com/joyparty/nodehub/proto/nh"
 	proto "google.golang.org/protobuf/proto"
+	reflect "reflect"
 )
 
 func PackAuthorizeAck(msg *AuthorizeAck) (*nh.Reply, error) {
@@ -19,4 +20,9 @@ func PackAuthorizeAck(msg *AuthorizeAck) (*nh.Reply, error) {
 		Code:        1,
 		Data:        data,
 	}, nil
+}
+
+// ReplyMessages 所有的返回值类型及其编码 [2]int32{service_code, reply_code}
+var ReplyMessages = map[[2]int32]reflect.Type{
+	{1, 1}: reflect.TypeOf(AuthorizeAck{}),
 }

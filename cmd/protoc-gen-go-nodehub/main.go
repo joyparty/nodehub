@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 
 	"github.com/joyparty/gokit"
@@ -16,10 +17,25 @@ const (
 	optionReplyService = protoreflect.Name("reply_service")
 )
 
-var extTypes = new(protoregistry.Types)
+var (
+	extTypes = new(protoregistry.Types)
+
+	config = struct {
+		// 是否生成返回值表，可用于客户端解码
+		ReplyMessages bool
+	}{}
+
+	flags flag.FlagSet
+)
+
+func init() {
+	flags.BoolVar(&config.ReplyMessages, "replyMessages", false, "build table of reply messages")
+}
 
 func main() {
-	protogen.Options{}.Run(func(gen *protogen.Plugin) error {
+	protogen.Options{
+		ParamFunc: flags.Set,
+	}.Run(func(gen *protogen.Plugin) error {
 		// The type information for all extensions is in the source files,
 		// so we need to extract them into a dynamically created protoregistry.Types.
 		for _, file := range gen.Files {
@@ -53,7 +69,8 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 
 	var ok bool
 	ok = genMethodReplyCodes(file, g) || ok
-	ok = genPackMessages(file, g) || ok
+	ok = genPackFunctions(file, g) || ok
+	ok = genReplyMessages(file, g) || ok
 	if !ok {
 		g.Skip()
 	}
