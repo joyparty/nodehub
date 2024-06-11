@@ -378,6 +378,10 @@ func (p *Proxy) doStreamRPC(ctx context.Context, sess Session, req *nh.Request, 
 
 		if err := stream.RecvMsg(output); err != nil {
 			if errors.Is(err, io.EOF) {
+				// 在stream完毕后，下行一个空返回值的reply表明stream已结束
+				output.RequestId = req.GetId()
+				output.ServiceCode = req.GetServiceCode()
+				p.sendReply(sess, output)
 				return nil
 			}
 			return err
