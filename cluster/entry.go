@@ -92,6 +92,11 @@ func (e GRPCEntry) Validate() error {
 
 // GRPCServiceDesc gRPC服务
 type GRPCServiceDesc struct {
+	// 服务名称
+	//
+	// example: helloworld.Greeter
+	Name string `json:"name"`
+
 	// 服务代码枚举值，每个服务的代码值必须唯一
 	//
 	// 网关会根据客户端请求消息内的service_code字段，将请求转发到对应的服务

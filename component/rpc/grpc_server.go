@@ -51,6 +51,7 @@ func BindGRPCServer(listener net.Listener, opts ...grpc.ServerOption) *GRPCServe
 // RegisterService 注册服务
 func (gs *GRPCServer) RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...Option) error {
 	sd := cluster.GRPCServiceDesc{
+		Name:     desc.ServiceName,
 		Code:     code,
 		Path:     fmt.Sprintf("/%s", desc.ServiceName),
 		Balancer: cluster.BalancerRandom,
