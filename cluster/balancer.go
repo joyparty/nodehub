@@ -20,17 +20,25 @@ const (
 	BalancerIPHash = "ipHash"
 	// BalancerIDHash 根据客户端ID哈希
 	BalancerIDHash = "idHash"
+	// BalancerOldest 使用最早启动的那个节点
+	//
+	// 可用于单点服务的备用节点高可用切换
+	//
+	// 当最初使用的主节点下线后，会按照启动顺序，依次启用后续的备用节点
+	BalancerOldest = "oldest"
+	// BalancerNewest 使用最新启动的那个节点
+	BalancerNewest = "newest"
 )
 
-var (
-	registeredBalancer = make(map[string]BalancerFactory)
-)
+var registeredBalancer = make(map[string]BalancerFactory)
 
 func init() {
 	RegisterBalancer(BalancerRandom, newRandomBalancer)
 	RegisterBalancer(BalancerRoundRobin, newRoundRobinBalancer)
 	RegisterBalancer(BalancerIPHash, newIPHashBalancer)
 	RegisterBalancer(BalancerIDHash, newIDHashBalancer)
+	RegisterBalancer(BalancerOldest, newOldestBalancer)
+	RegisterBalancer(BalancerNewest, newNewestBalancer)
 }
 
 // Session 会话
@@ -216,4 +224,42 @@ func (b *idHashBalancer) Pick(sess Session) (NodeEntry, error) {
 	hash := xxhash.Sum64String(sess.ID())
 	index := int(hash) % len(b.nodes)
 	return b.nodes[index], nil
+}
+
+type oldestBalancer struct {
+	node NodeEntry
+}
+
+func newOldestBalancer(_ int32, nodes []NodeEntry) Balancer {
+	// 从旧到新
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].ID.Compare(nodes[j].ID) < 0
+	})
+
+	return &oldestBalancer{
+		node: nodes[0],
+	}
+}
+
+func (b *oldestBalancer) Pick(sess Session) (NodeEntry, error) {
+	return b.node, nil
+}
+
+type newestBalancer struct {
+	node NodeEntry
+}
+
+func newNewestBalancer(_ int32, nodes []NodeEntry) Balancer {
+	// 从新到旧
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].ID.Compare(nodes[j].ID) > 0
+	})
+
+	return &newestBalancer{
+		node: nodes[0],
+	}
+}
+
+func (b *newestBalancer) Pick(sess Session) (NodeEntry, error) {
+	return b.node, nil
 }
