@@ -290,12 +290,12 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 // 以status.Error()构造的错误，都会被下行通知到客户端
 func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) (err error) {
 	var (
-		conn   *grpc.ClientConn
-		method string
+		conn *grpc.ClientConn
+		desc cluster.GRPCServiceDesc
 	)
 
 	logRequest := p.logRequest(ctx, sess, req)
-	defer func() { logRequest(conn, method, err) }()
+	defer func() { logRequest(conn, desc, err) }()
 
 	pass, err := p.opts.requestInterceptor(ctx, sess, req)
 	if err != nil {
@@ -322,8 +322,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	md.Set(rpc.MDGateway, p.nodeID)
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
-	method = path.Join(desc.Path, req.Method)
-
+	method := path.Join(desc.Path, req.Method)
 	if req.GetServerStream() {
 		return p.doStreamRPC(ctx, sess, req, conn, method)
 	}
@@ -518,10 +517,10 @@ FINISH:
 	return
 }
 
-func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) func(*grpc.ClientConn, string, error) {
+func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) func(*grpc.ClientConn, cluster.GRPCServiceDesc, error) {
 	start := time.Now()
 
-	return func(upstream *grpc.ClientConn, method string, err error) {
+	return func(upstream *grpc.ClientConn, desc cluster.GRPCServiceDesc, err error) {
 		if err == nil && p.opts.requestLogger == nil {
 			return
 		}
@@ -530,8 +529,11 @@ func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) f
 			"gateway", p.nodeID,
 			"session", sess,
 			"req", req,
-			"method", method,
 			"duration", time.Since(start).String(),
+		}
+
+		if name := desc.Name; name != "" {
+			logValues = append(logValues, "service", name)
 		}
 
 		if upstream != nil {
