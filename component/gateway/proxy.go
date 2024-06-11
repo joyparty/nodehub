@@ -340,9 +340,6 @@ func (p *Proxy) doSimpleRPC(ctx context.Context, sess Session, req *nh.Request, 
 	nh.ResetReply(output)
 	defer replyPool.Put(output)
 
-	ctx, cancel := context.WithTimeout(ctx, p.opts.requestDeadline)
-	defer cancel()
-
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		return fmt.Errorf("call unary method, %w", err)
 	}
