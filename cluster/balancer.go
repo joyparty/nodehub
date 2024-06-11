@@ -67,8 +67,11 @@ func RegisterBalancer(policy string, factory BalancerFactory) {
 
 // NewBalancer 创建负载均衡器
 func NewBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
-	if len(nodes) <= 1 {
-		return &noBalancer{nodes}
+	switch len(nodes) {
+	case 0:
+		return &errorBalancer{err: ErrNoNodeAvailable}
+	case 1:
+		return &noBalancer{node: nodes[0]}
 	}
 
 	// 倒序，最新的在前面，以最新的节点配置为准
@@ -97,14 +100,11 @@ func NewBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 }
 
 type noBalancer struct {
-	nodes []NodeEntry
+	node NodeEntry
 }
 
 func (nb *noBalancer) Pick(sess Session) (NodeEntry, error) {
-	if len(nb.nodes) == 0 {
-		return NodeEntry{}, ErrNoNodeAvailable
-	}
-	return nb.nodes[0], nil
+	return nb.node, nil
 }
 
 type errorBalancer struct {
