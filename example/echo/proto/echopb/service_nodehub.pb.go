@@ -5,11 +5,10 @@ package echopb
 
 import (
 	nh "github.com/joyparty/nodehub/proto/nh"
-	reflect "reflect"
 )
 
 func init() {
-	nh.RegisterReplyType(2, 1, reflect.TypeOf(Msg{}))
+	nh.RegisterReplyType(2, 1, &Msg{})
 }
 
 // Echo_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code

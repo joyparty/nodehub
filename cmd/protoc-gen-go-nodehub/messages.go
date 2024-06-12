@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	nhPackage      = protogen.GoImportPath("github.com/joyparty/nodehub/proto/nh")
-	protoPackage   = protogen.GoImportPath("google.golang.org/protobuf/proto")
-	reflectPackage = protogen.GoImportPath("reflect")
+	nhPackage    = protogen.GoImportPath("github.com/joyparty/nodehub/proto/nh")
+	protoPackage = protogen.GoImportPath("google.golang.org/protobuf/proto")
 )
 
 type Message struct {
@@ -56,12 +55,12 @@ func genReplyMessages(file *protogen.File, g *protogen.GeneratedFile) bool {
 	g.P("func init() {")
 	lo.ForEach(services, func(s Service, _ int) {
 		lo.ForEach(s.Methods, func(m Method, _ int) {
-			g.P(nhPackage.Ident("RegisterReplyType"), "(", s.Code.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.Output.GoIdent, "{}))")
+			g.P(nhPackage.Ident("RegisterReplyType"), "(", s.Code.Interface(), ",", m.ReplyCode.Interface(), ", &", m.Output.GoIdent, "{})")
 		})
 	})
 
 	lo.ForEach(messages, func(m Message, _ int) {
-		g.P(nhPackage.Ident("RegisterReplyType"), "(", m.ReplyService.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.GoIdent, "{}))")
+		g.P(nhPackage.Ident("RegisterReplyType"), "(", m.ReplyService.Interface(), ",", m.ReplyCode.Interface(), ", &", m.GoIdent, "{})")
 	})
 	g.P("}")
 

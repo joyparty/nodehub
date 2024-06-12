@@ -10,9 +10,13 @@ import (
 
 var replyTypes = map[[2]int32]reflect.Type{}
 
+func init() {
+	RegisterReplyType(0, int32(ReplyCode_RPC_ERROR), &RPCError{})
+}
+
 // RegisterReplyType 注册响应数据编码及类型
-func RegisterReplyType(serviceCode int32, code int32, messageType reflect.Type) {
-	replyTypes[[2]int32{serviceCode, code}] = messageType
+func RegisterReplyType(serviceCode int32, code int32, message proto.Message) {
+	replyTypes[[2]int32{serviceCode, code}] = reflect.TypeOf(message).Elem()
 }
 
 // GetReplyType 根据编码获取对应的响应数据类型
@@ -21,6 +25,18 @@ func GetReplyType(serviceCode int32, code int32) (reflect.Type, bool) {
 		return v, true
 	}
 	return nil, false
+}
+
+// UnpackReply 解包Reply
+func UnpackReply(reply *Reply) (msg proto.Message, ok bool, err error) {
+	msgType, ok := GetReplyType(reply.GetServiceCode(), reply.GetCode())
+	if !ok {
+		return
+	}
+
+	msg = reflect.New(msgType).Interface().(proto.Message)
+	err = proto.Unmarshal(reply.GetData(), msg)
+	return
 }
 
 // NewReply 把proto message打包Reply

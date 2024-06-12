@@ -6,11 +6,10 @@ package authpb
 import (
 	nh "github.com/joyparty/nodehub/proto/nh"
 	proto "google.golang.org/protobuf/proto"
-	reflect "reflect"
 )
 
 func init() {
-	nh.RegisterReplyType(1, 1, reflect.TypeOf(AuthorizeAck{}))
+	nh.RegisterReplyType(1, 1, &AuthorizeAck{})
 }
 
 func PackAuthorizeAck(msg *AuthorizeAck) (*nh.Reply, error) {
