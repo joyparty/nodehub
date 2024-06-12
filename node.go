@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/component/gateway"
@@ -115,6 +116,8 @@ func (n *Node) Serve(ctx context.Context) error {
 		logger.Error("change node state", "error", err)
 	}
 
+	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	n.stopAll(ctx)
 
 	// 服务发现注销
@@ -149,24 +152,44 @@ func (n *Node) startAll(ctx context.Context) error {
 }
 
 func (n *Node) stopAll(ctx context.Context) {
-	for i := len(n.components) - 1; i >= 0; i-- {
-		c := n.components[i]
-		logger.Info("stop component", "name", c.Name())
+	var wg sync.WaitGroup
+	for _, c := range n.components {
+		wg.Add(1)
 
-		if v, ok := c.(interface {
-			BeforeStop(ctx context.Context)
-		}); ok {
-			v.BeforeStop(ctx)
-		}
+		go func(c Component) {
+			defer wg.Done()
 
-		c.Stop(ctx)
+			stopC := make(chan struct{}, 1)
+			go func() {
+				defer close(stopC)
+				logger.Info("stop component", "name", c.Name())
 
-		if v, ok := c.(interface {
-			AfterStop(ctx context.Context)
-		}); ok {
-			v.AfterStop(ctx)
-		}
+				if v, ok := c.(interface {
+					BeforeStop(ctx context.Context)
+				}); ok {
+					v.BeforeStop(ctx)
+				}
+
+				c.Stop(ctx)
+
+				if v, ok := c.(interface {
+					AfterStop(ctx context.Context)
+				}); ok {
+					v.AfterStop(ctx)
+				}
+
+				stopC <- struct{}{}
+			}()
+
+			select {
+			case <-stopC:
+			case <-ctx.Done():
+			}
+			logger.Info("component stoped", "name", c.Name())
+		}(c)
 	}
+
+	wg.Wait()
 }
 
 // Shutdown 关闭节点
