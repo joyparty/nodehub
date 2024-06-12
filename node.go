@@ -183,9 +183,10 @@ func (n *Node) stopAll(ctx context.Context) {
 
 			select {
 			case <-stopC:
+				logger.Info("component stoped", "name", c.Name())
 			case <-ctx.Done():
+				logger.Error("component stop timeout", "name", c.Name())
 			}
-			logger.Info("component stoped", "name", c.Name())
 		}(c)
 	}
 
