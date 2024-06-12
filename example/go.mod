@@ -7,6 +7,7 @@ require (
 	github.com/joyparty/nodehub v0.0.0-20231214095413-449034d6bda2
 	github.com/nats-io/nats.go v1.35.0
 	github.com/oklog/ulid/v2 v2.1.0
+	github.com/reactivex/rxgo/v2 v2.5.0
 	github.com/redis/go-redis/v9 v9.5.1
 	go.etcd.io/etcd/client/v3 v3.5.13
 	golang.org/x/sys v0.20.0
@@ -34,7 +35,6 @@ require (
 	github.com/panjf2000/ants/v2 v2.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/quic-go v0.44.0 // indirect
-	github.com/reactivex/rxgo/v2 v2.5.0 // indirect
 	github.com/samber/lo v1.39.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect

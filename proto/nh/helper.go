@@ -8,16 +8,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var replyMessages = map[[2]int32]reflect.Type{}
+var replyTypes = map[[2]int32]reflect.Type{}
 
-// RegisterReplyMessage 注册响应数据编码及类型
-func RegisterReplyMessage(serviceCode int32, code int32, messageType reflect.Type) {
-	replyMessages[[2]int32{serviceCode, code}] = messageType
+// RegisterReplyType 注册响应数据编码及类型
+func RegisterReplyType(serviceCode int32, code int32, messageType reflect.Type) {
+	replyTypes[[2]int32{serviceCode, code}] = messageType
 }
 
-// GetReplyMessages 获取所有注册的响应数据编码类型表
-func GetReplyMessages() map[[2]int32]reflect.Type {
-	return replyMessages
+// GetReplyType 根据编码获取对应的响应数据类型
+func GetReplyType(serviceCode int32, code int32) (reflect.Type, bool) {
+	if v, ok := replyTypes[[2]int32{serviceCode, code}]; ok {
+		return v, true
+	}
+	return nil, false
 }
 
 // NewReply 把proto message打包Reply

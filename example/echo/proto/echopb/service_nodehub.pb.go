@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	nh.RegisterReplyMessage(2, 1, reflect.TypeOf(Msg{}))
+	nh.RegisterReplyType(2, 1, reflect.TypeOf(Msg{}))
 }
 
 // Echo_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code

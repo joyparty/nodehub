@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	nh.RegisterReplyMessage(1, 1, reflect.TypeOf(AuthorizeAck{}))
+	nh.RegisterReplyType(1, 1, reflect.TypeOf(AuthorizeAck{}))
 }
 
 func PackAuthorizeAck(msg *AuthorizeAck) (*nh.Reply, error) {

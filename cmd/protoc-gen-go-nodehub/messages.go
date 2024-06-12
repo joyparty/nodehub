@@ -56,12 +56,12 @@ func genReplyMessages(file *protogen.File, g *protogen.GeneratedFile) bool {
 	g.P("func init() {")
 	lo.ForEach(services, func(s Service, _ int) {
 		lo.ForEach(s.Methods, func(m Method, _ int) {
-			g.P(nhPackage.Ident("RegisterReplyMessage"), "(", s.Code.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.Output.GoIdent, "{}))")
+			g.P(nhPackage.Ident("RegisterReplyType"), "(", s.Code.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.Output.GoIdent, "{}))")
 		})
 	})
 
 	lo.ForEach(messages, func(m Message, _ int) {
-		g.P(nhPackage.Ident("RegisterReplyMessage"), "(", m.ReplyService.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.GoIdent, "{}))")
+		g.P(nhPackage.Ident("RegisterReplyType"), "(", m.ReplyService.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.GoIdent, "{}))")
 	})
 	g.P("}")
 
