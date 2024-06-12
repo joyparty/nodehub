@@ -50,15 +50,6 @@ func LogUnary(l logger.Logger) grpc.UnaryServerInterceptor {
 	}
 }
 
-// LogStream 打印stream接口请求日志
-func LogStream(l logger.Logger) grpc.StreamServerInterceptor {
-	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-		defer logRequest(ss.Context(), l, info.FullMethod)(err)
-
-		return handler(srv, ss)
-	}
-}
-
 // PackReply 自动把返回值转换为nodehub.Reply
 func PackReply(replyCodes ...map[string]int32) grpc.UnaryServerInterceptor {
 	codes := lo.Assign(replyCodes...)
@@ -79,36 +70,5 @@ func PackReply(replyCodes ...map[string]int32) grpc.UnaryServerInterceptor {
 		}
 
 		return
-	}
-}
-
-type replyStream struct {
-	grpc.ServerStream
-
-	replyCode int32
-}
-
-func (s *replyStream) SendMsg(m any) error {
-	reply, err := nh.NewReply(s.replyCode, m.(proto.Message))
-	if err != nil {
-		return err
-	}
-
-	return s.ServerStream.SendMsg(reply)
-}
-
-// PackReplyStream 把server side stream返回值转换为nodehub.Reply
-func PackReplyStream(replyCodes ...map[string]int32) grpc.StreamServerInterceptor {
-	codes := lo.Assign(replyCodes...)
-
-	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if code, ok := codes[info.FullMethod]; ok {
-			return handler(srv, &replyStream{
-				ServerStream: ss,
-				replyCode:    code,
-			})
-		}
-
-		return handler(srv, ss)
 	}
 }

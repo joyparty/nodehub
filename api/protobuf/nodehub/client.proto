@@ -30,9 +30,6 @@ message Request {
 
 	// 是否需要网关返回response
 	bool no_reply = 6;
-
-	// 调用grpc server-side streaming方法
-	bool server_stream = 7;
 }
 
 // 来自服务器端下行的消息

@@ -98,8 +98,6 @@ func (x *Request) LogValue() slog.Value {
 
 	if x.GetNoReply() {
 		attrs = append(attrs, slog.Bool("noReply", true))
-	} else if x.GetServerStream() {
-		attrs = append(attrs, slog.Bool("serverStream", true))
 	}
 
 	return slog.GroupValue(attrs...)

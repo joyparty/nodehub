@@ -322,14 +322,6 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	md.Set(rpc.MDGateway, p.nodeID)
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
-	method := path.Join(desc.Path, req.Method)
-	if req.GetServerStream() {
-		return p.doStreamRPC(ctx, sess, req, conn, method)
-	}
-	return p.doSimpleRPC(ctx, sess, req, conn, method)
-}
-
-func (p *Proxy) doSimpleRPC(ctx context.Context, sess Session, req *nh.Request, conn *grpc.ClientConn, method string) error {
 	input, err := newEmptyMessage(req.Data)
 	if err != nil {
 		return fmt.Errorf("unmarshal request data, %w", err)
@@ -339,6 +331,7 @@ func (p *Proxy) doSimpleRPC(ctx context.Context, sess Session, req *nh.Request, 
 	nh.ResetReply(output)
 	defer replyPool.Put(output)
 
+	method := path.Join(desc.Path, req.Method)
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		return fmt.Errorf("call unary method, %w", err)
 	}
@@ -351,46 +344,6 @@ func (p *Proxy) doSimpleRPC(ctx context.Context, sess Session, req *nh.Request, 
 	output.ServiceCode = req.GetServiceCode()
 	p.sendReply(sess, output)
 	return nil
-}
-
-func (p *Proxy) doStreamRPC(ctx context.Context, sess Session, req *nh.Request, conn *grpc.ClientConn, method string) error {
-	stream, err := conn.NewStream(ctx, streamDesc, method)
-	if err != nil {
-		return fmt.Errorf("call stream method, %w", err)
-	}
-
-	input, err := newEmptyMessage(req.Data)
-	if err != nil {
-		return fmt.Errorf("unmarshal request data, %w", err)
-	}
-
-	if err := stream.SendMsg(input); err != nil {
-		return fmt.Errorf("send request, %w", err)
-	} else if err := stream.CloseSend(); err != nil {
-		return err
-	}
-
-	output := replyPool.Get()
-	defer replyPool.Put(output)
-
-	for {
-		nh.ResetReply(output)
-
-		if err := stream.RecvMsg(output); err != nil {
-			if errors.Is(err, io.EOF) {
-				// 在stream完毕后，下行一个空返回值的reply表明stream已结束
-				output.RequestId = req.GetId()
-				output.ServiceCode = req.GetServiceCode()
-				p.sendReply(sess, output)
-				return nil
-			}
-			return err
-		}
-
-		output.RequestId = req.GetId()
-		output.ServiceCode = req.GetServiceCode()
-		p.sendReply(sess, output)
-	}
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {

@@ -361,12 +361,6 @@ func (c *Client) Call(serviceCode int32, method string, arg proto.Message, optio
 	return c.conn.send(serviceCode, data)
 }
 
-// CallStream 调用server-side stream接口
-func (c *Client) CallStream(serviceCode int32, method string, arg proto.Message, options ...CallOption) error {
-	options = append(options, WithServerStream())
-	return c.Call(serviceCode, method, arg, options...)
-}
-
 // OnReceive 注册消息处理器
 //
 // Example:
@@ -485,11 +479,6 @@ func (c *MustClient) Call(serviceCode int32, method string, arg proto.Message, o
 	gokit.Must(c.Client.Call(serviceCode, method, arg, options...))
 }
 
-// CallStream 调用stream接口
-func (c *MustClient) CallStream(serviceCode int32, method string, arg proto.Message, options ...CallOption) {
-	gokit.Must(c.Client.CallStream(serviceCode, method, arg, options...))
-}
-
 // CallOption 调用选项
 type CallOption func(req *nh.Request)
 
@@ -504,12 +493,5 @@ func WithNode(nodeID string) CallOption {
 func WithNoReply() CallOption {
 	return func(req *nh.Request) {
 		req.NoReply = true
-	}
-}
-
-// WithServerStream 发起server-side stream方法请求
-func WithServerStream() CallOption {
-	return func(req *nh.Request) {
-		req.ServerStream = true
 	}
 }
