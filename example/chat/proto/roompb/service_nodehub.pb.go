@@ -3,7 +3,23 @@
 
 package roompb
 
+import (
+	nh "github.com/joyparty/nodehub/proto/nh"
+	proto "google.golang.org/protobuf/proto"
+)
+
 // Room_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code
-var Room_MethodReplyCodes = map[string]int32{
-	"/room.Room/Join": 1,
+var Room_MethodReplyCodes = map[string]int32{}
+
+func PackNews(msg *News) (*nh.Reply, error) {
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &nh.Reply{
+		ServiceCode: 1,
+		Code:        1,
+		Data:        data,
+	}, nil
 }

@@ -69,7 +69,6 @@ func main() {
 	cli.Call(chatServiceCode, "Join",
 		&roompb.JoinRequest{Name: name},
 		client.WithNoReply(),
-		client.WithServerStream(),
 	)
 
 	defer func() {

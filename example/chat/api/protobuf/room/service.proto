@@ -9,7 +9,8 @@ import "google/protobuf/empty.proto";
 import "cluster/services.proto";
 
 extend google.protobuf.MessageOptions {
-	ReplyCode reply_code = 60000;
+	cluster.Services reply_service = 60000;
+	ReplyCode reply_code = 60001;
 }
 
 enum ReplyCode {
@@ -20,7 +21,7 @@ enum ReplyCode {
 service Room {
 	option (cluster.service_code) = ROOM;
 
-	rpc Join(JoinRequest) returns (stream News);
+	rpc Join(JoinRequest) returns (google.protobuf.Empty);
 	rpc Say(SayRequest) returns (google.protobuf.Empty);
 	rpc Leave(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
@@ -35,6 +36,7 @@ message SayRequest {
 }
 
 message News {
+	option (reply_service) = ROOM;
 	option (reply_code) = NEWS;
 
 	string from_id = 1;
