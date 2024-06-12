@@ -150,7 +150,7 @@ type Reply struct {
 	// code = 0，表示这是google.protobuf.Empty类型的空消息
 	Code int32 `protobuf:"varint,3,opt,name=code,proto3" json:"code,omitempty"`
 	// 下行protobuf message序列化之后的数据
-	// 客户端需要根据message_type字段判断具体反序列化成哪个protobuf message
+	// 客户端需要根据code字段判断具体反序列化成哪个protobuf message
 	Data []byte `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
 }
 

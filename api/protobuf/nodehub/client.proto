@@ -54,6 +54,6 @@ message Reply {
 	int32 code = 3;
 
 	// 下行protobuf message序列化之后的数据
-	// 客户端需要根据message_type字段判断具体反序列化成哪个protobuf message
+	// 客户端需要根据code字段判断具体反序列化成哪个protobuf message
 	bytes data = 4;
 }
