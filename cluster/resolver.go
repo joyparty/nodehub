@@ -66,6 +66,13 @@ func (r *grpcResolver) Update(node NodeEntry) {
 		r.updateServiceNodes(desc.Code)
 		r.updateBalancer(desc.Code)
 	}
+
+	// 节点下线时关闭连接
+	if node.State == NodeDown {
+		if conn, ok := r.conns.LoadAndDelete(node.GRPC.Endpoint); ok {
+			conn.Close()
+		}
+	}
 }
 
 // Remove 删除条目
