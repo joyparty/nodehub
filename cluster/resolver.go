@@ -13,12 +13,14 @@ import (
 
 // grpcResolver grpc服务发现
 type grpcResolver struct {
-	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
-
 	// serviceCode => GRPCServiceDesc
 	services *gokit.MapOf[int32, GRPCServiceDesc]
 
-	serviceNodes *gokit.MapOf[int32, []NodeEntry]
+	// 所有在线节点 nodeID => NodeEntry
+	allNodes *gokit.MapOf[ulid.ULID, NodeEntry]
+
+	// 所有状态为正常的节点 serviceCode => []NodeEntry
+	okNodes *gokit.MapOf[int32, []NodeEntry]
 
 	// 每个服务的负载均衡器
 	// serviceCode => Balancer
@@ -35,7 +37,7 @@ func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 	return &grpcResolver{
 		allNodes:        gokit.NewMapOf[ulid.ULID, NodeEntry](),
 		services:        gokit.NewMapOf[int32, GRPCServiceDesc](),
-		serviceNodes:    gokit.NewMapOf[int32, []NodeEntry](),
+		okNodes:         gokit.NewMapOf[int32, []NodeEntry](),
 		serviceBalancer: gokit.NewMapOf[int32, Balancer](),
 		conns:           gokit.NewMapOf[string, *grpc.ClientConn](),
 		dialOptions: append([]grpc.DialOption{
@@ -97,9 +99,9 @@ func (r *grpcResolver) updateServiceNodes(serviceCode int32) {
 	})
 
 	if len(nodes) == 0 {
-		r.serviceNodes.Delete(serviceCode)
+		r.okNodes.Delete(serviceCode)
 	} else {
-		r.serviceNodes.Store(serviceCode, nodes)
+		r.okNodes.Store(serviceCode, nodes)
 	}
 }
 
@@ -110,7 +112,7 @@ func (r *grpcResolver) updateBalancer(serviceCode int32) {
 		return
 	}
 
-	nodes, _ := r.serviceNodes.Load(serviceCode)
+	nodes, _ := r.okNodes.Load(serviceCode)
 
 	// balancer不考虑在使用过程中增减节点，每次节点变更都重新生成相关服务的负载均衡器
 	if len(nodes) == 0 {
@@ -142,7 +144,7 @@ func (r *grpcResolver) AllocNode(serviceCode int32, sess Session) (nodeID ulid.U
 
 // PickNode 随机选择可用节点
 func (r *grpcResolver) PickNode(serviceCode int32) (nodeID ulid.ULID, err error) {
-	nodes, _ := r.serviceNodes.Load(serviceCode)
+	nodes, _ := r.okNodes.Load(serviceCode)
 	if l := len(nodes); l == 0 {
 		err = ErrNoNodeAvailable
 	} else if l == 1 {
