@@ -9,6 +9,10 @@ import (
 	reflect "reflect"
 )
 
+func init() {
+	nh.RegisterReplyMessage(1, 1, reflect.TypeOf(AuthorizeAck{}))
+}
+
 func PackAuthorizeAck(msg *AuthorizeAck) (*nh.Reply, error) {
 	data, err := proto.Marshal(msg)
 	if err != nil {
@@ -20,9 +24,4 @@ func PackAuthorizeAck(msg *AuthorizeAck) (*nh.Reply, error) {
 		Code:        1,
 		Data:        data,
 	}, nil
-}
-
-// ReplyMessages 所有的返回值类型及其编码 [2]int32{service_code, reply_code}
-var ReplyMessages = map[[2]int32]reflect.Type{
-	{1, 1}: reflect.TypeOf(AuthorizeAck{}),
 }

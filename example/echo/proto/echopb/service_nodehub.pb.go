@@ -4,15 +4,15 @@
 package echopb
 
 import (
+	nh "github.com/joyparty/nodehub/proto/nh"
 	reflect "reflect"
 )
+
+func init() {
+	nh.RegisterReplyMessage(2, 1, reflect.TypeOf(Msg{}))
+}
 
 // Echo_MethodReplyCodes 每个grpc方法返回值对应的nodehub.Reply.code
 var Echo_MethodReplyCodes = map[string]int32{
 	"/echo.Echo/Send": 1,
-}
-
-// ReplyMessages 所有的返回值类型及其编码 [2]int32{service_code, reply_code}
-var ReplyMessages = map[[2]int32]reflect.Type{
-	{2, 1}: reflect.TypeOf(Msg{}),
 }

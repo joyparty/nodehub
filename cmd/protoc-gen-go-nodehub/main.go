@@ -68,9 +68,9 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 	g.P()
 
 	var ok bool
+	ok = genReplyMessages(file, g) || ok
 	ok = genMethodReplyCodes(file, g) || ok
 	ok = genPackFunctions(file, g) || ok
-	ok = genReplyMessages(file, g) || ok
 	if !ok {
 		g.Skip()
 	}

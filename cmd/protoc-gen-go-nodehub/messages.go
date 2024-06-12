@@ -52,27 +52,16 @@ func genReplyMessages(file *protogen.File, g *protogen.GeneratedFile) bool {
 		return false
 	}
 
-	done := map[protogen.GoIdent]struct{}{}
-
 	g.P()
-	g.P("// ReplyMessages 所有的返回值类型及其编码 [2]int32{service_code, reply_code}")
-	g.P("var ReplyMessages = map[[2]int32]", reflectPackage.Ident("Type"), "{")
+	g.P("func init() {")
 	lo.ForEach(services, func(s Service, _ int) {
 		lo.ForEach(s.Methods, func(m Method, _ int) {
-			messageType := m.Output.GoIdent
-			if _, ok := done[messageType]; !ok {
-				g.P("{", s.Code.Interface(), ",", m.ReplyCode.Interface(), "}: ", reflectPackage.Ident("TypeOf"), "(", messageType, "{}),")
-				done[messageType] = struct{}{}
-			}
+			g.P(nhPackage.Ident("RegisterReplyMessage"), "(", s.Code.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.Output.GoIdent, "{}))")
 		})
 	})
 
 	lo.ForEach(messages, func(m Message, _ int) {
-		messageType := m.GoIdent
-		if _, ok := done[messageType]; !ok {
-			g.P("{", m.ReplyService.Interface(), ",", m.ReplyCode.Interface(), "}: ", reflectPackage.Ident("TypeOf"), "(", messageType, "{}),")
-			done[messageType] = struct{}{}
-		}
+		g.P(nhPackage.Ident("RegisterReplyMessage"), "(", m.ReplyService.Interface(), ",", m.ReplyCode.Interface(), ",", reflectPackage.Ident("TypeOf"), "(", m.GoIdent, "{}))")
 	})
 	g.P("}")
 

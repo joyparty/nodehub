@@ -2,10 +2,23 @@ package nh
 
 import (
 	"log/slog"
+	"reflect"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+var replyMessages = map[[2]int32]reflect.Type{}
+
+// RegisterReplyMessage 注册响应数据编码及类型
+func RegisterReplyMessage(serviceCode int32, code int32, messageType reflect.Type) {
+	replyMessages[[2]int32{serviceCode, code}] = messageType
+}
+
+// GetReplyMessages 获取所有注册的响应数据编码类型表
+func GetReplyMessages() map[[2]int32]reflect.Type {
+	return replyMessages
+}
 
 // NewReply 把proto message打包Reply
 func NewReply(code int32, msg proto.Message) (*Reply, error) {
