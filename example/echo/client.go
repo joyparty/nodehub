@@ -70,7 +70,7 @@ func main() {
 
 	// echo接口返回
 	cli.OnReceive(echoServiceCode, int32(echopb.ReplyCode_MSG), func(requestID uint32, reply *echopb.Msg) {
-		logger.Info("receive reply", "requestID", requestID, "content", reply.GetContent())
+		logger.Info("echo back", "requestID", requestID, "content", reply.GetContent())
 	})
 
 	// 收到鉴权成功消息后开始正式发送消息

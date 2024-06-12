@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -250,6 +251,7 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 		return nil
 	}
 
+	var requestID uint32 = 1
 	errC := make(chan error, 1)
 	go func() {
 		defer close(errC)
@@ -259,6 +261,7 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 			errC <- err
 			return
 		}
+		atomic.StoreUint32(&requestID, req.GetId())
 
 		if err := validToken(req); err != nil {
 			errC <- err
@@ -279,6 +282,8 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 		reply := gokit.MustReturn(authpb.PackAuthorizeAck(&authpb.AuthorizeAck{
 			UserId: userID,
 		}))
+		// 确保Reply的RequestId和Request的Id一致
+		reply.RequestId = atomic.LoadUint32(&requestID)
 
 		gokit.Must(sess.Send(reply))
 	}

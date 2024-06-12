@@ -3,7 +3,7 @@ module github.com/joyparty/nodehub/example
 go 1.21.4
 
 require (
-	github.com/joyparty/gokit v0.0.0-20240506084510-bd762e024ead
+	github.com/joyparty/gokit v0.0.0-20240608061244-09c91a9dc3a7
 	github.com/joyparty/nodehub v0.0.0-20231214095413-449034d6bda2
 	github.com/nats-io/nats.go v1.35.0
 	github.com/oklog/ulid/v2 v2.1.0

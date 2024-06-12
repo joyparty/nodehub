@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -21,42 +22,42 @@ import (
 
 var writeTimeout = 5 * time.Second
 
-type client interface {
+type connection interface {
 	send(service int32, data []byte) error
 	ping() error
 	replyStream() <-chan *nh.Reply
 	Close()
 }
 
-type tcpClient struct {
+type tcpConn struct {
 	conn net.Conn
 	done chan struct{}
 }
 
-func newTCPClient(addr string) (*tcpClient, error) {
+func newTCPConn(addr string) (*tcpConn, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
 
-	return &tcpClient{
+	return &tcpConn{
 		conn: conn,
 		done: make(chan struct{}),
 	}, nil
 }
 
-func (tc *tcpClient) send(service int32, data []byte) error {
+func (tc *tcpConn) send(service int32, data []byte) error {
 	return codec.SendBytes(data, func(data []byte) error {
 		_, err := tc.conn.Write(data)
 		return err
 	})
 }
 
-func (tc *tcpClient) ping() error {
+func (tc *tcpConn) ping() error {
 	return tc.send(0, nil)
 }
 
-func (tc *tcpClient) replyStream() <-chan *nh.Reply {
+func (tc *tcpConn) replyStream() <-chan *nh.Reply {
 	ch := make(chan *nh.Reply)
 
 	go func() {
@@ -73,13 +74,14 @@ func (tc *tcpClient) replyStream() <-chan *nh.Reply {
 			}
 
 			if err := codec.ReadMessage(tc.conn, msg); err != nil {
-				panic(err)
+				if !errors.Is(err, net.ErrClosed) {
+					logger.Error("read tcp", "error", err)
+				}
+				return
 			}
 
 			reply := &nh.Reply{}
-			if err := proto.Unmarshal(msg.Bytes(), reply); err != nil {
-				panic(fmt.Errorf("unmarshal reply, %w", err))
-			}
+			gokit.Must(proto.Unmarshal(msg.Bytes(), reply))
 
 			select {
 			case <-tc.done:
@@ -92,18 +94,18 @@ func (tc *tcpClient) replyStream() <-chan *nh.Reply {
 	return ch
 }
 
-func (tc *tcpClient) Close() {
+func (tc *tcpConn) Close() {
 	close(tc.done)
 	_ = tc.conn.Close()
 }
 
-type quicClient struct {
+type quicConn struct {
 	conn    quic.Connection
 	streams []quic.Stream
 	done    chan struct{}
 }
 
-func newQUICClient(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) (*quicClient, error) {
+func newQUICConn(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) (*quicConn, error) {
 	conn, err := quic.DialAddr(context.Background(), addr, tlsConfig, quicConfig)
 	if err != nil {
 		return nil, err
@@ -118,7 +120,7 @@ func newQUICClient(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) 
 		streams = append(streams, stream)
 	}
 
-	qc := &quicClient{
+	qc := &quicConn{
 		conn:    conn,
 		streams: streams,
 		done:    make(chan struct{}),
@@ -127,7 +129,7 @@ func newQUICClient(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) 
 	return qc, nil
 }
 
-func (qc *quicClient) send(service int32, data []byte) error {
+func (qc *quicConn) send(service int32, data []byte) error {
 	s := qc.streams[int(service)%len(qc.streams)]
 
 	return codec.SendBytes(data, func(data []byte) error {
@@ -136,11 +138,11 @@ func (qc *quicClient) send(service int32, data []byte) error {
 	})
 }
 
-func (qc *quicClient) ping() error {
+func (qc *quicConn) ping() error {
 	return qc.send(0, nil)
 }
 
-func (qc *quicClient) replyStream() <-chan *nh.Reply {
+func (qc *quicConn) replyStream() <-chan *nh.Reply {
 	c := make(chan *nh.Reply)
 
 	for _, s := range qc.streams {
@@ -156,13 +158,12 @@ func (qc *quicClient) replyStream() <-chan *nh.Reply {
 				}
 
 				if err := codec.ReadMessage(s, msg); err != nil {
-					panic(err)
+					logger.Error("read quic", "error", err)
+					return
 				}
 
 				reply := &nh.Reply{}
-				if err := proto.Unmarshal(msg.Bytes(), reply); err != nil {
-					panic(fmt.Errorf("unmarshal reply, %w", err))
-				}
+				gokit.Must(proto.Unmarshal(msg.Bytes(), reply))
 
 				select {
 				case <-qc.done:
@@ -176,38 +177,38 @@ func (qc *quicClient) replyStream() <-chan *nh.Reply {
 	return c
 }
 
-func (qc *quicClient) Close() {
+func (qc *quicConn) Close() {
 	close(qc.done)
 	_ = qc.conn.CloseWithError(0, "")
 }
 
-type wsClient struct {
+type wsConn struct {
 	conn *websocket.Conn
 	done chan struct{}
 }
 
-func newWSClient(url string) (*wsClient, error) {
+func newWSConn(url string) (*wsConn, error) {
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &wsClient{
+	return &wsConn{
 		conn: conn,
 		done: make(chan struct{}),
 	}, nil
 }
 
-func (wc *wsClient) send(service int32, data []byte) error {
+func (wc *wsConn) send(service int32, data []byte) error {
 	wc.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	return wc.conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
-func (wc *wsClient) ping() error {
+func (wc *wsConn) ping() error {
 	return wc.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeTimeout))
 }
 
-func (wc *wsClient) replyStream() <-chan *nh.Reply {
+func (wc *wsConn) replyStream() <-chan *nh.Reply {
 	ch := make(chan *nh.Reply)
 
 	go func() {
@@ -222,23 +223,27 @@ func (wc *wsClient) replyStream() <-chan *nh.Reply {
 
 			messageType, data, err := wc.conn.ReadMessage()
 			if err != nil {
-				panic(fmt.Errorf("read websocket, %w", err))
+				if websocket.IsUnexpectedCloseError(err,
+					websocket.CloseGoingAway,
+					websocket.CloseAbnormalClosure,
+					websocket.CloseNormalClosure) {
+					logger.Error("read websocket", "error", err)
+				}
+				return
 			}
 
 			switch messageType {
 			case websocket.BinaryMessage:
-				resp := &nh.Reply{}
-				if err := proto.Unmarshal(data, resp); err != nil {
-					panic(fmt.Errorf("unmarshal response message, %w", err))
-				}
+				reply := &nh.Reply{}
+				gokit.Must(proto.Unmarshal(data, reply))
 
 				select {
 				case <-wc.done:
 					return
-				case ch <- resp:
+				case ch <- reply:
 				}
 			default:
-				panic(fmt.Errorf("unexpected websocket message type: %d", messageType))
+				logger.Error("unexpected websocket message type", "type", messageType)
 			}
 		}
 	}()
@@ -246,16 +251,15 @@ func (wc *wsClient) replyStream() <-chan *nh.Reply {
 	return ch
 }
 
-func (wc *wsClient) Close() {
+func (wc *wsConn) Close() {
 	close(wc.done)
 	wc.conn.Close()
 }
 
 // Client 网关客户端，用于测试及演示
 type Client struct {
-	client
-
 	idSeq *atomic.Uint32
+	conn  connection
 
 	// serviceCode => messageType => handler
 	handlers       *gokit.MapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]]
@@ -269,15 +273,15 @@ func New(dialURL string) (*Client, error) {
 		return nil, fmt.Errorf("parse dial url, %w", err)
 	}
 
-	var cc client
+	var cc connection
 	switch l.Scheme {
 	case "tcp":
-		cc, err = newTCPClient(l.Host)
+		cc, err = newTCPConn(l.Host)
 		if err != nil {
 			return nil, fmt.Errorf("dial tcp, %w", err)
 		}
 	case "ws":
-		cc, err = newWSClient(dialURL)
+		cc, err = newWSConn(dialURL)
 		if err != nil {
 			return nil, fmt.Errorf("dial websocket, %w", err)
 		}
@@ -286,7 +290,7 @@ func New(dialURL string) (*Client, error) {
 	}
 
 	c := &Client{
-		client:   cc,
+		conn:     cc,
 		idSeq:    &atomic.Uint32{},
 		handlers: gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
 		defaultHandler: func(reply *nh.Reply) {
@@ -312,13 +316,13 @@ func NewQUIC(dialURL string, tlsConfig *tls.Config, quicConfig *quic.Config) (*C
 		return nil, fmt.Errorf("unsupported scheme: %s", l.Scheme)
 	}
 
-	qc, err := newQUICClient(l.Host, tlsConfig, quicConfig)
+	qc, err := newQUICConn(l.Host, tlsConfig, quicConfig)
 	if err != nil {
 		return nil, fmt.Errorf("dial quic, %w", err)
 	}
 
 	c := &Client{
-		client:   qc,
+		conn:     qc,
 		idSeq:    &atomic.Uint32{},
 		handlers: gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
 		defaultHandler: func(reply *nh.Reply) {
@@ -354,7 +358,7 @@ func (c *Client) Call(serviceCode int32, method string, arg proto.Message, optio
 		return fmt.Errorf("marshal request message, %w", err)
 	}
 
-	return c.send(serviceCode, data)
+	return c.conn.send(serviceCode, data)
 }
 
 // CallStream 调用server-side stream接口
@@ -432,18 +436,20 @@ func (c *Client) run() {
 		defer ticker.Stop()
 
 		for range ticker.C {
-			if err := c.ping(); err != nil {
+			if err := c.conn.ping(); err != nil {
 				logger.Error("ping gateway", "error", err)
 			}
 		}
 	}()
 
-	ch := c.replyStream()
+	ch := c.conn.replyStream()
+
+Loop:
 	for {
 		select {
 		case reply, ok := <-ch:
 			if !ok {
-				return
+				break Loop
 			}
 			logger.Debug("receive reply",
 				"requestID", reply.GetRequestId(),
@@ -460,6 +466,13 @@ func (c *Client) run() {
 			c.defaultHandler(reply)
 		}
 	}
+
+	logger.Info("gateway connection closed")
+}
+
+// Close 关闭客户端
+func (c *Client) Close() {
+	c.conn.Close()
 }
 
 // MustClient 使用must方法处理错误的客户端
