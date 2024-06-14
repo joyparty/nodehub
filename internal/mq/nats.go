@@ -43,6 +43,12 @@ func (mq *natsMQ) Subscribe(ctx context.Context, handler func([]byte)) {
 		)
 }
 
+func (mq *natsMQ) Observable() rxgo.Observable {
+	mq.subscribe()
+
+	return mq.observer
+}
+
 func (mq *natsMQ) subscribe() {
 	mq.subscribeOnce.Do(func() {
 		msgC := make(chan *nats.Msg, 64)

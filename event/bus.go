@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/joyparty/nodehub/internal/mq"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/nats-io/nats.go"
+	"github.com/reactivex/rxgo/v2"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -44,6 +46,9 @@ func NewRedisBus(client *redis.Client) *Bus {
 // Bus 事件总线
 type Bus struct {
 	queue mq.Queue
+
+	observeOnce sync.Once
+	observable  rxgo.Observable // type: payload
 }
 
 // Publish 发布事件
@@ -100,25 +105,43 @@ func (bus *Bus) Subscribe(ctx context.Context, handler any) {
 		panic(errors.New("second argument must be time.Time"))
 	}
 
-	bus.queue.Subscribe(ctx, func(data []byte) {
-		p := payload{}
-		if err := json.Unmarshal(data, &p); err != nil {
-			logger.Error("unmarshal event payload", "error", err)
-			return
-		}
+	bus.observe()
+	bus.observable.ForEach(
+		func(item any) {
+			p := item.(payload)
 
-		if p.Type == eventType {
-			ev := reflect.New(firstArg)
-			if err := json.Unmarshal(p.Detail, ev.Interface()); err != nil {
-				logger.Error("unmarshal event", "error", err)
-				return
+			if p.Type == eventType {
+				ev := reflect.New(firstArg)
+				if err := json.Unmarshal(p.Detail, ev.Interface()); err != nil {
+					logger.Error("unmarshal event", "error", err)
+					return
+				}
+
+				fn.Call([]reflect.Value{
+					ev.Elem(),
+					reflect.ValueOf(p.GetTime()),
+				})
 			}
+		},
+		func(err error) {
+			logger.Error("handle cluster event", "error", err)
+		},
+		func() {},
 
-			fn.Call([]reflect.Value{
-				ev.Elem(),
-				reflect.ValueOf(p.GetTime()),
+		rxgo.WithContext(ctx),
+	)
+}
+
+func (bus *Bus) observe() {
+	bus.observeOnce.Do(func() {
+		bus.observable = bus.queue.Observable().
+			Map(func(ctx context.Context, item any) (any, error) {
+				p := payload{}
+				if err := json.Unmarshal(item.([]byte), &p); err != nil {
+					return nil, err
+				}
+				return p, nil
 			})
-		}
 	})
 }
 

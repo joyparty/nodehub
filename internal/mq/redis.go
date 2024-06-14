@@ -51,6 +51,12 @@ func (mq *redisMQ) Subscribe(ctx context.Context, handler func([]byte)) {
 		)
 }
 
+func (mq *redisMQ) Observable() rxgo.Observable {
+	mq.subscribe()
+
+	return mq.observer
+}
+
 func (mq *redisMQ) subscribe() {
 	mq.subscribeOnce.Do(func() {
 		ctx := context.Background()
