@@ -129,6 +129,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler any) {
 		func() {},
 
 		rxgo.WithContext(ctx),
+		rxgo.WithPool(4),
 	)
 }
 
