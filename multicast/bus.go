@@ -2,7 +2,6 @@ package multicast
 
 import (
 	"context"
-	"errors"
 
 	"github.com/joyparty/nodehub/internal/mq"
 	"github.com/joyparty/nodehub/logger"
@@ -50,10 +49,6 @@ func NewRedisBus(client *redis.Client) *Bus {
 
 // Publish 把消息发布到消息队列
 func (bus *Bus) Publish(ctx context.Context, message *nh.Multicast) error {
-	if message.GetContent().GetServiceCode() == 0 {
-		return errors.New("invalid content, from_service is required")
-	}
-
 	payload, err := proto.Marshal(message)
 	if err != nil {
 		return err
