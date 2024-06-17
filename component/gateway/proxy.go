@@ -306,7 +306,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 
 	desc, ok := p.opts.registry.GetGRPCDesc(req.GetServiceCode())
 	if !ok {
-		return status.Errorf(codes.NotFound, "service %d not found", req.GetServiceCode())
+		return status.Errorf(codes.Unimplemented, "unknown service %d", req.GetServiceCode())
 	} else if !desc.Public {
 		return status.Errorf(codes.PermissionDenied, "request private service")
 	}
@@ -333,7 +333,8 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 
 	method := path.Join(desc.Path, req.Method)
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
-		return fmt.Errorf("call unary method, %w", err)
+		// 这里不要用fmt.Errorf()包装，否则fmt.Errorf()会污染status.Status.Message()，导致日志记录不必要的重复内容
+		return err
 	}
 
 	if req.GetNoReply() {
@@ -504,7 +505,11 @@ func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) f
 		}
 
 		if err != nil {
-			logValues = append(logValues, "error", err)
+			if s, ok := status.FromError(err); ok {
+				logValues = append(logValues, "error", s.Message(), "grpcCode", s.Code())
+			} else {
+				logValues = append(logValues, "error", err)
+			}
 
 			if p.opts.requestLogger == nil {
 				logger.Error("handle request", logValues...)
