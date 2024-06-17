@@ -11,9 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Channel 通道名称
-var Channel = "nodehub:multicast"
-
 // Queue 消息队列
 type Queue = mq.Queue
 
@@ -30,20 +27,26 @@ func NewBus(queue Queue) *Bus {
 }
 
 // NewNatsBus 使用nats构造总线
-func NewNatsBus(conn *nats.Conn) *Bus {
+func NewNatsBus(conn *nats.Conn, options ...func(*Options)) *Bus {
+	opt := newOptions()
+	for _, fn := range options {
+		fn(opt)
+	}
+
 	return &Bus{
-		queue: mq.NewNatsMQ(conn, Channel),
+		queue: mq.NewNatsMQ(conn, opt.ChannelName),
 	}
 }
 
 // NewRedisBus 构造函数
-//
-// client 可以使用 *redis.Client 或者 *redis.ClusterClient
-//
-// 当使用ClusterClient时，会采用sharded channel
-func NewRedisBus(client *redis.Client) *Bus {
+func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
+	opt := newOptions()
+	for _, fn := range options {
+		fn(opt)
+	}
+
 	return &Bus{
-		queue: mq.NewRedisMQ(client, Channel),
+		queue: mq.NewRedisMQ(client, opt.ChannelName),
 	}
 }
 
@@ -73,4 +76,25 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 // Close 关闭消息队列
 func (bus *Bus) Close() {
 	bus.queue.Close()
+}
+
+// Options 配置
+type Options struct {
+	// ChannelName 通道名称，默认为nodehub:multicast
+	//
+	// 不同的总线实现内有不同的含义，在nats里面是topic，redis里面是channel
+	ChannelName string
+}
+
+func newOptions() *Options {
+	return &Options{
+		ChannelName: "nodehub:multicast",
+	}
+}
+
+// WithChannelName 设置通道名称
+func WithChannelName(name string) func(*Options) {
+	return func(o *Options) {
+		o.ChannelName = name
+	}
 }
