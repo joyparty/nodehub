@@ -230,7 +230,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	logger.Info("session connected", logVars...)
 	defer logger.Info("session disconnected", logVars...)
 
-	var expectedID uint32
+	var prevRequestID uint32
 
 	for {
 		select {
@@ -251,14 +251,11 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 			return
 		}
 
-		// 确保request id自增
-		if expectedID == 0 {
-			expectedID = req.GetId()
-		} else if req.GetId() != expectedID {
-			logger.Error("unexpected request id", "session", sess, "expected", expectedID, "actual", req.GetId())
+		if prevRequestID > 0 && req.GetId() <= prevRequestID {
+			logger.Error("request id has already been used ", "session", sess, "prev", prevRequestID, "current", req.GetId())
 			return
 		}
-		expectedID++
+		prevRequestID = req.GetId()
 
 		if err := p.submitTask(func() {
 			defer requestPool.Put(req)
