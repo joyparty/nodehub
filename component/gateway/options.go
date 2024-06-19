@@ -45,6 +45,9 @@ type Options struct {
 	// 如果超过这个时间还没有任何的读写操作，就认为此连接已断开
 	KeepaliveInterval time.Duration
 
+	// 每次请求的接口执行超时时间，默认5秒
+	RequstTimeout time.Duration
+
 	// 请求消息拦截器
 	// 每个请求都会经过这个拦截器，通过之后才会转发到上游服务
 	RequestInterceptor RequestInterceptor
@@ -61,6 +64,7 @@ type Options struct {
 func newOptions() *Options {
 	return &Options{
 		KeepaliveInterval:     1 * time.Minute,
+		RequstTimeout:         5 * time.Second,
 		RequestInterceptor:    defaultRequestInterceptor,
 		ConnectInterceptor:    defaultConnectInterceptor,
 		DisconnectInterceptor: defaultDisconnectInterceptor,
@@ -192,6 +196,13 @@ func WithRequestLogger(logger logger.Logger) Option {
 func WithKeepaliveInterval(interval time.Duration) Option {
 	return func(opt *Options) {
 		opt.KeepaliveInterval = interval.Abs()
+	}
+}
+
+// WithRequestTimeout 设置每次请求的接口执行超时时间，默认5秒
+func WithRequestTimeout(timeout time.Duration) Option {
+	return func(opt *Options) {
+		opt.RequstTimeout = timeout.Abs()
 	}
 }
 

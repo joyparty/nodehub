@@ -319,6 +319,12 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	md.Set(rpc.MDGateway, p.nodeID)
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
+	var cancel context.CancelFunc
+	if timemout := p.opts.RequstTimeout; timemout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timemout)
+		defer cancel()
+	}
+
 	input, err := newEmptyMessage(req.Data)
 	if err != nil {
 		return fmt.Errorf("unmarshal request data, %w", err)
