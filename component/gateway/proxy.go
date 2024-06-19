@@ -97,14 +97,14 @@ func (p *Proxy) Name() string {
 
 // CompleteNodeEntry 补全节点信息
 func (p *Proxy) CompleteNodeEntry(entry *cluster.NodeEntry) {
-	p.opts.transporter.CompleteNodeEntry(entry)
+	p.opts.Transporter.CompleteNodeEntry(entry)
 }
 
 // Start 启动服务
 func (p *Proxy) Start(ctx context.Context) error {
 	p.init(ctx)
 
-	sc, err := p.opts.transporter.Serve(ctx)
+	sc, err := p.opts.Transporter.Serve(ctx)
 	if err != nil {
 		return fmt.Errorf("start transporter, %w", err)
 	}
@@ -137,7 +137,7 @@ func (p *Proxy) Stop(ctx context.Context) {
 	close(p.done)
 	p.sessions.Close()
 
-	if err := p.opts.transporter.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+	if err := p.opts.Transporter.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
 		logger.Error("shutdown gateway transporter", "error", err)
 	}
 }
@@ -152,7 +152,7 @@ func (p *Proxy) NewGRPCService() nh.GatewayServer {
 
 func (p *Proxy) init(ctx context.Context) {
 	// 有状态路由更新
-	p.opts.eventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
+	p.opts.EventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
 		if err := p.submitTask(func() {
 			for _, userID := range ev.UserID {
 				if _, ok := p.sessions.Load(userID); ok {
@@ -164,7 +164,7 @@ func (p *Proxy) init(ctx context.Context) {
 		}
 	})
 
-	p.opts.eventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
+	p.opts.EventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
 		if err := p.submitTask(func() {
 			for _, userID := range ev.UserID {
 				p.stateTable.Remove(userID, ev.ServiceCode)
@@ -175,7 +175,7 @@ func (p *Proxy) init(ctx context.Context) {
 	})
 
 	// 禁止同一个用户同时连接多个网关
-	p.opts.eventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
+	p.opts.EventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
 		if ev.GatewayID != p.nodeID {
 			if sess, ok := p.sessions.Load(ev.UserID); ok {
 				logger.Warn("close duplicate session, user connect to other gateway", "session", sess)
@@ -185,7 +185,7 @@ func (p *Proxy) init(ctx context.Context) {
 	})
 
 	// 处理主动下行消息
-	p.opts.multicast.Subscribe(ctx, func(msg *nh.Multicast) {
+	p.opts.Multicast.Subscribe(ctx, func(msg *nh.Multicast) {
 		// 只发送5分钟内的消息
 		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
 			for _, sessID := range msg.GetReceiver() {
@@ -200,7 +200,7 @@ func (p *Proxy) init(ctx context.Context) {
 		}
 	})
 
-	p.opts.registry.SubscribeDelete(func(entry cluster.NodeEntry) {
+	p.opts.Registry.SubscribeDelete(func(entry cluster.NodeEntry) {
 		p.stateTable.CleanNode(entry.ID)
 	})
 
@@ -294,14 +294,14 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	logRequest := p.logRequest(ctx, sess, req)
 	defer func() { logRequest(conn, desc, err) }()
 
-	pass, err := p.opts.requestInterceptor(ctx, sess, req)
+	pass, err := p.opts.RequestInterceptor(ctx, sess, req)
 	if err != nil {
 		return fmt.Errorf("request interceptor, %w", err)
 	} else if !pass {
 		return errors.New("request interceptor denied")
 	}
 
-	desc, ok := p.opts.registry.GetGRPCDesc(req.GetServiceCode())
+	desc, ok := p.opts.Registry.GetGRPCDesc(req.GetServiceCode())
 	if !ok {
 		return status.Errorf(codes.Unimplemented, "unknown service %d", req.GetServiceCode())
 	} else if !desc.Public {
@@ -345,7 +345,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
-	userID, md, err := p.opts.initializer(ctx, sess)
+	userID, md, err := p.opts.Initializer(ctx, sess)
 	if err != nil {
 		return fmt.Errorf("deny by initializer, %w", err)
 	} else if userID == "" {
@@ -357,7 +357,7 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 	sess.SetID(userID)
 	sess.SetMetadata(md)
 
-	if err := p.opts.connectInterceptor(ctx, sess); err != nil {
+	if err := p.opts.ConnectInterceptor(ctx, sess); err != nil {
 		return err
 	}
 
@@ -376,7 +376,7 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 		p.cleanJobs.Delete(sess.ID())
 	}
 
-	if err := p.opts.eventBus.Publish(ctx, event.UserConnected{
+	if err := p.opts.EventBus.Publish(ctx, event.UserConnected{
 		UserID:     sess.ID(),
 		GatewayID:  p.nodeID,
 		RemoteAddr: sess.RemoteAddr(),
@@ -390,11 +390,11 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 
 func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
 	defer sess.Close()
-	p.opts.disconnectInterceptor(ctx, sess)
+	p.opts.DisconnectInterceptor(ctx, sess)
 	p.sessions.Delete(sess)
 
 	// 即使出错也不中断断开流程
-	_ = p.opts.eventBus.Publish(ctx, event.UserDisconnected{
+	_ = p.opts.EventBus.Publish(ctx, event.UserDisconnected{
 		UserID:     sess.ID(),
 		GatewayID:  p.nodeID,
 		RemoteAddr: sess.RemoteAddr(),
@@ -413,7 +413,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	var nodeID ulid.ULID
 	// 无状态服务，根据负载均衡策略选择一个节点发送
 	if !desc.Stateful {
-		nodeID, err = p.opts.registry.AllocGRPCNode(req.GetServiceCode(), sess)
+		nodeID, err = p.opts.Registry.AllocGRPCNode(req.GetServiceCode(), sess)
 		if err != nil {
 			err = status.Errorf(codes.Aborted, "pick grpc node, %v", err)
 			return
@@ -453,7 +453,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	}
 
 	// 自动分配策略，根据负载均衡策略选择一个节点发送
-	nodeID, err = p.opts.registry.AllocGRPCNode(req.GetServiceCode(), sess)
+	nodeID, err = p.opts.Registry.AllocGRPCNode(req.GetServiceCode(), sess)
 	if err != nil {
 		err = status.Errorf(codes.Aborted, "pick grpc node, %v", err)
 		return
@@ -465,7 +465,7 @@ func (p *Proxy) getUpstream(sess Session, req *nh.Request, desc cluster.GRPCServ
 	}()
 
 FINISH:
-	conn, err = p.opts.registry.GetGRPCConn(nodeID)
+	conn, err = p.opts.Registry.GetGRPCConn(nodeID)
 	if err != nil {
 		err = status.Errorf(codes.Aborted, "get grpc conn, %v", err)
 	}
@@ -476,7 +476,7 @@ func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) f
 	start := time.Now()
 
 	return func(upstream *grpc.ClientConn, desc cluster.GRPCServiceDesc, err error) {
-		if err == nil && p.opts.requestLogger == nil {
+		if err == nil && p.opts.RequestLogger == nil {
 			return
 		}
 
@@ -508,19 +508,19 @@ func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) f
 				logValues = append(logValues, "error", err)
 			}
 
-			if p.opts.requestLogger == nil {
+			if p.opts.RequestLogger == nil {
 				logger.Error("handle request", logValues...)
 			} else {
-				p.opts.requestLogger.Error("handle request", logValues...)
+				p.opts.RequestLogger.Error("handle request", logValues...)
 			}
 		} else {
-			p.opts.requestLogger.Info("handle request", logValues...)
+			p.opts.RequestLogger.Info("handle request", logValues...)
 		}
 	}
 }
 
 func (p *Proxy) submitTask(task func()) error {
-	if pool := p.opts.goPool; pool != nil {
+	if pool := p.opts.GoPool; pool != nil {
 		return pool.Submit(task)
 	}
 	return ants.Submit(task)
@@ -544,7 +544,7 @@ func (p *Proxy) removeZombie() {
 			return
 		case <-time.After(10 * time.Second):
 			p.sessions.Range(func(s Session) bool {
-				if time.Since(s.LastRWTime()) > p.opts.keepaliveInterval {
+				if time.Since(s.LastRWTime()) > p.opts.KeepaliveInterval {
 					logger.Info("remove heartbeat timeout session", "session", s)
 					_ = s.Close()
 				}

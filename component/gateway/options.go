@@ -16,41 +16,68 @@ import (
 
 // Options 网关配置
 type Options struct {
-	transporter       Transporter
-	initializer       Initializer
-	registry          *cluster.Registry
-	eventBus          *event.Bus
-	multicast         multicast.Subscriber
-	requestLogger     logger.Logger
-	goPool            GoPool
-	keepaliveInterval time.Duration
+	// 网络传输方式
+	// 一个网关节点只允许使用一种传输方式
+	Transporter Transporter
 
-	requestInterceptor    RequestInterceptor
-	connectInterceptor    ConnectInterceptor
-	disconnectInterceptor DisconnectInterceptor
+	// 会话初始化
+	// 通过这个配置可以实现自定义的初始化逻辑，例如鉴权
+	Initializer Initializer
+
+	// 服务发现注册中心
+	Registry *cluster.Registry
+
+	// 集群事件消息总线
+	EventBus *event.Bus
+
+	// 对客户端主动下行消息总线
+	// 每个网关都会订阅主动消息消息队列
+	// 如果消息接收方连接到了当前网关，就会把消息通过对应的会话下发，否则忽略
+	Multicast multicast.Subscriber
+
+	// 请求日志记录
+	RequestLogger logger.Logger
+
+	// goroutine池，用于处理网关内的各种异步任务
+	GoPool GoPool
+
+	// 网络连接保持活跃时间，默认1分钟
+	// 如果超过这个时间还没有任何的读写操作，就认为此连接已断开
+	KeepaliveInterval time.Duration
+
+	// 请求消息拦截器
+	// 每个请求都会经过这个拦截器，通过之后才会转发到上游服务
+	RequestInterceptor RequestInterceptor
+
+	// 连接拦截器
+	// 在连接创建之后执行自定义操作，返回错误会中断连接
+	ConnectInterceptor ConnectInterceptor
+
+	// 断开连接拦截器
+	// 在连接断开前执行自定操作
+	DisconnectInterceptor DisconnectInterceptor
 }
 
 func newOptions() *Options {
 	return &Options{
-		keepaliveInterval: 1 * time.Minute,
-
-		requestInterceptor:    defaultRequestInterceptor,
-		connectInterceptor:    defaultConnectInterceptor,
-		disconnectInterceptor: defaultDisconnectInterceptor,
+		KeepaliveInterval:     1 * time.Minute,
+		RequestInterceptor:    defaultRequestInterceptor,
+		ConnectInterceptor:    defaultConnectInterceptor,
+		DisconnectInterceptor: defaultDisconnectInterceptor,
 	}
 }
 
 // Validate 有效性检查
 func (opt *Options) Validate() error {
-	if opt.registry == nil {
+	if opt.Registry == nil {
 		return errors.New("registry is nil")
-	} else if opt.transporter == nil {
+	} else if opt.Transporter == nil {
 		return errors.New("transporter is nil")
-	} else if opt.initializer == nil {
+	} else if opt.Initializer == nil {
 		return errors.New("initializer is nil")
-	} else if opt.eventBus == nil {
+	} else if opt.EventBus == nil {
 		return errors.New("eventBus is nil")
-	} else if opt.multicast == nil {
+	} else if opt.Multicast == nil {
 		return errors.New("multicast subscriber is nil")
 	}
 
@@ -63,7 +90,7 @@ type Option func(opt *Options)
 // WithRegistry 设置服务注册中心
 func WithRegistry(registry *cluster.Registry) Option {
 	return func(opt *Options) {
-		opt.registry = registry
+		opt.Registry = registry
 	}
 }
 
@@ -77,7 +104,7 @@ type Transporter interface {
 // WithTransporter 设置传输层
 func WithTransporter(transporter Transporter) Option {
 	return func(opt *Options) {
-		opt.transporter = transporter
+		opt.Transporter = transporter
 	}
 }
 
@@ -91,7 +118,7 @@ type Initializer func(ctx context.Context, sess Session) (userID string, md meta
 // WithInitializer 设置连接初始化逻辑
 func WithInitializer(initializer Initializer) Option {
 	return func(opt *Options) {
-		opt.initializer = initializer
+		opt.Initializer = initializer
 	}
 }
 
@@ -107,7 +134,7 @@ var defaultRequestInterceptor = func(ctx context.Context, sess Session, req *nh.
 // WithRequestInterceptor 设置请求拦截器
 func WithRequestInterceptor(interceptor RequestInterceptor) Option {
 	return func(opt *Options) {
-		opt.requestInterceptor = interceptor
+		opt.RequestInterceptor = interceptor
 	}
 }
 
@@ -121,7 +148,7 @@ var defaultConnectInterceptor = func(ctx context.Context, sess Session) error {
 // WithConnectInterceptor 设置连接拦截器
 func WithConnectInterceptor(interceptor ConnectInterceptor) Option {
 	return func(opt *Options) {
-		opt.connectInterceptor = interceptor
+		opt.ConnectInterceptor = interceptor
 	}
 }
 
@@ -133,28 +160,28 @@ var defaultDisconnectInterceptor = func(ctx context.Context, sess Session) {}
 // WithDisconnectInterceptor 设置断开连接拦截器
 func WithDisconnectInterceptor(interceptor DisconnectInterceptor) Option {
 	return func(opt *Options) {
-		opt.disconnectInterceptor = interceptor
+		opt.DisconnectInterceptor = interceptor
 	}
 }
 
 // WithEventBus 设置事件总线
 func WithEventBus(bus *event.Bus) Option {
 	return func(opt *Options) {
-		opt.eventBus = bus
+		opt.EventBus = bus
 	}
 }
 
 // WithMulticast 设置广播组件
 func WithMulticast(multicast multicast.Subscriber) Option {
 	return func(opt *Options) {
-		opt.multicast = multicast
+		opt.Multicast = multicast
 	}
 }
 
 // WithRequestLogger 设置请求日志记录器
 func WithRequestLogger(logger logger.Logger) Option {
 	return func(opt *Options) {
-		opt.requestLogger = logger
+		opt.RequestLogger = logger
 	}
 }
 
@@ -164,7 +191,7 @@ func WithRequestLogger(logger logger.Logger) Option {
 // 服务器端如果检测到客户端连接超过这个时间还没有任何读写，就会认为此连接已断线，会触发主动断线操作
 func WithKeepaliveInterval(interval time.Duration) Option {
 	return func(opt *Options) {
-		opt.keepaliveInterval = interval.Abs()
+		opt.KeepaliveInterval = interval.Abs()
 	}
 }
 
@@ -176,7 +203,7 @@ type GoPool interface {
 // WithGoPool 设置goroutine pool
 func WithGoPool(pool GoPool) Option {
 	return func(opt *Options) {
-		opt.goPool = pool
+		opt.GoPool = pool
 	}
 }
 
