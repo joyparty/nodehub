@@ -11,6 +11,7 @@ import (
 
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/component/gateway"
+	"github.com/joyparty/nodehub/component/metrics"
 	"github.com/joyparty/nodehub/component/rpc"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
@@ -249,6 +250,8 @@ type GatewayConfig struct {
 	GRPCListen       string
 	GRPCListener     net.Listener
 	GRPCServerOption []grpc.ServerOption
+
+	MetricsListen string
 }
 
 // NewGatewayNode 构造一个网关节点
@@ -270,6 +273,10 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	}
 	gs.RegisterService(nh.GatewayServiceCode, nh.Gateway_ServiceDesc, proxy.NewGRPCService())
 	node.AddComponent(gs)
+
+	if addr := config.MetricsListen; addr != "" {
+		node.AddComponent(metrics.NewServer(addr))
+	}
 
 	return node
 }

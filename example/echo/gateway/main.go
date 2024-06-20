@@ -108,6 +108,9 @@ func main() {
 		},
 
 		GRPCListener: gokit.MustReturn(newTCPListener(grpcListen, reuse)),
+
+		// 启动prometheus指标服务
+		MetricsListen: "127.0.0.1:12345",
 	}
 
 	node := nodehub.NewGatewayNode(registry, gwConfig)

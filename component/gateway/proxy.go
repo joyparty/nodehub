@@ -15,6 +15,7 @@ import (
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/component/rpc"
 	"github.com/joyparty/nodehub/event"
+	"github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
@@ -287,12 +288,13 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 // 以status.Error()构造的错误，都会被下行通知到客户端
 func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) (err error) {
 	var (
-		conn *grpc.ClientConn
-		desc cluster.GRPCServiceDesc
+		conn   *grpc.ClientConn
+		desc   cluster.GRPCServiceDesc
+		method string
 	)
 
 	logRequest := p.logRequest(ctx, sess, req)
-	defer func() { logRequest(conn, desc, err) }()
+	defer func() { logRequest(conn, desc, method, err) }()
 
 	pass, err := p.opts.RequestInterceptor(ctx, sess, req)
 	if err != nil {
@@ -334,7 +336,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	nh.ResetReply(output)
 	defer replyPool.Put(output)
 
-	method := path.Join(desc.Path, req.Method)
+	method = path.Join(desc.Path, req.Method)
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		// 这里不要用fmt.Errorf()包装，否则fmt.Errorf()会污染status.Status.Message()，导致日志记录不必要的重复内容
 		return err
@@ -478,10 +480,15 @@ FINISH:
 	return
 }
 
-func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) func(*grpc.ClientConn, cluster.GRPCServiceDesc, error) {
+func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) func(*grpc.ClientConn, cluster.GRPCServiceDesc, string, error) {
 	start := time.Now()
 
-	return func(upstream *grpc.ClientConn, desc cluster.GRPCServiceDesc, err error) {
+	return func(upstream *grpc.ClientConn, desc cluster.GRPCServiceDesc, method string, err error) {
+		// 如果method为空，说明还没有到达请求阶段
+		if method != "" {
+			metrics.IncrGRPCRequests(method, err, time.Since(start))
+		}
+
 		if err == nil && p.opts.RequestLogger == nil {
 			return
 		}
