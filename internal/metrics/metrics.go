@@ -63,13 +63,14 @@ func Init() *prometheus.Registry {
 			Name: "payload_size",
 			Help: "Size of network payload",
 			Buckets: []float64{
-				1024,            // 1k
-				4 * 1024,        // 4k
-				8 * 1024,        // 8k
-				16 * 1024,       // 16k
-				512 * 1024,      // 512k
-				1024 * 1024,     // 1M
-				5 * 1024 * 1024, // 5M
+				1024,        // 1k
+				4 * 1024,    // 4k
+				8 * 1024,    // 8k
+				16 * 1024,   // 16k
+				32 * 1024,   // 32k
+				64 * 1024,   // 64k default max size
+				512 * 1024,  // 512k
+				1024 * 1024, // 1M
 			},
 		},
 	)
