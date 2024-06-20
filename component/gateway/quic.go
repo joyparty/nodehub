@@ -15,6 +15,7 @@ import (
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/internal/codec"
+	"github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
@@ -230,6 +231,7 @@ func (qs *quicSession) Recv(req *nh.Request) error {
 			codec.PutMessage(msg)
 			continue
 		}
+		metrics.IncrPayloadSize(qs.Type(), msg.Len())
 
 		defer codec.PutMessage(msg)
 		if err := proto.Unmarshal(msg.Bytes(), req); err != nil {

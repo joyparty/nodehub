@@ -13,6 +13,7 @@ import (
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/internal/codec"
+	"github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
@@ -143,6 +144,8 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 		ts.lastRWTime.Store(time.Now())
 
 		if msg.Len() > 0 {
+			metrics.IncrPayloadSize(ts.Type(), msg.Len())
+
 			if err := proto.Unmarshal(msg.Bytes(), req); err != nil {
 				return fmt.Errorf("unmarshal request, %w", err)
 			}

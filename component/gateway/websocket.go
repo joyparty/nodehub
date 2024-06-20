@@ -15,6 +15,7 @@ import (
 	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/internal/codec"
+	"github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
@@ -209,6 +210,7 @@ func (ws *wsSession) Recv(req *nh.Request) error {
 			return err
 		}
 		ws.lastRWTime.Store(time.Now())
+		metrics.IncrPayloadSize(ws.Type(), len(message))
 
 		// 只处理二进制消息
 		if messageType == websocket.BinaryMessage {

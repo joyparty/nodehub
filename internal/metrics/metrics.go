@@ -10,11 +10,13 @@ import (
 var (
 	enabled bool
 
-	registry     *prometheus.Registry
-	grpcReqs     *prometheus.CounterVec
-	grpcDurs     *prometheus.HistogramVec
-	sessionTotal *prometheus.CounterVec
-	sessionCount *prometheus.GaugeVec
+	registry         *prometheus.Registry
+	grpcReqs         *prometheus.CounterVec
+	grpcDurs         *prometheus.HistogramVec
+	sessionTotal     *prometheus.CounterVec
+	sessionCount     *prometheus.GaugeVec
+	payloadSize      prometheus.Histogram
+	payloadSizeTotal *prometheus.CounterVec
 )
 
 // Init 初始化metrics
@@ -56,11 +58,37 @@ func Init() *prometheus.Registry {
 		[]string{"type"},
 	)
 
+	payloadSize = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name: "payload_size",
+			Help: "Size of network payload",
+			Buckets: []float64{
+				1024,            // 1k
+				4 * 1024,        // 4k
+				8 * 1024,        // 8k
+				16 * 1024,       // 16k
+				512 * 1024,      // 512k
+				1024 * 1024,     // 1M
+				5 * 1024 * 1024, // 5M
+			},
+		},
+	)
+
+	payloadSizeTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "payload_size_total",
+			Help: "Total size of network payload",
+		},
+		[]string{"type"},
+	)
+
 	registry = prometheus.NewRegistry()
 	registry.MustRegister(grpcReqs)
 	registry.MustRegister(grpcDurs)
 	registry.MustRegister(sessionTotal)
 	registry.MustRegister(sessionCount)
+	registry.MustRegister(payloadSize)
+	registry.MustRegister(payloadSizeTotal)
 
 	enabled = true
 
@@ -100,4 +128,14 @@ func DecrGatewaySession(sessionType string) {
 	}
 
 	sessionCount.WithLabelValues(sessionType).Dec()
+}
+
+// IncrPayloadSize 统计网络包大小
+func IncrPayloadSize(sessionType string, size int) {
+	if !enabled {
+		return
+	}
+
+	payloadSize.Observe(float64(size))
+	payloadSizeTotal.WithLabelValues(sessionType).Add(float64(size))
 }
