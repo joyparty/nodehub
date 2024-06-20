@@ -10,9 +10,11 @@ import (
 var (
 	enabled bool
 
-	registry *prometheus.Registry
-	grpcReqs *prometheus.CounterVec
-	grpcDurs *prometheus.HistogramVec
+	registry     *prometheus.Registry
+	grpcReqs     *prometheus.CounterVec
+	grpcDurs     *prometheus.HistogramVec
+	sessionTotal *prometheus.CounterVec
+	sessionCount *prometheus.GaugeVec
 )
 
 // Init 初始化metrics
@@ -38,9 +40,27 @@ func Init() *prometheus.Registry {
 		[]string{"method"},
 	)
 
+	sessionTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "session_total",
+			Help: "Total number of sessions",
+		},
+		[]string{"type"},
+	)
+
+	sessionCount = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "session_count",
+			Help: "Number of sessions",
+		},
+		[]string{"type"},
+	)
+
 	registry = prometheus.NewRegistry()
 	registry.MustRegister(grpcReqs)
 	registry.MustRegister(grpcDurs)
+	registry.MustRegister(sessionTotal)
+	registry.MustRegister(sessionCount)
 
 	enabled = true
 
@@ -61,4 +81,23 @@ func IncrGRPCRequests(method string, err error, duration time.Duration) {
 	grpcDurs.With(prometheus.Labels{
 		"method": method,
 	}).Observe(duration.Seconds())
+}
+
+// IncrGatewaySession 增加网关session计数
+func IncrGatewaySession(sessionType string) {
+	if !enabled {
+		return
+	}
+
+	sessionTotal.WithLabelValues(sessionType).Inc()
+	sessionCount.WithLabelValues(sessionType).Inc()
+}
+
+// DecrGatewaySession 减少网关session计数
+func DecrGatewaySession(sessionType string) {
+	if !enabled {
+		return
+	}
+
+	sessionCount.WithLabelValues(sessionType).Dec()
 }

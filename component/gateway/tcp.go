@@ -106,6 +106,10 @@ func newTCPSession(conn net.Conn) *tcpSession {
 	return ts
 }
 
+func (ts *tcpSession) Type() string {
+	return "tcp"
+}
+
 func (ts *tcpSession) ID() string {
 	return ts.id
 }

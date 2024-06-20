@@ -47,6 +47,7 @@ var (
 
 // Session 连接会话
 type Session interface {
+	Type() string
 	ID() string
 	SetID(string)
 	SetMetadata(metadata.MD)
@@ -222,6 +223,9 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		return
 	}
 	defer p.onDisconnect(ctx, sess)
+
+	metrics.IncrGatewaySession(sess.Type())
+	defer metrics.DecrGatewaySession(sess.Type())
 
 	logVars := []any{
 		"session", sess,

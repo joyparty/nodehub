@@ -126,6 +126,10 @@ func newQuicSession(conn quic.Connection) *quicSession {
 	return qs
 }
 
+func (qs *quicSession) Type() string {
+	return "quic"
+}
+
 func (qs *quicSession) ID() string {
 	return qs.id
 }

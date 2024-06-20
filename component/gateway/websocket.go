@@ -169,6 +169,10 @@ func (ws *wsSession) setPingPongHandler() {
 	})
 }
 
+func (ws *wsSession) Type() string {
+	return "websocket"
+}
+
 func (ws *wsSession) ID() string {
 	return ws.id
 }
