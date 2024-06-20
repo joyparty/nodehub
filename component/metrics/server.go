@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/joyparty/nodehub/cluster"
 	in "github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -26,6 +27,11 @@ func NewServer(addr string) *Server {
 // Name implements nodehub.Component interface.
 func (s *Server) Name() string {
 	return "metrics"
+}
+
+// CompleteNodeEntry 服务发现条目配置
+func (s *Server) CompleteNodeEntry(entry *cluster.NodeEntry) {
+	entry.Metrics = fmt.Sprintf("http://%s/metrics", s.addr)
 }
 
 // Start implements nodehub.Component interface.

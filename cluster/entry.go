@@ -43,6 +43,11 @@ type NodeEntry struct {
 	//	 - ws://0.0.0.0:8222/grpc
 	Entrance string `json:"entrance,omitempty"`
 
+	// prometheus监控指标URL
+	//
+	// Example: http://127.0.0.1:12345/metrics
+	Metrics string `json:"metrics,omitempty"`
+
 	// grpc服务信息
 	GRPC GRPCEntry `json:"grpc"`
 
