@@ -159,7 +159,7 @@ func (bus *Bus) observe() {
 					metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(p.GetTime()))
 				}
 			}
-		}})
+		}}, rxgo.WithErrorStrategy(rxgo.ContinueOnError))
 	})
 }
 
