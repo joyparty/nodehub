@@ -17,6 +17,8 @@ var (
 	sessionCount     *prometheus.GaugeVec
 	payloadSize      prometheus.Histogram
 	payloadSizeTotal *prometheus.CounterVec
+	queueTotal       *prometheus.CounterVec
+	queueDurs        *prometheus.HistogramVec
 )
 
 // Init 初始化metrics
@@ -83,6 +85,23 @@ func Init() *prometheus.Registry {
 		[]string{"type"},
 	)
 
+	queueTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "message_queue_total",
+			Help: "Total number of queue message",
+		},
+		[]string{"topic"},
+	)
+
+	queueDurs = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "message_queue_delay",
+			Help:    "Duration of queue message from publish to consume",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"topic"},
+	)
+
 	registry = prometheus.NewRegistry()
 	registry.MustRegister(grpcReqs)
 	registry.MustRegister(grpcDurs)
@@ -90,6 +109,8 @@ func Init() *prometheus.Registry {
 	registry.MustRegister(sessionCount)
 	registry.MustRegister(payloadSize)
 	registry.MustRegister(payloadSizeTotal)
+	registry.MustRegister(queueTotal)
+	registry.MustRegister(queueDurs)
 
 	enabled = true
 
@@ -139,4 +160,14 @@ func IncrPayloadSize(sessionType string, size int) {
 
 	payloadSize.Observe(float64(size))
 	payloadSizeTotal.WithLabelValues(sessionType).Add(float64(size))
+}
+
+// IncrMessageQueue 队列消息统计
+func IncrMessageQueue(topic string, duration time.Duration) {
+	if !enabled {
+		return
+	}
+
+	queueTotal.WithLabelValues(topic).Inc()
+	queueDurs.WithLabelValues(topic).Observe(duration.Seconds())
 }

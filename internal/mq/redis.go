@@ -2,10 +2,8 @@ package mq
 
 import (
 	"context"
-	"sync"
+	"time"
 
-	"github.com/joyparty/nodehub/logger"
-	"github.com/reactivex/rxgo/v2"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -14,9 +12,6 @@ type redisMQ struct {
 	client  *redis.Client
 	channel string
 	done    chan struct{}
-
-	observer      rxgo.Observable
-	subscribeOnce *sync.Once
 }
 
 // NewRedisMQ 构造函数
@@ -26,11 +21,14 @@ type redisMQ struct {
 // 当使用ClusterClient时，会采用sharded channel
 func NewRedisMQ(client *redis.Client, channel string) Queue {
 	return &redisMQ{
-		client:        client,
-		channel:       channel,
-		done:          make(chan struct{}),
-		subscribeOnce: &sync.Once{},
+		client:  client,
+		channel: channel,
+		done:    make(chan struct{}),
 	}
+}
+
+func (mq *redisMQ) Topic() string {
+	return mq.channel
 }
 
 // Publish 把消息发布到消息队列
@@ -38,60 +36,44 @@ func (mq *redisMQ) Publish(ctx context.Context, payload []byte) error {
 	return mq.client.Publish(ctx, mq.channel, payload).Err()
 }
 
-// Subscribe 从消息队列订阅消息
-func (mq *redisMQ) Subscribe(ctx context.Context, handler func([]byte)) {
-	mq.subscribe()
+func (mq *redisMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
+	msgC := make(chan []byte)
 
-	mq.observer.
-		DoOnNext(
-			func(item any) {
-				handler(item.([]byte))
-			},
-			rxgo.WithContext(ctx),
-		)
-}
-
-func (mq *redisMQ) Observable() rxgo.Observable {
-	mq.subscribe()
-
-	return mq.observer
-}
-
-func (mq *redisMQ) subscribe() {
-	mq.subscribeOnce.Do(func() {
-		ctx := context.Background()
+	go func() {
 		pubsub := mq.client.Subscribe(ctx, mq.channel)
-		items := make(chan rxgo.Item)
-		mq.observer = rxgo.FromEventSource(items, rxgo.WithErrorStrategy(rxgo.ContinueOnError))
 
-		mc := pubsub.Channel()
-		go func() {
-			defer func() {
-				pubsub.Unsubscribe(ctx)
-				pubsub.Close()
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
 
-				close(items)
-			}()
+			pubsub.Unsubscribe(ctx)
+			pubsub.Close()
+			close(msgC)
+		}()
 
-			for {
+		for {
+			select {
+			case <-mq.done:
+				return
+			case <-ctx.Done():
+				return
+			case msg, ok := <-pubsub.Channel():
+				if !ok {
+					return
+				}
+
 				select {
 				case <-mq.done:
 					return
-				case msg, ok := <-mc:
-					if !ok {
-						logger.Error("redis MQ consumer unexpected closed", "channel", mq.channel)
-						return
-					}
-
-					select {
-					case <-mq.done:
-						return
-					case items <- rxgo.Of([]byte(msg.Payload)):
-					}
+				case msgC <- []byte(msg.Payload):
+				default:
+					// drop
 				}
 			}
-		}()
-	})
+		}
+	}()
+
+	return msgC, nil
 }
 
 // Close 关闭消息队列

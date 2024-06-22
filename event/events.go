@@ -42,7 +42,7 @@ type payload struct {
 }
 
 func (p payload) GetTime() time.Time {
-	return time.UnixMilli(p.Time)
+	return time.UnixMicro(p.Time)
 }
 
 func newPayload(ev any) (p payload, err error) {
@@ -52,7 +52,7 @@ func newPayload(ev any) (p payload, err error) {
 		return
 	}
 
-	p.Time = time.Now().UnixMilli()
+	p.Time = time.Now().UnixMicro()
 	p.Type = eventType
 	p.Detail, err = json.Marshal(ev)
 	return
