@@ -66,8 +66,6 @@ func (mq *redisMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
 				case <-mq.done:
 					return
 				case msgC <- []byte(msg.Payload):
-				default:
-					// drop
 				}
 			}
 		}

@@ -58,8 +58,6 @@ func (mq *natsMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
 				case <-mq.done:
 					return
 				case msgC <- msg.Data:
-				default:
-					// drop
 				}
 			}
 		}
