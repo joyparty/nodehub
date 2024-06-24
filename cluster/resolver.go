@@ -3,7 +3,6 @@ package cluster
 import (
 	"fmt"
 	"math/rand"
-	"sync"
 
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
@@ -14,8 +13,6 @@ import (
 
 // grpcResolver grpc服务发现
 type grpcResolver struct {
-	sync.Mutex
-
 	// serviceCode => GRPCServiceDesc
 	services *gokit.MapOf[int32, GRPCServiceDesc]
 
@@ -52,9 +49,6 @@ func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 
 // Update 更新条目
 func (r *grpcResolver) Update(node NodeEntry) {
-	r.Lock()
-	defer r.Unlock()
-
 	if len(node.GRPC.Services) == 0 {
 		return
 	}
@@ -83,9 +77,6 @@ func (r *grpcResolver) Update(node NodeEntry) {
 
 // Remove 删除条目
 func (r *grpcResolver) Remove(node NodeEntry) {
-	r.Lock()
-	defer r.Unlock()
-
 	if len(node.GRPC.Services) == 0 {
 		return
 	}

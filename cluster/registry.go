@@ -134,9 +134,25 @@ func (r *Registry) runWatcher() error {
 	events := make(chan rxgo.Item)
 	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
 
-	updateNodes := func(event mvccpb.Event_EventType, value []byte) {
+	var (
+		lock     sync.Mutex
+		versions = map[string]int64{} // etcd条目版本号
+	)
+	updateNodes := func(event mvccpb.Event_EventType, kv *mvccpb.KeyValue) {
+		lock.Lock()
+		defer lock.Unlock()
+
+		// DELETE事件不检查版本号信息
+		if event == mvccpb.PUT {
+			key := string(kv.Key)
+			if ver, ok := versions[key]; ok && ver >= kv.Version {
+				return
+			}
+			versions[key] = kv.Version
+		}
+
 		var entry NodeEntry
-		if err := json.Unmarshal(value, &entry); err != nil {
+		if err := json.Unmarshal(kv.Value, &entry); err != nil {
 			logger.Error("unmarshal entry", "error", err)
 			return
 		}
@@ -158,16 +174,19 @@ func (r *Registry) runWatcher() error {
 	}
 
 	// 处理已有条目
-	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
-	defer cancel()
+	go func() {
+		ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+		defer cancel()
 
-	resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
-	if err != nil {
-		return fmt.Errorf("get exist entries, %w", err)
-	}
-	for _, kv := range resp.Kvs {
-		updateNodes(mvccpb.PUT, kv.Value)
-	}
+		resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
+		if err != nil {
+			logger.Error("get exist entries", "error", err)
+			panic(fmt.Errorf("get exist entries, %w", err))
+		}
+		for _, kv := range resp.Kvs {
+			updateNodes(mvccpb.PUT, kv)
+		}
+	}()
 
 	// 监听变更
 	go func() {
@@ -182,9 +201,9 @@ func (r *Registry) runWatcher() error {
 				for _, ev := range wResp.Events {
 					switch ev.Type {
 					case mvccpb.PUT:
-						updateNodes(ev.Type, ev.Kv.Value)
+						updateNodes(ev.Type, ev.Kv)
 					case mvccpb.DELETE:
-						updateNodes(ev.Type, ev.PrevKv.Value)
+						updateNodes(ev.Type, ev.PrevKv)
 					default:
 						logger.Error("unknown event type", "type", ev.Type)
 					}
