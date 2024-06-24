@@ -39,6 +39,8 @@ type Component interface {
 
 // Node 节点，一个节点上可以运行多个网络服务
 type Node struct {
+	sync.RWMutex
+
 	entry      *cluster.NodeEntry
 	registry   *cluster.Registry
 	components []Component
@@ -203,11 +205,17 @@ func (n *Node) Shutdown() {
 
 // State 获取节点状态
 func (n *Node) State() cluster.NodeState {
+	n.RLock()
+	defer n.RUnlock()
+
 	return n.entry.State
 }
 
 // ChangeState 改变节点状态
 func (n *Node) ChangeState(state cluster.NodeState) (err error) {
+	n.Lock()
+	defer n.Unlock()
+
 	if n.entry.State == state {
 		return nil
 	}
