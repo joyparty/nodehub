@@ -173,21 +173,6 @@ func (r *Registry) runWatcher() error {
 		}
 	}
 
-	// 处理已有条目
-	go func() {
-		ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
-		defer cancel()
-
-		resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
-		if err != nil {
-			logger.Error("get exist entries", "error", err)
-			panic(fmt.Errorf("get exist entries, %w", err))
-		}
-		for _, kv := range resp.Kvs {
-			updateNodes(mvccpb.PUT, kv)
-		}
-	}()
-
 	// 监听变更
 	go func() {
 		defer close(events)
@@ -211,6 +196,18 @@ func (r *Registry) runWatcher() error {
 			}
 		}
 	}()
+
+	// 处理已有条目
+	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+	defer cancel()
+
+	resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		return fmt.Errorf("get exist entries, %w", err)
+	}
+	for _, kv := range resp.Kvs {
+		updateNodes(mvccpb.PUT, kv)
+	}
 
 	return nil
 }
