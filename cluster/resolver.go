@@ -5,7 +5,6 @@ import (
 	"math/rand"
 
 	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/logger"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/lo"
 	"google.golang.org/grpc"
@@ -50,14 +49,11 @@ func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 
 // Update 更新条目
 func (r *grpcResolver) Update(node NodeEntry) {
-	defer r.logData()
-
 	if len(node.GRPC.Services) == 0 {
 		return
 	}
 
 	r.allNodes.Store(node.ID, node)
-
 	for _, desc := range node.GRPC.Services {
 		// code为负数的是框架内置服务，不需要服务发现
 		if desc.Code < 0 {
@@ -80,14 +76,17 @@ func (r *grpcResolver) Update(node NodeEntry) {
 
 // Remove 删除条目
 func (r *grpcResolver) Remove(node NodeEntry) {
-	defer r.logData()
-
 	if len(node.GRPC.Services) == 0 {
 		return
 	}
 
 	r.allNodes.Delete(node.ID)
 	for _, desc := range node.GRPC.Services {
+		// code为负数的是框架内置服务，不需要服务发现
+		if desc.Code < 0 {
+			continue
+		}
+
 		r.updateServiceNodes(desc.Code)
 		r.updateBalancer(desc.Code)
 	}
@@ -201,7 +200,7 @@ func (r *grpcResolver) Close() {
 	})
 }
 
-func (r *grpcResolver) logData() {
+func (r *grpcResolver) DumpData() map[string]any {
 	service := map[int32]GRPCServiceDesc{}
 	r.services.Range(func(key int32, value GRPCServiceDesc) bool {
 		service[key] = value
@@ -222,9 +221,9 @@ func (r *grpcResolver) logData() {
 		return true
 	})
 
-	logger.Debug("grpc resolver data",
-		"services", service,
-		"allNodes", allNodes,
-		"okNodes", okNodes,
-	)
+	return map[string]any{
+		"services": service,
+		"allNodes": allNodes,
+		"okNodes":  okNodes,
+	}
 }

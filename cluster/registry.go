@@ -134,22 +134,25 @@ func (r *Registry) runWatcher() error {
 	events := make(chan rxgo.Item)
 	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
 
-	var (
-		lock     sync.Mutex
-		versions = map[string]int64{} // etcd条目版本号
-	)
+	versions := gokit.NewMapOf[string, int64]() // etcd条目版本号
 	updateNodes := func(event mvccpb.Event_EventType, kv *mvccpb.KeyValue) {
-		lock.Lock()
-		defer lock.Unlock()
-
 		// DELETE事件不检查版本号信息
 		if event == mvccpb.PUT {
 			key := string(kv.Key)
-			if ver, ok := versions[key]; ok && ver >= kv.Version {
+			if ver, ok := versions.Load(key); ok && ver >= kv.Version {
 				return
 			}
-			versions[key] = kv.Version
+			versions.Store(key, kv.Version)
 		}
+
+		defer func() {
+			vals := []any{}
+			for k, v := range r.DumpGRPCResolver() {
+				vals = append(vals, k, v)
+			}
+
+			logger.Debug("grpc resolver data", vals...)
+		}()
 
 		var entry NodeEntry
 		if err := json.Unmarshal(kv.Value, &entry); err != nil {
@@ -198,18 +201,27 @@ func (r *Registry) runWatcher() error {
 	}()
 
 	// 处理已有条目
-	ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
-	defer cancel()
+	updateExists := func() error {
+		ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
+		defer cancel()
 
-	resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
-	if err != nil {
-		return fmt.Errorf("get exist entries, %w", err)
-	}
-	for _, kv := range resp.Kvs {
-		updateNodes(mvccpb.PUT, kv)
+		resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
+		if err != nil {
+			return fmt.Errorf("get exist entries, %w", err)
+		}
+		for _, kv := range resp.Kvs {
+			updateNodes(mvccpb.PUT, kv)
+		}
+		return nil
 	}
 
-	return nil
+	// 延迟3秒再全量同步一次
+	go func() {
+		time.Sleep(3 * time.Second)
+		updateExists()
+	}()
+
+	return updateExists()
 }
 
 // GetGRPCDesc 获取grpc服务描述
@@ -289,6 +301,11 @@ func (r *Registry) SubscribeDelete(handler func(entry NodeEntry)) {
 				handler(ev.Entry)
 			}
 		})
+}
+
+// DumpGRPCResolver 导出grpc服务解析器数据
+func (r *Registry) DumpGRPCResolver() map[string]any {
+	return r.grpcResolver.DumpData()
 }
 
 // Close 关闭
