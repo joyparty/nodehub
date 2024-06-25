@@ -134,16 +134,30 @@ func (r *Registry) runWatcher() error {
 	events := make(chan rxgo.Item)
 	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
 
-	versions := gokit.NewMapOf[string, int64]() // etcd条目版本号
+	var (
+		lock     sync.Mutex
+		versions = map[string]int64{} // etcd条目版本号
+	)
 	updateNodes := func(event mvccpb.Event_EventType, kv *mvccpb.KeyValue) {
+		lock.Lock()
+		defer lock.Unlock()
+
 		// DELETE事件不检查版本号信息
 		if event == mvccpb.PUT {
 			key := string(kv.Key)
-			if ver, ok := versions.Load(key); ok && ver >= kv.Version {
+			if ver, ok := versions[key]; ok && ver >= kv.Version {
 				return
 			}
-			versions.Store(key, kv.Version)
+			versions[key] = kv.Version
 		}
+
+		var entry NodeEntry
+		if err := json.Unmarshal(kv.Value, &entry); err != nil {
+			logger.Error("unmarshal entry", "error", err)
+			return
+		}
+
+		logger.Info("update cluster nodes", "event", event.String(), "entry", entry)
 
 		defer func() {
 			vals := []any{}
@@ -153,14 +167,6 @@ func (r *Registry) runWatcher() error {
 
 			logger.Debug("grpc resolver data", vals...)
 		}()
-
-		var entry NodeEntry
-		if err := json.Unmarshal(kv.Value, &entry); err != nil {
-			logger.Error("unmarshal entry", "error", err)
-			return
-		}
-
-		logger.Info("update cluster nodes", "event", event.String(), "entry", entry)
 
 		switch event {
 		case mvccpb.PUT:
