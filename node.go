@@ -253,7 +253,8 @@ func (n *Node) Entry() cluster.NodeEntry {
 
 // GatewayConfig 网关配置
 type GatewayConfig struct {
-	Options []gateway.Option
+	NodeOptions []NodeOption
+	Options     []gateway.Option
 
 	GRPCListen       string
 	GRPCListener     net.Listener
@@ -264,7 +265,7 @@ type GatewayConfig struct {
 
 // NewGatewayNode 构造一个网关节点
 func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
-	node := NewNode("gateway", registry)
+	node := NewNode("gateway", registry, config.NodeOptions...)
 
 	options := append(config.Options, gateway.WithRegistry(registry))
 	proxy, err := gateway.NewProxy(node.ID(), options...)
