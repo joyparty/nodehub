@@ -5,6 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/joyparty/gokit"
+	"github.com/joyparty/nodehub/logger"
 	"github.com/oklog/ulid/v2"
 	"github.com/samber/lo"
 	"google.golang.org/grpc"
@@ -49,6 +50,8 @@ func newGRPCResolver(dialOptions ...grpc.DialOption) *grpcResolver {
 
 // Update 更新条目
 func (r *grpcResolver) Update(node NodeEntry) {
+	defer r.logData()
+
 	if len(node.GRPC.Services) == 0 {
 		return
 	}
@@ -77,6 +80,8 @@ func (r *grpcResolver) Update(node NodeEntry) {
 
 // Remove 删除条目
 func (r *grpcResolver) Remove(node NodeEntry) {
+	defer r.logData()
+
 	if len(node.GRPC.Services) == 0 {
 		return
 	}
@@ -194,4 +199,32 @@ func (r *grpcResolver) Close() {
 		r.conns.Delete(key)
 		return true
 	})
+}
+
+func (r *grpcResolver) logData() {
+	service := map[int32]GRPCServiceDesc{}
+	r.services.Range(func(key int32, value GRPCServiceDesc) bool {
+		service[key] = value
+		return true
+	})
+
+	allNodes := map[ulid.ULID]NodeEntry{}
+	r.allNodes.Range(func(key ulid.ULID, value NodeEntry) bool {
+		allNodes[key] = value
+		return true
+	})
+
+	okNodes := map[int32][]ulid.ULID{}
+	r.okNodes.Range(func(key int32, value []NodeEntry) bool {
+		okNodes[key] = lo.Map(value, func(v NodeEntry, _ int) ulid.ULID {
+			return v.ID
+		})
+		return true
+	})
+
+	logger.Debug("grpc resolver data",
+		"services", service,
+		"allNodes", allNodes,
+		"okNodes", okNodes,
+	)
 }
