@@ -13,3 +13,7 @@ build_protobuf:
 		--go-grpc_out=./proto \
 		--go-grpc_opt=module=github.com/joyparty/nodehub/proto \
 		./api/protobuf/nodehub/*.proto)
+
+.PHONY: test
+test:
+	@go test -count=10 ./... | grep -v '^?'

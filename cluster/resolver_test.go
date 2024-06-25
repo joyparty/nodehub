@@ -20,13 +20,13 @@ func TestGRPCResolver(t *testing.T) {
 	entries := genTestEntries(20)
 
 	t.Run("init", func(t *testing.T) {
-		updateEntries(resolver, entries)
+		updateResolver(resolver, entries, nil)
 		testResolver(t, resolver, entries)
 	})
 
 	// 删除3个节点
 	t.Run("deleteThree", func(t *testing.T) {
-		deleteEntries(resolver, entries[:3])
+		updateResolver(resolver, entries[3:], entries[:3])
 		testResolver(t, resolver, entries[3:])
 	})
 
@@ -35,7 +35,7 @@ func TestGRPCResolver(t *testing.T) {
 		for i := 0; i < len(entries); i++ {
 			entries[i].State = NodeDown
 		}
-		updateEntries(resolver, entries)
+		updateResolver(resolver, entries, nil)
 		testResolver(t, resolver, entries)
 	})
 
@@ -44,20 +44,20 @@ func TestGRPCResolver(t *testing.T) {
 		for i := 0; i < len(entries); i++ {
 			entries[i].State = NodeOK
 		}
-		updateEntries(resolver, entries)
+		updateResolver(resolver, entries, nil)
 		testResolver(t, resolver, entries)
 	})
 
 	t.Run("deleteAll", func(t *testing.T) {
-		deleteEntries(resolver, entries)
+		updateResolver(resolver, nil, entries)
 		testResolver(t, resolver, []NodeEntry{})
 	})
 }
 
-func updateEntries(resolver *grpcResolver, entries []NodeEntry) {
+func updateResolver(resolver *grpcResolver, update []NodeEntry, remove []NodeEntry) {
 	var wg sync.WaitGroup
-	for i := 0; i < len(entries); i++ {
-		entry := entries[i]
+	for i := 0; i < len(update); i++ {
+		entry := update[i]
 
 		wg.Add(1)
 		go func() {
@@ -65,15 +65,11 @@ func updateEntries(resolver *grpcResolver, entries []NodeEntry) {
 			resolver.Update(entry)
 		}()
 	}
-	wg.Wait()
-}
 
-func deleteEntries(resolver *grpcResolver, entries []NodeEntry) {
-	var wg sync.WaitGroup
-	for i := 0; i < len(entries); i++ {
-		entry := entries[i]
-
+	for i := 0; i < len(remove); i++ {
+		entry := remove[i]
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 			resolver.Remove(entry)
@@ -91,7 +87,10 @@ func testResolver(t *testing.T, resolver *grpcResolver, entries []NodeEntry) {
 	for serviceCode, expected := range getExpectedOKNodes(entries) {
 		actual, _ := resolver.okNodes.Load(serviceCode)
 		if !compareNodes(expected, actual) {
-			t.Fatal("ok nodes not equal")
+			// printJSON(expected)
+			// printJSON(actual)
+
+			t.Fatalf("ok nodes not equal, expected %d nodes, got %d", len(expected), len(actual))
 		}
 	}
 }

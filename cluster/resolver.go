@@ -3,6 +3,7 @@ package cluster
 import (
 	"fmt"
 	"math/rand"
+	"sync"
 
 	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
@@ -13,6 +14,8 @@ import (
 
 // grpcResolver grpc服务发现
 type grpcResolver struct {
+	sync.Mutex
+
 	// serviceCode => GRPCServiceDesc
 	services *gokit.MapOf[int32, GRPCServiceDesc]
 
@@ -53,23 +56,26 @@ func (r *grpcResolver) Update(node NodeEntry) {
 		return
 	}
 
+	// 节点下线时关闭连接
+	if node.State == NodeDown {
+		defer func() {
+			if conn, ok := r.conns.LoadAndDelete(node.GRPC.Endpoint); ok {
+				conn.Close()
+			}
+		}()
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
 	r.allNodes.Store(node.ID, node)
 	for _, desc := range node.GRPC.Services {
 		// code为负数的是框架内置服务，不需要服务发现
-		if desc.Code < 0 {
-			continue
-		}
-
-		// 网关可以一直开启不重启，所以允许新的节点配置覆盖已有配置
-		r.services.Store(desc.Code, desc)
-		r.updateServiceNodes(desc.Code)
-		r.updateBalancer(desc.Code)
-	}
-
-	// 节点下线时关闭连接
-	if node.State == NodeDown {
-		if conn, ok := r.conns.LoadAndDelete(node.GRPC.Endpoint); ok {
-			conn.Close()
+		if desc.Code > 0 {
+			// 网关可以一直开启不重启，所以允许新的节点配置覆盖已有配置
+			r.services.Store(desc.Code, desc)
+			r.updateServiceNodes(desc.Code)
+			r.updateBalancer(desc.Code)
 		}
 	}
 }
@@ -80,19 +86,22 @@ func (r *grpcResolver) Remove(node NodeEntry) {
 		return
 	}
 
+	defer func() {
+		if conn, ok := r.conns.LoadAndDelete(node.GRPC.Endpoint); ok {
+			conn.Close()
+		}
+	}()
+
+	r.Lock()
+	defer r.Unlock()
+
 	r.allNodes.Delete(node.ID)
 	for _, desc := range node.GRPC.Services {
 		// code为负数的是框架内置服务，不需要服务发现
-		if desc.Code < 0 {
-			continue
+		if desc.Code > 0 {
+			r.updateServiceNodes(desc.Code)
+			r.updateBalancer(desc.Code)
 		}
-
-		r.updateServiceNodes(desc.Code)
-		r.updateBalancer(desc.Code)
-	}
-
-	if conn, ok := r.conns.LoadAndDelete(node.GRPC.Endpoint); ok {
-		conn.Close()
 	}
 }
 
