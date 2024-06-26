@@ -188,15 +188,19 @@ func (p *Proxy) init(ctx context.Context) {
 
 	// 处理主动下行消息
 	p.opts.Multicast.Subscribe(ctx, func(msg *nh.Multicast) {
-		// 只发送5分钟内的消息
-		if time.Since(msg.GetTime().AsTime()) <= 5*time.Minute {
-			for _, sessID := range msg.GetReceiver() {
-				if sess, ok := p.sessions.Load(sessID); ok {
-					if err := p.submitTask(func() {
-						p.sendReply(sess, msg.Content)
-					}); err != nil {
-						logger.Error("submit multicast task", "error", err, "session", sess, "reply", msg.Content)
-					}
+		for _, sessID := range msg.GetReceiver() {
+			if sess, ok := p.sessions.Load(sessID); ok {
+				if err := p.submitTask(func() {
+					logger.Debug("send multicast",
+						"receiver", sessID,
+						"service", msg.GetContent().GetServiceCode(),
+						"code", msg.GetContent().GetCode(),
+						"time", msg.GetTime().AsTime().Format(time.RFC3339),
+					)
+
+					p.sendReply(sess, msg.Content)
+				}); err != nil {
+					logger.Error("submit multicast task", "error", err, "session", sess, "reply", msg.Content)
 				}
 			}
 		}
