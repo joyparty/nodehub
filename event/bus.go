@@ -142,24 +142,29 @@ func (bus *Bus) Subscribe(ctx context.Context, handler any) {
 
 func (bus *Bus) observe() {
 	bus.observeOnce.Do(func() {
-		bus.observable = rxgo.Create([]rxgo.Producer{func(ctx context.Context, next chan<- rxgo.Item) {
-			msgC, err := bus.queue.Subscribe(context.Background())
-			if err != nil {
-				logger.Error("subscribe cluster events", "error", err)
-				panic(fmt.Errorf("subscribe cluster events, %w", err))
-			}
+		msgC, err := bus.queue.Subscribe(context.Background())
+		if err != nil {
+			logger.Error("subscribe cluster events", "error", err)
+			panic(fmt.Errorf("subscribe cluster events, %w", err))
+		}
+
+		events := make(chan rxgo.Item)
+		bus.observable = rxgo.FromEventSource(events, rxgo.WithErrorStrategy(rxgo.ContinueOnError))
+
+		go func() {
+			defer close(events)
 
 			for msg := range msgC {
 				p := payload{}
 				if err := json.Unmarshal(msg, &p); err != nil {
-					next <- rxgo.Error(err)
+					events <- rxgo.Error(err)
 				} else {
-					next <- rxgo.Of(p)
+					events <- rxgo.Of(p)
 
 					metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(p.GetTime()))
 				}
 			}
-		}}, rxgo.WithErrorStrategy(rxgo.ContinueOnError))
+		}()
 	})
 }
 
