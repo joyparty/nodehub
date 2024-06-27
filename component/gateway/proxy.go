@@ -12,12 +12,6 @@ import (
 	"time"
 
 	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/cluster"
-	"github.com/joyparty/nodehub/component/rpc"
-	"github.com/joyparty/nodehub/event"
-	"github.com/joyparty/nodehub/internal/metrics"
-	"github.com/joyparty/nodehub/logger"
-	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
 	"github.com/panjf2000/ants/v2"
 	"google.golang.org/grpc"
@@ -26,6 +20,13 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/joyparty/nodehub/cluster"
+	"github.com/joyparty/nodehub/component/rpc"
+	"github.com/joyparty/nodehub/event"
+	"github.com/joyparty/nodehub/internal/metrics"
+	"github.com/joyparty/nodehub/logger"
+	"github.com/joyparty/nodehub/proto/nh"
 )
 
 var (
@@ -188,7 +189,14 @@ func (p *Proxy) init(ctx context.Context) {
 
 	// 处理主动下行消息
 	p.opts.Multicast.Subscribe(ctx, func(msg *nh.Multicast) {
+		logger.Debug("send multicast",
+			"receiver", msg.Receiver,
+			"service", msg.GetContent().GetServiceCode(),
+			"code", msg.GetContent().GetCode(),
+			"time", msg.GetTime().AsTime().Format(time.RFC3339),
+		)
 		for _, sessID := range msg.GetReceiver() {
+			sessID := sessID
 			if sess, ok := p.sessions.Load(sessID); ok {
 				if err := p.submitTask(func() {
 					logger.Debug("send multicast",
