@@ -2,6 +2,7 @@ package multicast
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/joyparty/nodehub/internal/metrics"
@@ -69,16 +70,26 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 	}
 
 	go func() {
-		for msg := range msgC {
-			n := &nh.Multicast{}
-			if err := proto.Unmarshal(msg, n); err != nil {
-				logger.Error("unmarshal multicast message", "error", err)
-			} else {
-				handler(n)
+		var wg sync.WaitGroup
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
 
-				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(n.Time.AsTime()))
-			}
+			go func() {
+				defer wg.Done()
+
+				for msg := range msgC {
+					n := &nh.Multicast{}
+					if err := proto.Unmarshal(msg, n); err != nil {
+						logger.Error("unmarshal multicast message", "error", err)
+					} else {
+						handler(n)
+
+						metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(n.Time.AsTime()))
+					}
+				}
+			}()
 		}
+		wg.Wait()
 	}()
 	return nil
 }

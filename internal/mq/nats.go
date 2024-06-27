@@ -30,7 +30,7 @@ func (mq *natsMQ) Publish(ctx context.Context, payload []byte) error {
 }
 
 func (mq *natsMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
-	msgC := make(chan []byte)
+	msgC := make(chan []byte, 100)
 
 	sub, err := mq.conn.Subscribe(mq.subject, func(msg *nats.Msg) {
 		select {
