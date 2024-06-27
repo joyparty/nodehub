@@ -192,7 +192,7 @@ func (p *Proxy) init(ctx context.Context) {
 			if sess, ok := p.sessions.Load(sessID); ok {
 				if err := p.submitTask(func() {
 					logger.Debug("send multicast",
-						"receiver", sessID,
+						"receiver", sess.ID(),
 						"service", msg.GetContent().GetServiceCode(),
 						"code", msg.GetContent().GetCode(),
 						"time", msg.GetTime().AsTime().Format(time.RFC3339),
