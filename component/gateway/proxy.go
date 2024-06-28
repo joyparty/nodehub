@@ -206,7 +206,7 @@ func (p *Proxy) init(ctx context.Context) {
 		}
 	})
 
-	p.opts.Registry.SubscribeDelete(func(entry cluster.NodeEntry) {
+	p.opts.Registry.SubscribeDelete(ctx, func(entry cluster.NodeEntry) {
 		p.stateTable.CleanNode(entry.ID)
 	})
 

@@ -290,23 +290,23 @@ func (r *Registry) ForeachNodes(f func(NodeEntry) bool) {
 }
 
 // SubscribeUpdate 订阅节点更新
-func (r *Registry) SubscribeUpdate(handler func(entry NodeEntry)) {
+func (r *Registry) SubscribeUpdate(ctx context.Context, handler func(entry NodeEntry)) {
 	r.observable.
 		DoOnNext(func(item any) {
 			if ev, ok := item.(eventUpdateNode); ok {
 				handler(ev.Entry)
 			}
-		})
+		}, rxgo.WithContext(ctx))
 }
 
 // SubscribeDelete 订阅节点删除
-func (r *Registry) SubscribeDelete(handler func(entry NodeEntry)) {
+func (r *Registry) SubscribeDelete(ctx context.Context, handler func(entry NodeEntry)) {
 	r.observable.
 		DoOnNext(func(item any) {
 			if ev, ok := item.(eventDeleteNode); ok {
 				handler(ev.Entry)
 			}
-		})
+		}, rxgo.WithContext(ctx))
 }
 
 // DumpGRPCResolver 导出grpc服务解析器数据
