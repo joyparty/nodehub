@@ -108,22 +108,19 @@ func (r *Registry) initLease(ctx context.Context) error {
 
 	// 心跳维持
 	go func() {
-	Loop:
 		for {
 			select {
 			case v, ok := <-ch:
-				if !ok {
+				if v == nil { // etcd down
+					logger.Error("etcd lease keeper closed")
+					panic(errors.New("etcd lease keeper closed"))
+				} else if !ok {
 					return
-				} else if v == nil { // etcd down
-					break Loop
 				}
 			case <-r.client.Ctx().Done():
 				return
 			}
 		}
-
-		logger.Error("lease keeper closed")
-		panic(errors.New("lease keeper closed"))
 	}()
 
 	return nil
