@@ -36,8 +36,8 @@ github.com/google/pprof v0.0.0-20240625030939-27f56978b8b0 h1:e+8XbKB6IMn8A4OAyZ
 github.com/google/pprof v0.0.0-20240625030939-27f56978b8b0/go.mod h1:K1liHPHnj73Fdn/EKuT8nrFqBihUSKXoLYU0BuatOYo=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/joyparty/gokit v0.0.0-20240627025105-cba89f695cde h1:D8NkCdfPAWlYQaYPkXHg3KFBGj+HPHgp6Y0mJ0s1FR0=
-github.com/joyparty/gokit v0.0.0-20240627025105-cba89f695cde/go.mod h1:pT9THuPqHBfz+D7T3UKKtFxepOLolTgky/kUZ08sc7Y=
+github.com/joyparty/gokit v0.0.0-20240701071940-a59edde9ed5c h1:GXwSU18uRkLlHENBWar4aNoxJjpOdxXSMrhrZ1o5df4=
+github.com/joyparty/gokit v0.0.0-20240701071940-a59edde9ed5c/go.mod h1:pT9THuPqHBfz+D7T3UKKtFxepOLolTgky/kUZ08sc7Y=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/compress v1.17.9 h1:6KIumPrER1LHsvBVuDa0r5xaG0Es51mhhB9BQB2qeMA=

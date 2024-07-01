@@ -2,9 +2,9 @@ package multicast
 
 import (
 	"context"
-	"sync"
 	"time"
 
+	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/internal/mq"
 	"github.com/joyparty/nodehub/logger"
@@ -69,28 +69,16 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 		return err
 	}
 
-	go func() {
-		var wg sync.WaitGroup
-		for i := 0; i < 4; i++ {
-			wg.Add(1)
+	gokit.FanOut(msgC, 4, func(data []byte) {
+		n := &nh.Multicast{}
+		if err := proto.Unmarshal(data, n); err != nil {
+			logger.Error("unmarshal multicast message", "error", err)
+		} else {
+			handler(n)
 
-			go func() {
-				defer wg.Done()
-
-				for msg := range msgC {
-					n := &nh.Multicast{}
-					if err := proto.Unmarshal(msg, n); err != nil {
-						logger.Error("unmarshal multicast message", "error", err)
-					} else {
-						handler(n)
-
-						metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(n.Time.AsTime()))
-					}
-				}
-			}()
+			metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(n.Time.AsTime()))
 		}
-		wg.Wait()
-	}()
+	})
 	return nil
 }
 

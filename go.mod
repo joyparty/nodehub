@@ -5,7 +5,7 @@ go 1.21.0
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/joyparty/gokit v0.0.0-20240627025105-cba89f695cde
+	github.com/joyparty/gokit v0.0.0-20240701071940-a59edde9ed5c
 	github.com/nats-io/nats.go v1.36.0
 	github.com/oklog/ulid/v2 v2.1.0
 	github.com/panjf2000/ants/v2 v2.10.0
