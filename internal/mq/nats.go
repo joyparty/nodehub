@@ -30,31 +30,29 @@ func (mq *natsMQ) Publish(ctx context.Context, payload []byte) error {
 }
 
 func (mq *natsMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
+	ctx, cancel := context.WithCancel(ctx)
 	msgC := make(chan []byte, 100)
 
 	sub, err := mq.conn.Subscribe(mq.subject, func(msg *nats.Msg) {
 		select {
-		case <-mq.done:
-		default:
-			select {
-			case <-mq.done:
-			case msgC <- msg.Data:
-			}
+		case <-ctx.Done():
+		case msgC <- msg.Data:
 		}
 	})
 	if err != nil {
-		close(msgC)
+		cancel()
 		return nil, err
 	}
 
 	go func() {
-		defer sub.Unsubscribe()
-		defer close(msgC)
-
 		select {
 		case <-mq.done:
 		case <-ctx.Done():
 		}
+
+		sub.Unsubscribe()
+		cancel()
+		close(msgC)
 	}()
 
 	return msgC, nil

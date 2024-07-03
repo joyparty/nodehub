@@ -162,7 +162,6 @@ func (qs *quicSession) LastRWTime() time.Time {
 func (qs *quicSession) Close() error {
 	qs.closeOnce.Do(func() {
 		close(qs.done)
-		close(qs.msgC)
 
 		qs.streams.CloseAll()
 		_ = qs.conn.CloseWithError(0, "")
@@ -208,12 +207,7 @@ func (qs *quicSession) handleRequest() {
 				select {
 				case <-qs.done:
 					return
-				default:
-					select {
-					case <-qs.done:
-						return
-					case qs.msgC <- msg:
-					}
+				case qs.msgC <- msg:
 				}
 			}
 		}()
@@ -222,22 +216,24 @@ func (qs *quicSession) handleRequest() {
 
 func (qs *quicSession) Recv(req *nh.Request) error {
 	for {
-		msg, ok := <-qs.msgC
-		if !ok {
+		select {
+		case <-qs.done:
 			return io.EOF
-		}
+		case msg, ok := <-qs.msgC:
+			if !ok {
+				return io.EOF
+			} else if msg.Len() == 0 { // ping
+				codec.PutMessage(msg)
+				continue
+			}
+			metrics.IncrPayloadSize(qs.Type(), msg.Len())
 
-		if msg.Len() == 0 { // ping
-			codec.PutMessage(msg)
-			continue
+			defer codec.PutMessage(msg)
+			if err := proto.Unmarshal(msg.Bytes(), req); err != nil {
+				return fmt.Errorf("unmarshal request, %w", err)
+			}
+			return nil
 		}
-		metrics.IncrPayloadSize(qs.Type(), msg.Len())
-
-		defer codec.PutMessage(msg)
-		if err := proto.Unmarshal(msg.Bytes(), req); err != nil {
-			return fmt.Errorf("unmarshal request, %w", err)
-		}
-		return nil
 	}
 }
 
