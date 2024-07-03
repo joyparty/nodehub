@@ -2,6 +2,7 @@ package multicast
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/joyparty/gokit"
@@ -12,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Queue 消息队列
@@ -55,6 +57,12 @@ func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
 
 // Publish 把消息发布到消息队列
 func (bus *Bus) Publish(ctx context.Context, message *nh.Multicast) error {
+	if len(message.Receiver) == 0 {
+		return errors.New("receiver is empty")
+	} else if message.Time == nil {
+		message.Time = timestamppb.Now()
+	}
+
 	payload, err := proto.Marshal(message)
 	if err != nil {
 		return err
