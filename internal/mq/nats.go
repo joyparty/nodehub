@@ -35,7 +35,11 @@ func (mq *natsMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
 	sub, err := mq.conn.Subscribe(mq.subject, func(msg *nats.Msg) {
 		select {
 		case <-mq.done:
-		case msgC <- msg.Data:
+		default:
+			select {
+			case <-mq.done:
+			case msgC <- msg.Data:
+			}
 		}
 	})
 	if err != nil {

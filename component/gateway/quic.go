@@ -199,16 +199,16 @@ func (qs *quicSession) handleRequest() {
 			}()
 
 			for {
+				msg := codec.GetMessage()
+				if err := codec.ReadMessage(s, msg); err != nil {
+					return err
+				}
+				qs.lastRWTime.Store(time.Now())
+
 				select {
 				case <-qs.done:
 					return
 				default:
-					msg := codec.GetMessage()
-					if err := codec.ReadMessage(s, msg); err != nil {
-						return err
-					}
-					qs.lastRWTime.Store(time.Now())
-
 					select {
 					case <-qs.done:
 						return
