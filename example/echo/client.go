@@ -16,8 +16,7 @@ import (
 	"github.com/joyparty/nodehub/example/echo/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/echo/proto/echopb"
 	"github.com/joyparty/nodehub/logger"
-	"github.com/joyparty/nodehub/proto/nh"
-	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -55,45 +54,43 @@ func main() {
 	cli := newClient(endpoint)
 	defer cli.Close()
 
-	// 网关返回的RPC错误
-	cli.OnReceive(0, int32(nh.ReplyCode_RPC_ERROR), func(requestID uint32, reply *nh.RPCError) {
-		fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
-			time.Now().Format(time.RFC3339),
-			requestID,
-			reply.GetRequestService(),
-			reply.GetRequestMethod(),
-			codes.Code(reply.GetStatus().GetCode()),
-			reply.GetStatus().GetMessage(),
-		)
-		os.Exit(1)
-	})
-
-	// echo接口返回
-	cli.OnReceive(echoServiceCode, int32(echopb.ReplyCode_MSG), func(requestID uint32, reply *echopb.Msg) {
-		logger.Info("echo back", "requestID", requestID, "content", reply.GetContent())
-	})
-
-	// 收到鉴权成功消息后开始正式发送消息
-	cli.OnReceive(authServiceCode, int32(authpb.ReplyCode_AUTHORIZE_ACK),
-		func(requestID uint32, msg *authpb.AuthorizeAck) {
-			for {
-				cli.Call(echoServiceCode, "Send", &echopb.Msg{
-					Content: "hello world!",
-				})
-				time.Sleep(1 * time.Second)
-			}
-		},
+	// 鉴权请求
+	authReply := &authpb.AuthorizeAck{}
+	err := cli.Call(context.Background(), 0, "Authorize",
+		&authpb.AuthorizeToken{Token: "0d8b750e-35e8-4f98-b032-f389d401213e"},
+		authReply,
 	)
+	if err != nil {
+		handleError(err)
+	}
+	logger.Info("auth success", "user_id", authReply.GetUserId())
 
-	// 连接后首先发送鉴权消息
-	cli.Call(0, "Authorize", &authpb.AuthorizeToken{
-		Token: "0d8b750e-35e8-4f98-b032-f389d401213e",
-	})
+	for {
+		echoReply := &echopb.Msg{}
+		err := cli.Call(context.Background(), echoServiceCode, "Send",
+			&echopb.Msg{Content: "hello world!"},
+			echoReply,
+		)
+		if err != nil {
+			handleError(err)
+		}
 
-	<-context.Background().Done()
+		logger.Info("echo back", "content", echoReply.GetContent())
+		time.Sleep(1 * time.Second)
+	}
 }
 
-func newClient(endpoint string) *client.MustClient {
+func handleError(err error) {
+	if s, ok := status.FromError(err); ok {
+		fmt.Printf("RPCError, code = %s, message = %s\n", s.Code(), s.Message())
+	} else {
+		fmt.Printf("ERROR: %v\n", err)
+	}
+
+	os.Exit(1)
+}
+
+func newClient(endpoint string) *client.Client {
 	var cli *client.Client
 	if strings.HasPrefix(endpoint, "quic://") {
 		tlsConfig := &tls.Config{
@@ -105,5 +102,5 @@ func newClient(endpoint string) *client.MustClient {
 		cli = gokit.MustReturn(client.New(endpoint))
 	}
 
-	return &client.MustClient{Client: cli}
+	return cli
 }

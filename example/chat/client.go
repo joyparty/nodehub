@@ -12,7 +12,7 @@ import (
 	"github.com/joyparty/nodehub/example/chat/proto/clusterpb"
 	"github.com/joyparty/nodehub/example/chat/proto/roompb"
 	"github.com/joyparty/nodehub/proto/nh"
-	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -34,59 +34,49 @@ func init() {
 }
 
 func main() {
-	var gwClient *client.Client
+	var cli *client.Client
 	if useTCP {
-		gwClient = gokit.MustReturn(client.New(fmt.Sprintf("tcp://%s", serverAddr)))
+		cli = gokit.MustReturn(client.New(fmt.Sprintf("tcp://%s", serverAddr)))
 	} else {
-		gwClient = gokit.MustReturn(client.New(fmt.Sprintf("ws://%s", serverAddr)))
+		cli = gokit.MustReturn(client.New(fmt.Sprintf("ws://%s", serverAddr)))
 	}
+	defer cli.Close()
 
-	cli := &client.MustClient{Client: gwClient}
-	// defer client.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	cli.OnReceive(0, int32(nh.ReplyCode_RPC_ERROR),
-		func(requestID uint32, reply *nh.RPCError) {
-			fmt.Printf("[%s] #%03d ERROR, call %d.%s(), code = %s, message = %s\n",
-				time.Now().Format(time.RFC3339),
-				requestID,
-				reply.GetRequestService(),
-				reply.GetRequestMethod(),
-				codes.Code(reply.Status.Code),
-				reply.Status.Message,
-			)
-			os.Exit(1) // revive:disable-line:deep-exit
-		})
+	cli.Subscribe(ctx, chatServiceCode, int32(roompb.ReplyCode_NEWS), func(news *roompb.News, reply *nh.Reply) {
+		if news.GetFromId() == "" {
+			fmt.Printf(">>> %s\n", news.GetContent())
+		} else {
+			fmt.Printf("%s: %s\n", news.GetFromName(), news.GetContent())
+		}
+	})
 
-	cli.OnReceive(chatServiceCode, int32(roompb.ReplyCode_NEWS),
-		func(requestID uint32, reply *roompb.News) {
-			if reply.FromId == "" {
-				fmt.Printf(">>> %s\n", reply.Content)
-			} else {
-				fmt.Printf("%s: %s\n", reply.FromName, reply.Content)
-			}
-		})
-
-	cli.Call(chatServiceCode, "Join",
-		&roompb.JoinRequest{Name: name},
-		client.WithNoReply(),
-	)
+	if err := cli.CallNoReply(ctx, chatServiceCode, "Join", &roompb.JoinRequest{Name: name}); err != nil {
+		handleError(err)
+	}
 
 	defer func() {
-		cli.Call(chatServiceCode, "Leave",
-			&emptypb.Empty{},
-			client.WithNoReply(),
-		)
-		time.Sleep(1 * time.Second)
+		cli.CallNoReply(context.Background(), chatServiceCode, "Leave", &emptypb.Empty{})
 	}()
 
-	if say != "" {
-		cli.Call(chatServiceCode, "Say",
-			&roompb.SayRequest{Content: say},
-			client.WithNoReply(),
-		)
-		time.Sleep(1 * time.Second)
-		return
+	if say == "" {
+		<-context.Background().Done()
 	}
 
-	<-context.Background().Done()
+	if err := cli.CallNoReply(ctx, chatServiceCode, "Say", &roompb.SayRequest{Content: say}); err != nil {
+		handleError(err)
+	}
+	time.Sleep(1 * time.Second)
+}
+
+func handleError(err error) {
+	if s, ok := status.FromError(err); ok {
+		fmt.Printf("RPCError, code = %s, message = %s\n", s.Code(), s.Message())
+	} else {
+		fmt.Printf("ERROR: %v\n", err)
+	}
+
+	os.Exit(1)
 }

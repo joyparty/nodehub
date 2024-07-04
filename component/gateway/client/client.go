@@ -17,6 +17,8 @@ import (
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/quic-go/quic-go"
+	"github.com/reactivex/rxgo/v2"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -256,14 +258,15 @@ func (wc *wsConn) Close() {
 	wc.conn.Close()
 }
 
-// Client 网关客户端，用于测试及演示
+// Client 客户端
 type Client struct {
-	idSeq *atomic.Uint32
-	conn  connection
+	seq  atomic.Uint32
+	conn connection
 
-	// serviceCode => messageType => handler
-	handlers       *gokit.MapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]]
-	defaultHandler func(*nh.Reply)
+	await         *gokit.MapOf[uint32, chan *nh.Reply]
+	replyC        chan rxgo.Item
+	replyObserver rxgo.Observable
+	done          chan struct{}
 }
 
 // New 创建客户端
@@ -289,22 +292,7 @@ func New(dialURL string) (*Client, error) {
 		return nil, fmt.Errorf("unsupported scheme: %s", l.Scheme)
 	}
 
-	c := &Client{
-		conn:     cc,
-		idSeq:    &atomic.Uint32{},
-		handlers: gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
-		defaultHandler: func(reply *nh.Reply) {
-			fmt.Printf("%s REPLY: requestID=%d service=%d code=%d\n",
-				time.Now().Format(time.RFC3339),
-				reply.GetRequestId(),
-				reply.GetServiceCode(),
-				reply.GetCode(),
-			)
-		},
-	}
-
-	go c.run()
-	return c, nil
+	return newClient(cc), nil
 }
 
 // NewQUIC 创建QUIC客户端
@@ -321,162 +309,193 @@ func NewQUIC(dialURL string, tlsConfig *tls.Config, quicConfig *quic.Config) (*C
 		return nil, fmt.Errorf("dial quic, %w", err)
 	}
 
+	return newClient(qc), nil
+}
+
+func newClient(conn connection) *Client {
+	replyC := make(chan rxgo.Item)
 	c := &Client{
-		conn:     qc,
-		idSeq:    &atomic.Uint32{},
-		handlers: gokit.NewMapOf[int32, *gokit.MapOf[int32, func(*nh.Reply)]](),
-		defaultHandler: func(reply *nh.Reply) {
-			fmt.Printf("%s REPLY: requestID=%d service=%d code=%d\n",
-				time.Now().Format(time.RFC3339),
-				reply.GetRequestId(),
-				reply.GetServiceCode(),
-				reply.GetCode(),
-			)
-		},
+		conn:          conn,
+		await:         gokit.NewMapOf[uint32, chan *nh.Reply](),
+		replyC:        replyC,
+		replyObserver: rxgo.FromEventSource(replyC),
+		done:          make(chan struct{}),
 	}
 
-	go c.run()
-	return c, nil
+	go c.pingLoop()
+	go c.receiveLoop()
+	return c
 }
 
-// SetDefaultHandler 设置默认消息处理器
-func (c *Client) SetDefaultHandler(handler func(reply *nh.Reply)) {
-	c.defaultHandler = handler
-}
-
-// Call 发起远程调用
-func (c *Client) Call(serviceCode int32, method string, arg proto.Message, options ...CallOption) error {
-	req, err := c.newRequest(arg, options...)
+// Call 发送请求
+func (cli *Client) Call(ctx context.Context, serviceCode int32, method string, input, output proto.Message, options ...CallOption) error {
+	req, err := cli.send(serviceCode, method, input, options...)
 	if err != nil {
-		return fmt.Errorf("build request message, %w", err)
-	}
-	req.ServiceCode = serviceCode
-	req.Method = method
-
-	data, err := proto.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("marshal request message, %w", err)
+		return fmt.Errorf("send request, %w", err)
+	} else if req.GetNoReply() {
+		return nil
 	}
 
-	return c.conn.send(serviceCode, data)
+	ch := make(chan *nh.Reply, 1)
+
+	cli.await.Store(req.GetId(), ch)
+	defer cli.await.Delete(req.GetId())
+
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case reply := <-ch:
+		// rpc error
+		if reply.GetServiceCode() == 0 && reply.GetCode() == int32(nh.ReplyCode_RPC_ERROR) {
+			rpcError := &nh.RPCError{}
+			if err := proto.Unmarshal(reply.GetData(), rpcError); err != nil {
+				return fmt.Errorf("unmarshal rpc error, %w", err)
+			}
+
+			return status.FromProto(rpcError.GetStatus()).Err()
+		}
+
+		if err := proto.Unmarshal(reply.GetData(), output); err != nil {
+			return fmt.Errorf("unmarshal reply, %w", err)
+		}
+
+		return nil
+	}
 }
 
-// OnReceive 注册消息处理器
+// CallNoReply 发送无需回复的请求
+func (cli *Client) CallNoReply(ctx context.Context, serviceCode int32, method string, input proto.Message, options ...CallOption) error {
+	options = append(options, WithNoReply())
+
+	return cli.Call(ctx, serviceCode, method, input, nil, options...)
+}
+
+// Subscribe 订阅指定类型消息
 //
 // Example:
 //
-//	client.OnReceive(gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(requestID uint32, msg *gatewaypb.RPCError) {
+//	client.Subscribe(ctx, gateway.ServiceCode, int32(gatewaypb.Protocol_RPC_ERROR), func(msg *gatewaypb.RPCError, reply *nh.Reply) {
 //		// ...
 //	})
-func (c *Client) OnReceive(serviceCode int32, messageType int32, handler any) {
-	fn := reflect.ValueOf(handler)
-	fnType := fn.Type()
+func (cli *Client) Subscribe(ctx context.Context, serviceCode int32, messageCode int32, callback any) {
+	handler := cli.newHandler(callback)
 
-	if fnType.Kind() != reflect.Func {
-		panic(fmt.Errorf("handler must be a function"))
-	} else if fnType.NumIn() != 2 {
-		panic(fmt.Errorf("handler must have two arguments"))
-	}
-
-	firstArg := fnType.In(0)
-	if firstArg.Kind() != reflect.Uint32 {
-		panic(fmt.Errorf("handler's first argument must be uint32"))
-	}
-
-	secondArg := fnType.In(1)
-	if !secondArg.Implements(reflect.TypeOf((*proto.Message)(nil)).Elem()) {
-		panic(fmt.Errorf("handler's second argument must be proto.Message"))
-	}
-
-	serviceHandlers, ok := c.handlers.Load(serviceCode)
-	if !ok {
-		serviceHandlers, _ = c.handlers.LoadOrStore(serviceCode, gokit.NewMapOf[int32, func(*nh.Reply)]())
-	}
-	serviceHandlers.Store(messageType, func(resp *nh.Reply) {
-		msg := reflect.New(secondArg.Elem())
-
-		if err := proto.Unmarshal(resp.Data, msg.Interface().(proto.Message)); err != nil {
-			panic(fmt.Errorf("unmarshal response message, %w", err))
-		}
-
-		fn.Call([]reflect.Value{
-			reflect.ValueOf(resp.GetRequestId()),
-			msg,
-		})
-	})
+	cli.replyObserver.
+		Filter(func(item any) bool {
+			reply, ok := item.(*nh.Reply)
+			return ok &&
+				reply.GetServiceCode() == serviceCode &&
+				reply.GetCode() == messageCode
+		}).
+		DoOnNext(func(item any) {
+			handler(item.(*nh.Reply))
+		}, rxgo.WithContext(ctx))
 }
 
-func (c *Client) newRequest(msg proto.Message, options ...CallOption) (*nh.Request, error) {
+// Close 关闭客户端
+func (cli *Client) Close() {
+	cli.conn.Close()
+	close(cli.done)
+	close(cli.replyC)
+}
+
+func (cli *Client) newHandler(callback any) func(*nh.Reply) {
+	handler := reflect.ValueOf(callback)
+	handlerType := handler.Type()
+
+	if handlerType.Kind() != reflect.Func {
+		panic(errors.New("callback must be a function"))
+	} else if handlerType.NumIn() != 2 {
+		panic(errors.New("callback must have to arguments"))
+	}
+
+	firstArg := handlerType.In(0)
+	if !firstArg.Implements(reflect.TypeOf((*proto.Message)(nil)).Elem()) {
+		panic(errors.New("callback's first argument must be proto.Message"))
+	}
+
+	sencondArg := handlerType.In(1)
+	if sencondArg != reflect.TypeOf((*nh.Reply)(nil)) {
+		panic(errors.New("callback's second argument must be *nh.Reply"))
+	}
+
+	return func(reply *nh.Reply) {
+		msg := reflect.New(firstArg.Elem())
+		gokit.Must(proto.Unmarshal(reply.Data, msg.Interface().(proto.Message)))
+
+		handler.Call([]reflect.Value{
+			msg,
+			reflect.ValueOf(reply),
+		})
+	}
+}
+
+func (cli *Client) send(serviceCode int32, method string, input proto.Message, options ...CallOption) (*nh.Request, error) {
+	data, err := proto.Marshal(input)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request message, %w", err)
+	}
 	req := &nh.Request{
-		Id: c.idSeq.Add(1),
+		Id:          cli.seq.Add(1),
+		Data:        data,
+		ServiceCode: serviceCode,
+		Method:      method,
 	}
 
 	for _, opt := range options {
 		opt(req)
 	}
 
-	data, err := proto.Marshal(msg)
+	data, err = proto.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal request payload, %w", err)
 	}
 
-	req.Data = data
-	return req, nil
+	return req, cli.conn.send(serviceCode, data)
 }
 
-func (c *Client) run() {
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
+func (cli *Client) receiveLoop() {
+	for reply := range cli.conn.replyStream() {
+		logger.Debug("receive reply",
+			"requestID", reply.GetRequestId(),
+			"fromService", reply.GetServiceCode(),
+			"code", reply.GetCode(),
+		)
 
-		for range ticker.C {
-			if err := c.conn.ping(); err != nil {
-				logger.Error("ping gateway", "error", err)
-			}
+		if ch, ok := cli.await.Load(reply.GetRequestId()); ok {
+			ch <- reply
+			continue
 		}
-	}()
 
-	ch := c.conn.replyStream()
-
-Loop:
-	for {
 		select {
-		case reply, ok := <-ch:
-			if !ok {
-				break Loop
-			}
-			logger.Debug("receive reply",
-				"requestID", reply.GetRequestId(),
-				"fromService", reply.GetServiceCode(),
-				"code", reply.GetCode(),
-			)
-
-			if handlers, ok := c.handlers.Load(reply.GetServiceCode()); ok {
-				if handler, ok := handlers.Load(reply.GetCode()); ok {
-					go handler(reply)
-					continue
-				}
-			}
-			c.defaultHandler(reply)
+		case <-cli.done:
+			return
+		case cli.replyC <- rxgo.Of(reply):
 		}
 	}
-
-	logger.Info("gateway connection closed")
 }
 
-// Close 关闭客户端
-func (c *Client) Close() {
-	c.conn.Close()
-}
+func (cli *Client) pingLoop() {
+	tk := time.NewTicker(10 * time.Second)
+	defer tk.Stop()
 
-// MustClient 使用must方法处理错误的客户端
-type MustClient struct {
-	*Client
-}
+	for range tk.C {
+		select {
+		case <-cli.done:
+			return
+		default:
+		}
 
-// Call 发送请求
-func (c *MustClient) Call(serviceCode int32, method string, arg proto.Message, options ...CallOption) {
-	gokit.Must(c.Client.Call(serviceCode, method, arg, options...))
+		if err := cli.conn.ping(); err != nil {
+			logger.Error("send ping", "error", err)
+		}
+	}
 }
 
 // CallOption 调用选项
