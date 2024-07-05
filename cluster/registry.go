@@ -110,12 +110,10 @@ func (r *Registry) initLease(ctx context.Context) error {
 	go func() {
 		for {
 			select {
-			case v, ok := <-ch:
-				if v == nil { // etcd down
+			case _, ok := <-ch:
+				if !ok { // etcd down or disconnect
 					logger.Error("etcd lease keeper closed")
 					panic(errors.New("etcd lease keeper closed"))
-				} else if !ok {
-					return
 				}
 			case <-r.client.Ctx().Done():
 				return
