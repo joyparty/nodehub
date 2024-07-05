@@ -46,7 +46,7 @@ func init() {
 	logger.SetLogger(slog.Default())
 
 	client := mustReturn(clientv3.New(clientv3.Config{
-		Endpoints: []string{"127.0.0.1:2379"},
+		Endpoints: []string{"127.0.0.1:2379", "127.0.0.1:2479", "127.0.0.1:2579"},
 	}))
 
 	registry = mustReturn(cluster.NewRegistry(client))

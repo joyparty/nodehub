@@ -1,14 +1,46 @@
-version: '3.9'
-
 services:
-  etcd:
+  etcd1:
     image: 'bitnami/etcd:latest'
     environment:
       - ALLOW_NONE_AUTHENTICATION=yes
-      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_NAME=infra0
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd1:2380
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd1:2379
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=nodehub-etcd-cluster
+      - ETCD_INITIAL_CLUSTER=infra0=http://etcd1:2380,infra1=http://etcd2:2380,infra2=http://etcd3:2380
     ports:
       - 127.0.0.1:2379:2379
-      - 127.0.0.1:2380:2380
+  etcd2:
+    image: 'bitnami/etcd:latest'
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_NAME=infra1
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd2:2380
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd2:2379
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=nodehub-etcd-cluster
+      - ETCD_INITIAL_CLUSTER=infra0=http://etcd1:2380,infra1=http://etcd2:2380,infra2=http://etcd3:2380
+    ports:
+      - 127.0.0.1:2479:2379
+  etcd3:
+    image: 'bitnami/etcd:latest'
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_NAME=infra2
+      - ETCD_INITIAL_ADVERTISE_PEER_URLS=http://etcd3:2380
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd3:2379
+      - ETCD_LISTEN_PEER_URLS=http://0.0.0.0:2380
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+      - ETCD_INITIAL_CLUSTER_STATE=new
+      - ETCD_INITIAL_CLUSTER_TOKEN=nodehub-etcd-cluster
+      - ETCD_INITIAL_CLUSTER=infra0=http://etcd1:2380,infra1=http://etcd2:2380,infra2=http://etcd3:2380
+    ports:
+      - 127.0.0.1:2579:2379
   redis:
     image: 'redis:latest'
     ports:

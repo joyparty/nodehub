@@ -44,7 +44,7 @@ func init() {
 	logger.SetLogger(slog.Default())
 
 	client := gokit.MustReturn(clientv3.New(clientv3.Config{
-		Endpoints: []string{"127.0.0.1:2379"},
+		Endpoints: []string{"127.0.0.1:2379", "127.0.0.1:2479", "127.0.0.1:2579"},
 	}))
 
 	registry = gokit.MustReturn(cluster.NewRegistry(client))
