@@ -41,13 +41,33 @@ services:
       - ETCD_INITIAL_CLUSTER=infra0=http://etcd1:2380,infra1=http://etcd2:2380,infra2=http://etcd3:2380
     ports:
       - 127.0.0.1:2579:2379
-  redis:
-    image: 'redis:latest'
-    ports:
-      - 127.0.0.1:6379:6379
-  nats:
-    image: 'nats:latest'
+  nats1:
+    image: 'bitnami/nats:latest'
+    environment:
+      - NATS_ENABLE_CLUSTER=yes
+      - NATS_CLUSTER_PORT_NUMBER=4248
+      - NATS_EXTRA_ARGS=--cluster_name=nodehub
     ports:
       - '127.0.0.1:4222:4222'
-      - '127.0.0.1:6222:6222'
-      - '127.0.0.1:8222:8222'
+  nats2:
+    image: 'bitnami/nats:latest'
+    environment:
+      - NATS_ENABLE_CLUSTER=yes
+      - NATS_CLUSTER_PORT_NUMBER=5248
+      - NATS_CLUSTER_ROUTES=nats://nats1:4248
+      - NATS_EXTRA_ARGS=--cluster_name=nodehub
+    ports:
+      - '127.0.0.1:5222:4222'
+    depends_on:
+      - nats1
+  nats3:
+    image: 'bitnami/nats:latest'
+    environment:
+      - NATS_ENABLE_CLUSTER=yes
+      - NATS_CLUSTER_PORT_NUMBER=6248
+      - NATS_CLUSTER_ROUTES=nats://nats1:4248
+      - NATS_EXTRA_ARGS=--cluster_name=nodehub
+    ports:
+      - '127.0.0.1:6222:4222'
+    depends_on:
+      - nats1

@@ -9,7 +9,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"flag"
-	"fmt"
 	"log/slog"
 	"math/big"
 	"net"
@@ -29,7 +28,6 @@ import (
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/nats-io/nats.go"
 	"github.com/oklog/ulid/v2"
-	"github.com/redis/go-redis/v9"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/metadata"
@@ -41,8 +39,7 @@ var (
 	proxyListen string
 	reuse       bool
 	grpcListen  string
-	redisAddr   string
-	natsAddr    string
+	natsURL     string
 	useTCP      bool
 	useQUIC     bool
 )
@@ -51,8 +48,7 @@ func init() {
 	flag.StringVar(&proxyListen, "proxy", "127.0.0.1:9000", "proxy listen address")
 	flag.BoolVar(&reuse, "reuse", false, "reuse port")
 	flag.StringVar(&grpcListen, "grpc", "127.0.0.1:10000", "grpc listen address")
-	flag.StringVar(&redisAddr, "redis", "127.0.0.1:6379", "redis address")
-	flag.StringVar(&natsAddr, "nats", "127.0.0.1:4222", "nats address")
+	flag.StringVar(&natsURL, "nats", "nats://127.0.0.1:4222,nats://127.0.0.1:5222,nats://127.0.0.1:6222", "nats address")
 	flag.BoolVar(&useTCP, "tcp", false, "use tcp")
 	flag.BoolVar(&useQUIC, "quic", false, "use quic")
 	flag.Parse()
@@ -161,17 +157,8 @@ func main() {
 	}
 }
 
-func newRedisBus() (*event.Bus, *multicast.Bus) {
-	client := redis.NewClient(&redis.Options{
-		Network: "tcp",
-		Addr:    redisAddr,
-	})
-	return event.NewRedisBus(client), multicast.NewRedisBus(client)
-}
-
 func newNatsBus() (*event.Bus, *multicast.Bus) {
-	dsn := fmt.Sprintf("nats://%s", natsAddr)
-	conn := gokit.MustReturn(nats.Connect(dsn))
+	conn := gokit.MustReturn(nats.Connect(natsURL))
 	return event.NewNatsBus(conn), multicast.NewNatsBus(conn)
 }
 
