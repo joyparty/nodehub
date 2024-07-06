@@ -11,7 +11,7 @@ import (
 
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/component/gateway"
-	"github.com/joyparty/nodehub/component/metrics"
+	"github.com/joyparty/nodehub/component/gateway/metrics"
 	"github.com/joyparty/nodehub/component/rpc"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
