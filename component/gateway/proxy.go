@@ -524,7 +524,7 @@ func (p *Proxy) logRequest(sess Session, req *nh.Request) func(context.Context, 
 
 		if err != nil {
 			if s, ok := status.FromError(err); ok {
-				logValues = append(logValues, "error", s.Message(), "grpcCode", s.Code())
+				logValues = append(logValues, "error", s.Message(), "grpcCode", s.Code().String())
 			} else {
 				logValues = append(logValues, "error", err)
 			}
