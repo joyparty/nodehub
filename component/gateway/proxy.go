@@ -301,8 +301,8 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 		method string
 	)
 
-	logRequest := p.logRequest(ctx, sess, req)
-	defer func() { logRequest(conn, desc, method, err) }()
+	logRequest := p.logRequest(sess, req)
+	defer func() { logRequest(ctx, conn, desc, method, err) }()
 
 	pass, err := p.opts.RequestInterceptor(ctx, sess, req)
 	if err != nil {
@@ -488,10 +488,10 @@ FINISH:
 	return
 }
 
-func (p *Proxy) logRequest(ctx context.Context, sess Session, req *nh.Request) func(*grpc.ClientConn, cluster.GRPCServiceDesc, string, error) {
+func (p *Proxy) logRequest(sess Session, req *nh.Request) func(context.Context, *grpc.ClientConn, cluster.GRPCServiceDesc, string, error) {
 	start := time.Now()
 
-	return func(upstream *grpc.ClientConn, desc cluster.GRPCServiceDesc, method string, err error) {
+	return func(ctx context.Context, upstream *grpc.ClientConn, desc cluster.GRPCServiceDesc, method string, err error) {
 		// 如果method为空，说明还没有到达请求阶段
 		if method != "" {
 			metrics.IncrGRPCRequests(method, err, time.Since(start))
