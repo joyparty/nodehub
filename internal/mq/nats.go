@@ -44,15 +44,18 @@ func (mq *natsMQ) Subscribe(ctx context.Context) (<-chan []byte, error) {
 		return nil, err
 	}
 
+	sub.SetClosedHandler(func(subject string) {
+		close(msgC)
+	})
+
 	go func() {
 		select {
 		case <-mq.done:
 		case <-ctx.Done():
 		}
 
-		sub.Unsubscribe()
 		cancel()
-		close(msgC)
+		sub.Unsubscribe()
 	}()
 
 	return msgC, nil
