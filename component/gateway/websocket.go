@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -204,7 +205,7 @@ func (ws *wsSession) Recv(req *nh.Request) error {
 				websocket.CloseGoingAway,
 				websocket.CloseAbnormalClosure,
 				websocket.CloseNormalClosure,
-			) {
+			) || errors.Is(err, net.ErrClosed) {
 				return io.EOF
 			}
 			return err
