@@ -87,6 +87,11 @@ func (n *Node) AddComponent(c ...Component) {
 	n.components = append(n.components, c...)
 }
 
+// GetComponents 获取组件列表
+func (n *Node) GetComponents() []Component {
+	return n.components
+}
+
 // Serve 启动所有组件
 func (n *Node) Serve(ctx context.Context) error {
 	// 确保node service一定被注册
