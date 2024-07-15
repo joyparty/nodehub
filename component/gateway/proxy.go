@@ -63,12 +63,13 @@ type Session interface {
 
 // Proxy 客户端会话运行环境
 type Proxy struct {
-	nodeID     string
-	opts       *Options
-	sessions   *sessionHub
-	stateTable *stateTable
-	cleanJobs  *gokit.MapOf[string, *time.Timer]
-	done       chan struct{}
+	nodeID       string
+	opts         *Options
+	sessions     *sessionHub
+	sessionCount atomic.Int32
+	stateTable   *stateTable
+	cleanJobs    *gokit.MapOf[string, *time.Timer]
+	done         chan struct{}
 }
 
 // NewProxy 构造函数
@@ -152,6 +153,11 @@ func (p *Proxy) NewGRPCService() nh.GatewayServer {
 	}
 }
 
+// SessionCount 当前会话数量
+func (p *Proxy) SessionCount() int {
+	return int(p.sessionCount.Load())
+}
+
 func (p *Proxy) init(ctx context.Context) {
 	// 有状态路由更新
 	p.opts.EventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
@@ -227,6 +233,9 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		return
 	}
 	defer p.onDisconnect(ctx, sess)
+
+	p.sessionCount.Add(1)
+	defer p.sessionCount.Add(-1)
 
 	metrics.IncrGatewaySession(sess.Type())
 	defer metrics.DecrGatewaySession(sess.Type())
