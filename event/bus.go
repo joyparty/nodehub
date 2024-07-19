@@ -140,6 +140,25 @@ func (bus *Bus) Subscribe(ctx context.Context, handler any) {
 	)
 }
 
+// Observable 事件观察者
+func (bus *Bus) Observable() rxgo.Observable {
+	bus.observe()
+	return bus.observable.
+		Map(func(_ context.Context, item any) (any, error) {
+			p := item.(payload)
+			evType, ok := events[p.Type]
+			if !ok {
+				return nil, fmt.Errorf("unknown event %q", p.Type)
+			}
+
+			ev := reflect.New(evType).Interface()
+			if err := json.Unmarshal(p.Detail, ev); err != nil {
+				return nil, fmt.Errorf("unmarshal event %q, %w", p.Type, err)
+			}
+			return ev, nil
+		})
+}
+
 func (bus *Bus) observe() {
 	bus.observeOnce.Do(func() {
 		msgC, err := bus.queue.Subscribe(context.Background())
