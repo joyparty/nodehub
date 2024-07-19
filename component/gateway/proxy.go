@@ -39,10 +39,6 @@ var (
 	replyPool = gokit.NewPoolOf(func() *nh.Reply {
 		return &nh.Reply{}
 	})
-
-	streamDesc = &grpc.StreamDesc{
-		ServerStreams: true,
-	}
 )
 
 // Session 连接会话

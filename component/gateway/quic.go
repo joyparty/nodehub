@@ -328,9 +328,5 @@ func isUnexpectedQUICError(err error) bool {
 	}
 
 	var timeoutErr *quic.IdleTimeoutError
-	if errors.As(err, &timeoutErr) {
-		return false
-	}
-
-	return true
+	return !errors.As(err, &timeoutErr)
 }
