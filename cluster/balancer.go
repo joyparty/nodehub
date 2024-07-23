@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/oklog/ulid/v2"
 )
 
 const (
@@ -52,7 +53,7 @@ type BalancerFactory func(serviceCode int32, nodes []NodeEntry) Balancer
 
 // Balancer 负载均衡器
 type Balancer interface {
-	Pick(sess Session) (NodeEntry, error)
+	Pick(sess Session) (nodeID ulid.ULID, err error)
 }
 
 // RegisterBalancer 注册负载均衡器
@@ -103,16 +104,16 @@ type noBalancer struct {
 	node NodeEntry
 }
 
-func (nb *noBalancer) Pick(sess Session) (NodeEntry, error) {
-	return nb.node, nil
+func (nb *noBalancer) Pick(sess Session) (ulid.ULID, error) {
+	return nb.node.ID, nil
 }
 
 type errorBalancer struct {
 	err error
 }
 
-func (eb *errorBalancer) Pick(sess Session) (NodeEntry, error) {
-	return NodeEntry{}, eb.err
+func (eb *errorBalancer) Pick(sess Session) (ulid.ULID, error) {
+	return ulid.ULID{}, eb.err
 }
 
 type randomBalancer struct {
@@ -125,8 +126,8 @@ func newRandomBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 	}
 }
 
-func (b *randomBalancer) Pick(sess Session) (NodeEntry, error) {
-	return b.nodes[rand.Intn(len(b.nodes))], nil
+func (b *randomBalancer) Pick(sess Session) (ulid.ULID, error) {
+	return b.nodes[rand.Intn(len(b.nodes))].ID, nil
 }
 
 type weightedNode struct {
@@ -168,16 +169,16 @@ func newRoundRobinBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 	}
 }
 
-func (b *roundRobinBalancer) Pick(sess Session) (NodeEntry, error) {
+func (b *roundRobinBalancer) Pick(sess Session) (ulid.ULID, error) {
 	r := rand.Intn(b.sum)
 	for _, node := range b.nodes {
 		r -= node.weight
 		if r < 0 {
-			return node.entry, nil
+			return node.entry.ID, nil
 		}
 	}
 
-	return NodeEntry{}, ErrNoNodeAvailable
+	return ulid.ULID{}, ErrNoNodeAvailable
 }
 
 type ipHashBalancer struct {
@@ -190,13 +191,13 @@ func newIPHashBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 	}
 }
 
-func (b *ipHashBalancer) Pick(sess Session) (NodeEntry, error) {
+func (b *ipHashBalancer) Pick(sess Session) (ulid.ULID, error) {
 	ipInt, err := addrToint64(sess.RemoteAddr())
 	if err != nil {
-		return NodeEntry{}, err
+		return ulid.ULID{}, err
 	}
 	index := int(ipInt) % len(b.nodes)
-	return b.nodes[index], nil
+	return b.nodes[index].ID, nil
 }
 
 func addrToint64(remoteAddr string) (int64, error) {
@@ -220,10 +221,10 @@ func newIDHashBalancer(serviceCode int32, nodes []NodeEntry) Balancer {
 	}
 }
 
-func (b *idHashBalancer) Pick(sess Session) (NodeEntry, error) {
+func (b *idHashBalancer) Pick(sess Session) (ulid.ULID, error) {
 	hash := xxhash.Sum64String(sess.ID())
 	index := int(hash) % len(b.nodes)
-	return b.nodes[index], nil
+	return b.nodes[index].ID, nil
 }
 
 type oldestBalancer struct {
@@ -241,8 +242,8 @@ func newOldestBalancer(_ int32, nodes []NodeEntry) Balancer {
 	}
 }
 
-func (b *oldestBalancer) Pick(sess Session) (NodeEntry, error) {
-	return b.node, nil
+func (b *oldestBalancer) Pick(sess Session) (ulid.ULID, error) {
+	return b.node.ID, nil
 }
 
 type newestBalancer struct {
@@ -260,6 +261,6 @@ func newNewestBalancer(_ int32, nodes []NodeEntry) Balancer {
 	}
 }
 
-func (b *newestBalancer) Pick(sess Session) (NodeEntry, error) {
-	return b.node, nil
+func (b *newestBalancer) Pick(sess Session) (ulid.ULID, error) {
+	return b.node.ID, nil
 }

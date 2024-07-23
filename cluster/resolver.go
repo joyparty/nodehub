@@ -155,11 +155,7 @@ func (r *grpcResolver) AllocNode(serviceCode int32, sess Session) (nodeID ulid.U
 		return
 	}
 
-	node, err := balancer.Pick(sess)
-	if err != nil {
-		return
-	}
-	return node.ID, nil
+	return balancer.Pick(sess)
 }
 
 // PickNode 随机选择可用节点
