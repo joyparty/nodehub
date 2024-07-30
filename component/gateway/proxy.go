@@ -192,18 +192,14 @@ func (p *Proxy) init(ctx context.Context) {
 	p.opts.Multicast.Subscribe(ctx, func(msg *nh.Multicast) {
 		for _, sessID := range msg.GetReceiver() {
 			if sess, ok := p.sessions.Load(sessID); ok {
-				if err := p.submitTask(func() {
-					logger.Debug("send multicast",
-						"receiver", sess.ID(),
-						"service", msg.GetContent().GetServiceCode(),
-						"code", msg.GetContent().GetCode(),
-						"time", msg.GetTime().AsTime().Format(time.RFC3339),
-					)
+				logger.Debug("send multicast",
+					"receiver", sess.ID(),
+					"service", msg.GetContent().GetServiceCode(),
+					"code", msg.GetContent().GetCode(),
+					"time", msg.GetTime().AsTime().Format(time.RFC3339),
+				)
 
-					p.sendReply(sess, msg.Content)
-				}); err != nil {
-					logger.Error("submit multicast task", "error", err, "session", sess, "reply", msg.Content)
-				}
+				p.sendReply(sess, msg.Content)
 			}
 		}
 	})

@@ -37,4 +37,7 @@ message Multicast {
 
 	// 消息内容
 	Reply content = 3;
+
+	// 可选，同一个channel的消息会严格按照顺序处理
+	string channel = 4;
 }

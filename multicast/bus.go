@@ -5,12 +5,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/joyparty/gokit"
-	"github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/internal/mq"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/nats-io/nats.go"
+	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -77,16 +76,74 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 		return err
 	}
 
-	gokit.FanOut(msgC, 4, func(data []byte) {
-		n := &nh.Multicast{}
-		if err := proto.Unmarshal(data, n); err != nil {
-			logger.Error("unmarshal multicast message", "error", err)
-		} else {
-			handler(n)
-
-			metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(n.Time.AsTime()))
+	go func() {
+		type worker struct {
+			C      chan *nh.Multicast
+			Active time.Time
 		}
-	})
+
+		workers := map[string]*worker{}
+		defer func() {
+			for k, w := range workers {
+				close(w.C)
+				delete(workers, k)
+			}
+		}()
+
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				for k, w := range workers {
+					if time.Since(w.Active) > 5*time.Minute {
+						close(w.C)
+						delete(workers, k)
+					}
+				}
+			case data, ok := <-msgC:
+				if !ok {
+					return
+				}
+
+				msg := &nh.Multicast{}
+				if err := proto.Unmarshal(data, msg); err != nil {
+					logger.Error("unmarshal multicast message", "error", err)
+					continue
+				}
+
+				if msg.GetChannel() == "" {
+					if err := ants.Submit(func() {
+						handler(msg)
+					}); err != nil {
+						logger.Error("submit handler", "error", err)
+					}
+					continue
+				}
+
+				w, ok := workers[msg.GetChannel()]
+				if !ok {
+					w = &worker{
+						C: make(chan *nh.Multicast, 100),
+					}
+					workers[msg.GetChannel()] = w
+
+					go func() {
+						for msg := range w.C {
+							handler(msg)
+						}
+					}()
+				}
+
+				w.C <- msg
+				w.Active = time.Now()
+			}
+		}
+	}()
+
 	return nil
 }
 
