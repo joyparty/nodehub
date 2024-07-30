@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/joyparty/nodehub/internal/metrics"
 	"github.com/joyparty/nodehub/internal/mq"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
@@ -114,6 +115,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 					logger.Error("unmarshal multicast message", "error", err)
 					continue
 				}
+				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(msg.Time.AsTime()))
 
 				if msg.GetChannel() == "" {
 					if err := ants.Submit(func() {
