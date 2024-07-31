@@ -232,17 +232,12 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	metrics.IncrGatewaySession(sess.Type())
 	defer metrics.DecrGatewaySession(sess.Type())
 
-	logVars := []any{
-		"session", sess,
-		"gateway", p.nodeID,
-	}
-
-	logger.Info("session connected", logVars...)
-	defer logger.Info("session disconnected", logVars...)
-
-	reqC := make(chan requestTask)
+	reqC := make(chan *nh.Request)
 	defer close(reqC)
-	go p.runRequestTask(ctx, reqC)
+	go p.handleRequestStream(ctx, sess, reqC)
+
+	logger.Info("session connected", "session", sess, "gateway", p.nodeID)
+	defer logger.Info("session disconnected", "session", sess, "gateway", p.nodeID)
 
 	var prevRequestID uint32
 
@@ -271,14 +266,11 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		}
 		prevRequestID = req.GetId()
 
-		run, stream := p.buildRequest(ctx, sess, req)
-		task := func() {
-			run()
-			requestPool.Put(req)
-		}
-
-		if stream == "" {
-			if err := p.submitTask(task); err != nil {
+		if req.GetStream() == "" {
+			// 没有指定stream的消息，直接并发处理
+			if err := p.submitTask(func() {
+				p.handleRequest(ctx, sess, req)
+			}); err != nil {
 				requestPool.Put(req)
 				logger.Error("submit request task", "error", err, "session", sess, "req", req)
 			}
@@ -286,140 +278,122 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 			select {
 			case <-p.done:
 				return
-			case reqC <- requestTask{Stream: stream, Task: task}:
+			case reqC <- req:
 			}
 		}
 	}
 }
 
-// 以status.Error()构造的错误，都会被下行通知到客户端
-func (p *Proxy) buildRequest(ctx context.Context, sess Session, req *nh.Request) (exec func(), stream string) { // revive:disable-line
+func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) {
+	defer requestPool.Put(req)
+
+	var err error
+
+	defer func() {
+		if err == nil {
+			return
+		}
+
+		// 以status.Error()构造的错误，都会被下行通知到客户端
+		if s, ok := status.FromError(err); ok {
+			if s.Code() == codes.Unknown {
+				// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
+				s = status.New(codes.Unknown, "unknown error")
+			}
+
+			reply, _ := nh.NewReply(int32(nh.ReplyCode_RPC_ERROR), &nh.RPCError{
+				RequestService: req.GetServiceCode(),
+				RequestMethod:  req.GetMethod(),
+				Status:         s.Proto(),
+			})
+			reply.RequestId = req.GetId()
+			p.sendReply(sess, reply)
+		}
+	}()
+
 	var (
-		err        error
-		doRequest  func() error
-		desc       cluster.GRPCServiceDesc
-		ok         bool
-		logRequest = p.logRequest(sess, req)
+		conn   *grpc.ClientConn
+		desc   cluster.GRPCServiceDesc
+		method string
 	)
+
+	logRequest := p.logRequest(sess, req)
+	defer func() { logRequest(ctx, conn, desc, method, err) }()
 
 	pass, err := p.opts.RequestInterceptor(ctx, sess, req)
 	if err != nil {
 		err = fmt.Errorf("request interceptor, %w", err)
+		return
 	} else if !pass {
 		err = errors.New("request interceptor denied")
-	} else {
-		desc, ok = p.opts.Registry.GetGRPCDesc(req.GetServiceCode())
-		if !ok {
-			err = status.Errorf(codes.Unimplemented, "unknown service %d", req.GetServiceCode())
-		} else if !desc.Public {
-			err = status.Errorf(codes.PermissionDenied, "request private service")
-		}
+		return
 	}
 
+	desc, ok := p.opts.Registry.GetGRPCDesc(req.GetServiceCode())
+	if !ok {
+		err = status.Errorf(codes.Unimplemented, "unknown service %d", req.GetServiceCode())
+		return
+	} else if !desc.Public {
+		err = status.Errorf(codes.PermissionDenied, "request private service")
+		return
+	}
+
+	conn, err = p.getUpstream(sess, req, desc)
 	if err != nil {
-		doRequest = func() error {
-			defer logRequest(ctx, nil, desc, "", err)
-			return err
-		}
-		goto BUILD
+		return
 	}
 
-	stream = req.GetStream()
-	doRequest = func() (err error) {
-		// 任务会放到channel内等待执行，如果实际执行的时候对应的连接已经不存在则放弃
-		if _, ok := p.sessions.Load(sess.ID()); !ok {
-			return
-		}
+	md := sess.MetadataCopy()
+	md.Set(rpc.MDTransactionID, ulid.Make().String())
+	md.Set(rpc.MDSessID, sess.ID())
+	md.Set(rpc.MDGateway, p.nodeID)
+	ctx = metadata.NewOutgoingContext(ctx, md)
 
-		var (
-			conn   *grpc.ClientConn
-			method string
-		)
-
-		defer func() {
-			logRequest(ctx, conn, desc, method, err)
-		}()
-
-		conn, err = p.getUpstream(sess, req, desc)
-		if err != nil {
-			return
-		}
-
-		md := sess.MetadataCopy()
-		md.Set(rpc.MDTransactionID, ulid.Make().String())
-		md.Set(rpc.MDSessID, sess.ID())
-		md.Set(rpc.MDGateway, p.nodeID)
-		ctx = metadata.NewOutgoingContext(ctx, md)
-
-		var cancel context.CancelFunc
-		if timemout := p.opts.RequstTimeout; timemout > 0 {
-			ctx, cancel = context.WithTimeout(ctx, timemout)
-			defer cancel()
-		}
-
-		input, err := newEmptyMessage(req.Data)
-		if err != nil {
-			err = fmt.Errorf("unmarshal request data, %w", err)
-			return
-		}
-
-		output := replyPool.Get()
-		nh.ResetReply(output)
-		defer replyPool.Put(output)
-
-		method = path.Join(desc.Path, req.Method)
-		if err = conn.Invoke(ctx, method, input, output); err != nil {
-			// 这里不要用fmt.Errorf()包装，否则fmt.Errorf()会污染status.Status.Message()，导致日志记录不必要的重复内容
-			return
-		}
-
-		if req.GetNoReply() {
-			return
-		}
-
-		output.RequestId = req.GetId()
-		output.ServiceCode = req.GetServiceCode()
-		p.sendReply(sess, output)
-		return nil
+	var cancel context.CancelFunc
+	if timemout := p.opts.RequstTimeout; timemout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timemout)
+		defer cancel()
 	}
 
-BUILD:
-	exec = func() {
-		if err := doRequest(); err != nil {
-			if s, ok := status.FromError(err); ok {
-				if s.Code() == codes.Unknown {
-					// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
-					s = status.New(codes.Unknown, "unknown error")
-				}
-
-				reply, _ := nh.NewReply(int32(nh.ReplyCode_RPC_ERROR), &nh.RPCError{
-					RequestService: req.GetServiceCode(),
-					RequestMethod:  req.GetMethod(),
-					Status:         s.Proto(),
-				})
-				reply.RequestId = req.GetId()
-				p.sendReply(sess, reply)
-			}
-		}
+	input, err := newEmptyMessage(req.Data)
+	if err != nil {
+		err = fmt.Errorf("unmarshal request data, %w", err)
+		return
 	}
 
-	return
+	output := replyPool.Get()
+	nh.ResetReply(output)
+	defer replyPool.Put(output)
+
+	method = path.Join(desc.Path, req.Method)
+	if err = conn.Invoke(ctx, method, input, output); err != nil {
+		// 这里不要用fmt.Errorf()包装，否则fmt.Errorf()会污染status.Status.Message()，导致日志记录不必要的重复内容
+		return
+	}
+
+	if req.GetNoReply() {
+		return
+	}
+
+	output.RequestId = req.GetId()
+	output.ServiceCode = req.GetServiceCode()
+	p.sendReply(sess, output)
 }
 
-type requestTask struct {
-	Stream string
-	Task   func()
-}
-
-func (p *Proxy) runRequestTask(ctx context.Context, c <-chan requestTask) {
+func (p *Proxy) handleRequestStream(ctx context.Context, sess Session, reqC <-chan *nh.Request) {
 	type worker struct {
-		C      chan func()
+		C      chan *nh.Request
 		Active time.Time
 	}
 
 	workers := map[string]*worker{}
 	defer func() {
 		for _, w := range workers {
+			// drain channel
+			for i, l := 0, len(w.C); i < l; i++ {
+				requestPool.Put(<-w.C)
+			}
+
 			close(w.C)
 		}
 	}()
@@ -432,33 +406,32 @@ func (p *Proxy) runRequestTask(ctx context.Context, c <-chan requestTask) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// 清理不活跃worker
 			for stream, w := range workers {
 				if time.Since(w.Active) > 1*time.Minute {
 					close(w.C)
 					delete(workers, stream)
 				}
 			}
-		case task, ok := <-c:
+		case req, ok := <-reqC:
 			if !ok {
 				return
 			}
 
-			w, ok := workers[task.Stream]
+			w, ok := workers[req.GetStream()]
 			if !ok {
 				w = &worker{
-					C: make(chan func(), 100),
+					C: make(chan *nh.Request, 10),
 				}
-				workers[task.Stream] = w
+				workers[req.GetStream()] = w
 
 				go func() {
-					for fn := range w.C {
-						fn()
+					for req := range w.C {
+						p.handleRequest(ctx, sess, req)
 					}
 				}()
 			}
 
-			w.C <- task.Task
+			w.C <- req
 			w.Active = time.Now()
 		}
 	}
