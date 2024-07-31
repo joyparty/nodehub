@@ -100,6 +100,10 @@ func (x *Request) LogValue() slog.Value {
 		attrs = append(attrs, slog.Bool("noReply", true))
 	}
 
+	if stream := x.GetStream(); stream != "" {
+		attrs = append(attrs, slog.String("stream", stream))
+	}
+
 	return slog.GroupValue(attrs...)
 }
 

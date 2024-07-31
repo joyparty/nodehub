@@ -232,13 +232,12 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	metrics.IncrGatewaySession(sess.Type())
 	defer metrics.DecrGatewaySession(sess.Type())
 
-	logVars := []any{
-		"session", sess,
-		"gateway", p.nodeID,
-	}
+	reqC := make(chan *nh.Request)
+	defer close(reqC)
+	go p.handleRequestStream(ctx, sess, reqC)
 
-	logger.Info("session connected", logVars...)
-	defer logger.Info("session disconnected", logVars...)
+	logger.Info("session connected", "session", sess, "gateway", p.nodeID)
+	defer logger.Info("session disconnected", "session", sess, "gateway", p.nodeID)
 
 	var prevRequestID uint32
 
@@ -253,49 +252,65 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		nh.ResetRequest(req)
 
 		if err := sess.Recv(req); err != nil {
-			requestPool.Put(req)
-
 			if !errors.Is(err, io.EOF) {
 				logger.Error("recv request", "error", err, "session", sess)
 			}
+			requestPool.Put(req)
 			return
 		}
 
 		if prevRequestID > 0 && req.GetId() <= prevRequestID {
 			logger.Error("request id has already been used ", "session", sess, "prev", prevRequestID, "current", req.GetId())
+			requestPool.Put(req)
 			return
 		}
 		prevRequestID = req.GetId()
 
-		if err := p.submitTask(func() {
-			defer requestPool.Put(req)
-
-			if err := p.handleRequest(ctx, sess, req); err != nil {
-				if s, ok := status.FromError(err); ok {
-					if s.Code() == codes.Unknown {
-						// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
-						s = status.New(codes.Unknown, "unknown error")
-					}
-
-					reply, _ := nh.NewReply(int32(nh.ReplyCode_RPC_ERROR), &nh.RPCError{
-						RequestService: req.GetServiceCode(),
-						RequestMethod:  req.GetMethod(),
-						Status:         s.Proto(),
-					})
-					reply.RequestId = req.GetId()
-					p.sendReply(sess, reply)
-				}
+		if req.GetStream() == "" {
+			// 没有指定stream的消息，直接并发处理
+			if err := p.submitTask(func() {
+				p.handleRequest(ctx, sess, req)
+			}); err != nil {
+				requestPool.Put(req)
+				logger.Error("submit request task", "error", err, "session", sess, "req", req)
 			}
-		}); err != nil {
-			requestPool.Put(req)
-
-			logger.Error("submit request task", "error", err, "session", sess, "req", req)
+		} else {
+			select {
+			case <-p.done:
+				return
+			case reqC <- req:
+			}
 		}
 	}
 }
 
-// 以status.Error()构造的错误，都会被下行通知到客户端
-func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) (err error) {
+func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) {
+	defer requestPool.Put(req)
+
+	var err error
+
+	defer func() {
+		if err == nil {
+			return
+		}
+
+		// 以status.Error()构造的错误，都会被下行通知到客户端
+		if s, ok := status.FromError(err); ok {
+			if s.Code() == codes.Unknown {
+				// unknown错误，不下行详细的错误描述，避免泄露信息到客户端
+				s = status.New(codes.Unknown, "unknown error")
+			}
+
+			reply, _ := nh.NewReply(int32(nh.ReplyCode_RPC_ERROR), &nh.RPCError{
+				RequestService: req.GetServiceCode(),
+				RequestMethod:  req.GetMethod(),
+				Status:         s.Proto(),
+			})
+			reply.RequestId = req.GetId()
+			p.sendReply(sess, reply)
+		}
+	}()
+
 	var (
 		conn   *grpc.ClientConn
 		desc   cluster.GRPCServiceDesc
@@ -307,16 +322,20 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 
 	pass, err := p.opts.RequestInterceptor(ctx, sess, req)
 	if err != nil {
-		return fmt.Errorf("request interceptor, %w", err)
+		err = fmt.Errorf("request interceptor, %w", err)
+		return
 	} else if !pass {
-		return errors.New("request interceptor denied")
+		err = errors.New("request interceptor denied")
+		return
 	}
 
 	desc, ok := p.opts.Registry.GetGRPCDesc(req.GetServiceCode())
 	if !ok {
-		return status.Errorf(codes.Unimplemented, "unknown service %d", req.GetServiceCode())
+		err = status.Errorf(codes.Unimplemented, "unknown service %d", req.GetServiceCode())
+		return
 	} else if !desc.Public {
-		return status.Errorf(codes.PermissionDenied, "request private service")
+		err = status.Errorf(codes.PermissionDenied, "request private service")
+		return
 	}
 
 	conn, err = p.getUpstream(sess, req, desc)
@@ -338,7 +357,8 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 
 	input, err := newEmptyMessage(req.Data)
 	if err != nil {
-		return fmt.Errorf("unmarshal request data, %w", err)
+		err = fmt.Errorf("unmarshal request data, %w", err)
+		return
 	}
 
 	output := replyPool.Get()
@@ -348,17 +368,73 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	method = path.Join(desc.Path, req.Method)
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		// 这里不要用fmt.Errorf()包装，否则fmt.Errorf()会污染status.Status.Message()，导致日志记录不必要的重复内容
-		return err
+		return
 	}
 
 	if req.GetNoReply() {
-		return nil
+		return
 	}
 
 	output.RequestId = req.GetId()
 	output.ServiceCode = req.GetServiceCode()
 	p.sendReply(sess, output)
-	return nil
+}
+
+func (p *Proxy) handleRequestStream(ctx context.Context, sess Session, reqC <-chan *nh.Request) {
+	type worker struct {
+		C      chan *nh.Request
+		Active time.Time
+	}
+
+	workers := map[string]*worker{}
+	defer func() {
+		for _, w := range workers {
+			// drain channel
+			for i, l := 0, len(w.C); i < l; i++ {
+				requestPool.Put(<-w.C)
+			}
+
+			close(w.C)
+		}
+	}()
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for stream, w := range workers {
+				if time.Since(w.Active) > 1*time.Minute {
+					close(w.C)
+					delete(workers, stream)
+				}
+			}
+		case req, ok := <-reqC:
+			if !ok {
+				return
+			}
+
+			w, ok := workers[req.GetStream()]
+			if !ok {
+				w = &worker{
+					C: make(chan *nh.Request, 10),
+				}
+				workers[req.GetStream()] = w
+
+				go func() {
+					for req := range w.C {
+						p.handleRequest(ctx, sess, req)
+					}
+				}()
+			}
+
+			w.C <- req
+			w.Active = time.Now()
+		}
+	}
 }
 
 func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
