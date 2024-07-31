@@ -117,7 +117,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 				}
 				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(msg.Time.AsTime()))
 
-				if msg.GetChannel() == "" {
+				if msg.GetStream() == "" {
 					if err := ants.Submit(func() {
 						handler(msg)
 					}); err != nil {
@@ -126,12 +126,12 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 					continue
 				}
 
-				w, ok := workers[msg.GetChannel()]
+				w, ok := workers[msg.GetStream()]
 				if !ok {
 					w = &worker{
 						C: make(chan *nh.Multicast, 100),
 					}
-					workers[msg.GetChannel()] = w
+					workers[msg.GetStream()] = w
 
 					go func() {
 						for msg := range w.C {

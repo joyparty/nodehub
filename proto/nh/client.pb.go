@@ -45,10 +45,10 @@ type Request struct {
 	NodeId string `protobuf:"bytes,5,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	// 是否需要网关返回response
 	NoReply bool `protobuf:"varint,6,opt,name=no_reply,json=noReply,proto3" json:"no_reply,omitempty"`
-	// 如果不设置值，网关会马上以并发的方式处理这个请求
+	// 如果不设置值，网关会以并发的方式处理这个请求
 	// 如果设置了值，网关会严格按照接收顺序处理同一个流的所有的请求
 	// 使用了流以后，性能会受到一定影响，因为网关会等待上一个请求的返回之后才会处理下一个请求
-	// 不同的流之间不会互相影响
+	// 不同客户端以及不同的流之间不会互相影响
 	// 例如：stream = "stream1"，表示这个请求属于stream1这个流
 	Stream string `protobuf:"bytes,7,opt,name=stream,proto3" json:"stream,omitempty"`
 }
