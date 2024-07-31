@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -260,6 +261,8 @@ func (wc *wsConn) Close() {
 
 // Client 客户端
 type Client struct {
+	sync.Mutex
+
 	seq  atomic.Uint32
 	conn connection
 
@@ -437,6 +440,9 @@ func (cli *Client) newHandler(callback any) func(*nh.Reply) {
 }
 
 func (cli *Client) send(serviceCode int32, method string, input proto.Message, options ...CallOption) (*nh.Request, error) {
+	cli.Lock()
+	defer cli.Unlock()
+
 	data, err := proto.Marshal(input)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request message, %w", err)
@@ -512,5 +518,12 @@ func WithNode(nodeID string) CallOption {
 func WithNoReply() CallOption {
 	return func(req *nh.Request) {
 		req.NoReply = true
+	}
+}
+
+// WithStream 指定流
+func WithStream(stream string) CallOption {
+	return func(req *nh.Request) {
+		req.Stream = stream
 	}
 }

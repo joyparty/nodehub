@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/joyparty/gokit"
@@ -36,7 +37,7 @@ func init() {
 
 	logger.SetLogger(
 		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
+			Level: slog.LevelDebug,
 		})),
 	)
 }
@@ -65,17 +66,31 @@ func main() {
 	}
 	logger.Info("auth success", "user_id", authReply.GetUserId())
 
+	var wg sync.WaitGroup
 	for {
-		echoReply := &echopb.Msg{}
-		err := cli.Call(context.Background(), echoServiceCode, "Send",
-			&echopb.Msg{Content: "hello world!"},
-			echoReply,
-		)
-		if err != nil {
-			handleError(err)
+
+		for i := 0; i < 3; i++ {
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+
+				echoReply := &echopb.Msg{}
+				err := cli.Call(context.Background(), echoServiceCode, "Send",
+					&echopb.Msg{Content: "hello world!"},
+					echoReply,
+					client.WithStream("test:echo"),
+				)
+
+				if err != nil {
+					handleError(err)
+				} else {
+					logger.Info("echo back", "content", echoReply.GetContent())
+				}
+			}()
 		}
 
-		logger.Info("echo back", "content", echoReply.GetContent())
+		wg.Wait()
 		time.Sleep(1 * time.Second)
 	}
 }
