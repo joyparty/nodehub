@@ -403,8 +403,6 @@ func (p *Proxy) handleRequestStream(ctx context.Context, sess Session, reqC <-ch
 
 	for {
 		select {
-		case <-ctx.Done():
-			return
 		case <-ticker.C:
 			for stream, w := range workers {
 				if time.Since(w.Active) > 1*time.Minute {
@@ -636,11 +634,14 @@ func (p *Proxy) sendReply(sess Session, reply *nh.Reply) {
 
 // 定时移除心跳超时的连接
 func (p *Proxy) removeZombie() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-p.done:
 			return
-		case <-time.After(10 * time.Second):
+		case <-ticker.C:
 			p.sessions.Range(func(s Session) bool {
 				if time.Since(s.LastRWTime()) > p.opts.KeepaliveInterval {
 					logger.Info("remove heartbeat timeout session", "session", s)
