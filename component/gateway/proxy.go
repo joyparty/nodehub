@@ -325,7 +325,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 		err = fmt.Errorf("request interceptor, %w", err)
 		return
 	} else if !pass {
-		logger.Debug("deny by request interceptor", "session", sess, "req", req)
+		err = errors.New("request interceptor denied")
 		return
 	}
 
