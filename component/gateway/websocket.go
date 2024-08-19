@@ -125,8 +125,16 @@ func (ws *wsServer) newSession(w http.ResponseWriter, r *http.Request) (sess Ses
 		return nil, fmt.Errorf("upgrade websocket, %w", err)
 	}
 
+	// 当websocket通过nginx代理时，有可能无法拿到真实的远程地址
+	// 需要反向代理把真实的远程地址放到x-remote-addr请求头中
+	// 如果设置了x-remote-addr请求头，则使用该请求头中的地址
+	remoteAddr := r.RemoteAddr
+	if v := r.Header.Get("x-remote-addr"); v != "" {
+		remoteAddr = v
+	}
+
 	wsConn.SetReadLimit(int64(codec.MaxMessageSize))
-	return newWsSession(wsConn), nil
+	return newWsSession(wsConn, remoteAddr), nil
 }
 
 type wsSession struct {
@@ -134,18 +142,20 @@ type wsSession struct {
 	conn       *websocket.Conn
 	md         metadata.MD
 	lastRWTime gokit.ValueOf[time.Time]
+	remoteAddr string
 
 	writeMux  sync.Mutex
 	closeOnce sync.Once
 	done      chan struct{}
 }
 
-func newWsSession(conn *websocket.Conn) *wsSession {
+func newWsSession(conn *websocket.Conn, remoteAddr string) *wsSession {
 	ws := &wsSession{
 		id:         ulid.Make().String(),
 		conn:       conn,
 		done:       make(chan struct{}),
 		lastRWTime: gokit.NewValueOf[time.Time](),
+		remoteAddr: remoteAddr,
 	}
 
 	ws.lastRWTime.Store(time.Now())
@@ -249,6 +259,10 @@ func (ws *wsSession) LocalAddr() string {
 }
 
 func (ws *wsSession) RemoteAddr() string {
+	if ws.remoteAddr != "" {
+		return ws.remoteAddr
+	}
+
 	return ws.conn.RemoteAddr().String()
 }
 
