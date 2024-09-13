@@ -5,10 +5,16 @@ import (
 	"reflect"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var replyTypes = map[[2]int32]reflect.Type{}
+var (
+	// EmptyReply 空响应
+	EmptyReply = &emptypb.Empty{}
+
+	replyTypes = map[[2]int32]reflect.Type{}
+)
 
 func init() {
 	RegisterReplyType(0, int32(ReplyCode_RPC_ERROR), &RPCError{})

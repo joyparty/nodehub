@@ -12,8 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-var emptyReply = &emptypb.Empty{}
-
 // 节点管理服务，每个节点都会自动注册
 type nodeService struct {
 	nh.UnimplementedNodeServer
@@ -28,7 +26,7 @@ func (ns *nodeService) ChangeState(_ context.Context, req *nh.ChangeStateRequest
 		return nil, status.Error(codes.InvalidArgument, "state is empty")
 	}
 
-	return emptyReply, ns.node.ChangeState(cluster.NodeState(state))
+	return nh.EmptyReply, ns.node.ChangeState(cluster.NodeState(state))
 }
 
 // 关闭服务
@@ -36,7 +34,7 @@ func (ns *nodeService) Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty
 	logger.Info("node shutdown by rpc command")
 	ns.node.Shutdown()
 
-	return emptyReply, nil
+	return nh.EmptyReply, nil
 }
 
 // NewNodeClient 节点管理服务客户端

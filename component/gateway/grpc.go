@@ -11,8 +11,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-var emptyReply = &emptypb.Empty{}
-
 type gwService struct {
 	nh.UnimplementedGatewayServer
 
@@ -58,12 +56,12 @@ func (s *gwService) SetServiceRoute(ctx context.Context, req *nh.SetServiceRoute
 
 		s.stateTable.Store(req.GetSessionId(), req.GetServiceCode(), nodeID)
 	}
-	return emptyReply, nil
+	return nh.EmptyReply, nil
 }
 
 func (s *gwService) RemoveServiceRoute(ctx context.Context, req *nh.RemoveServiceRouteRequest) (*emptypb.Empty, error) {
 	s.stateTable.Remove(req.GetSessionId(), req.GetServiceCode())
-	return emptyReply, nil
+	return nh.EmptyReply, nil
 }
 
 func (s *gwService) ReplaceServiceRoute(ctx context.Context, req *nh.ReplaceServiceRouteRequest) (*emptypb.Empty, error) {
@@ -78,7 +76,7 @@ func (s *gwService) ReplaceServiceRoute(ctx context.Context, req *nh.ReplaceServ
 	}
 
 	s.stateTable.ReplaceNode(oldID, newID)
-	return emptyReply, nil
+	return nh.EmptyReply, nil
 }
 
 func (s *gwService) SendReply(ctx context.Context, req *nh.SendReplyRequest) (*nh.SendReplyResponse, error) {
