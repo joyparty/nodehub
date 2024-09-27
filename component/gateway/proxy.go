@@ -213,6 +213,8 @@ func (p *Proxy) init(ctx context.Context) {
 
 // Handle 处理客户端连接
 func (p *Proxy) handleSession(ctx context.Context, sess Session) {
+	defer sess.Close()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -221,7 +223,6 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		if !errors.Is(err, io.EOF) {
 			logger.Error("initialize connect", "error", err, "addr", sess.RemoteAddr())
 		}
-		_ = sess.Close()
 		return
 	}
 	defer p.onDisconnect(ctx, sess)
@@ -480,7 +481,6 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 }
 
 func (p *Proxy) onDisconnect(ctx context.Context, sess Session) {
-	defer sess.Close()
 	p.opts.DisconnectInterceptor(ctx, sess)
 	p.sessions.Delete(sess)
 
