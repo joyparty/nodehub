@@ -108,12 +108,23 @@ func (r *Registry) initLease(ctx context.Context) error {
 
 	// 心跳维持
 	go func() {
+		tk := time.NewTicker(30 * time.Second)
+		defer tk.Stop()
+
 		for {
 			select {
 			case _, ok := <-ch:
 				if !ok { // etcd down or disconnect
 					logger.Error("etcd lease keeper closed")
 					panic(errors.New("etcd lease keeper closed"))
+				}
+			case <-tk.C:
+				resp, err := r.client.TimeToLive(r.client.Ctx(), lease.ID)
+				if err != nil {
+					logger.Error("check lease ttl", "error", err)
+				} else if resp.TTL < 0 {
+					logger.Error("etcd lease expired")
+					panic(errors.New("etcd lease expired"))
 				}
 			case <-r.client.Ctx().Done():
 				return
