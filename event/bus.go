@@ -113,8 +113,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler any) {
 		panic(errors.New("second argument must be time.Time"))
 	}
 
-	bus.observe()
-	bus.observable.ForEach(
+	bus.observe().ForEach(
 		func(item any) {
 			p := item.(payload)
 
@@ -142,8 +141,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler any) {
 
 // Observable 事件观察者
 func (bus *Bus) Observable() rxgo.Observable {
-	bus.observe()
-	return bus.observable.
+	return bus.observe().
 		Map(func(_ context.Context, item any) (any, error) {
 			p := item.(payload)
 			evType, ok := events[p.Type]
@@ -159,7 +157,7 @@ func (bus *Bus) Observable() rxgo.Observable {
 		})
 }
 
-func (bus *Bus) observe() {
+func (bus *Bus) observe() rxgo.Observable {
 	bus.observeOnce.Do(func() {
 		msgC, err := bus.queue.Subscribe(context.Background())
 		if err != nil {
@@ -185,6 +183,8 @@ func (bus *Bus) observe() {
 			}
 		}()
 	})
+
+	return bus.observable
 }
 
 // Close 关闭事件总线连接

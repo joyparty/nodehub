@@ -40,4 +40,8 @@ message Multicast {
 
 	// 可选，同一个stream的消息会严格按照顺序处理
 	string stream = 4;
+
+	// 可选，是否广播给所有人
+	// 如果 receiver 有值，则忽略此字段
+	bool to_everyone = 5;
 }

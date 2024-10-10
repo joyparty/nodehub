@@ -190,8 +190,8 @@ func (p *Proxy) init(ctx context.Context) {
 
 	// 处理主动下行消息
 	p.opts.Multicast.Subscribe(ctx, func(msg *nh.Multicast) {
-		for _, sessID := range msg.GetReceiver() {
-			if sess, ok := p.sessions.Load(sessID); ok {
+		send := func(sess Session, msg *nh.Multicast) {
+			if err := p.submitTask(func() {
 				logger.Debug("send multicast",
 					"receiver", sess.ID(),
 					"service", msg.GetContent().GetServiceCode(),
@@ -200,6 +200,22 @@ func (p *Proxy) init(ctx context.Context) {
 				)
 
 				p.sendReply(sess, msg.Content)
+			}); err != nil {
+				logger.Error("submit send multicast task", "error", err, "receiver", sess.ID())
+			}
+		}
+
+		if msg.GetToEveryone() && len(msg.GetReceiver()) == 0 {
+			p.sessions.Range(func(sess Session) bool {
+				send(sess, msg)
+				return true
+			})
+			return
+		}
+
+		for _, sessID := range msg.GetReceiver() {
+			if sess, ok := p.sessions.Load(sessID); ok {
+				send(sess, msg)
 			}
 		}
 	})
