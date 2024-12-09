@@ -118,10 +118,10 @@ func (p *Proxy) Start(ctx context.Context) error {
 					return
 				}
 
-				if err := p.submitTask(func() {
-					p.handleSession(ctx, sess)
-				}); err != nil {
-					logger.Error("handle session", "error", err, "session", sess)
+				if !p.submitTask(
+					func() { p.handleSession(ctx, sess) },
+					"handle session", "session", sess,
+				) {
 					_ = sess.Close()
 				}
 			}
@@ -157,25 +157,27 @@ func (p *Proxy) SessionCount() int {
 func (p *Proxy) init(ctx context.Context) {
 	// 有状态路由更新
 	p.opts.EventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
-		if err := p.submitTask(func() {
-			for _, userID := range ev.UserID {
-				if _, ok := p.sessions.Load(userID); ok {
-					p.stateTable.Store(userID, ev.ServiceCode, ev.NodeID)
+		p.submitTask(
+			func() {
+				for _, userID := range ev.UserID {
+					if _, ok := p.sessions.Load(userID); ok {
+						p.stateTable.Store(userID, ev.ServiceCode, ev.NodeID)
+					}
 				}
-			}
-		}); err != nil {
-			logger.Error("handle NodeAssign event", "error", err, "event", ev)
-		}
+			},
+			"handle NodeAssign event", "event", ev,
+		)
 	})
 
 	p.opts.EventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-		if err := p.submitTask(func() {
-			for _, userID := range ev.UserID {
-				p.stateTable.Remove(userID, ev.ServiceCode)
-			}
-		}); err != nil {
-			logger.Error("handle NodeUnassign event", "error", err, "event", ev)
-		}
+		p.submitTask(
+			func() {
+				for _, userID := range ev.UserID {
+					p.stateTable.Remove(userID, ev.ServiceCode)
+				}
+			},
+			"handle NodeUnassign event", "event", ev,
+		)
 	})
 
 	// 禁止同一个用户同时连接多个网关
@@ -191,18 +193,19 @@ func (p *Proxy) init(ctx context.Context) {
 	// 处理主动下行消息
 	p.opts.Multicast.Subscribe(ctx, func(msg *nh.Multicast) {
 		send := func(sess Session, msg *nh.Multicast) {
-			if err := p.submitTask(func() {
-				logger.Debug("send multicast",
-					"receiver", sess.ID(),
-					"service", msg.GetContent().GetServiceCode(),
-					"code", msg.GetContent().GetCode(),
-					"time", msg.GetTime().AsTime().Format(time.RFC3339),
-				)
+			p.submitTask(
+				func() {
+					logger.Debug("send multicast",
+						"receiver", sess.ID(),
+						"service", msg.GetContent().GetServiceCode(),
+						"code", msg.GetContent().GetCode(),
+						"time", msg.GetTime().AsTime().Format(time.RFC3339),
+					)
 
-				p.sendReply(sess, msg.Content)
-			}); err != nil {
-				logger.Error("submit send multicast task", "error", err, "receiver", sess.ID())
-			}
+					p.sendReply(sess, msg.Content)
+				},
+				"submit send multicast task", "receiver", sess.ID(),
+			)
 		}
 
 		if msg.GetToEveryone() && len(msg.GetReceiver()) == 0 {
@@ -285,11 +288,11 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 
 		if req.GetStream() == "" {
 			// 没有指定stream的消息，直接并发处理
-			if err := p.submitTask(func() {
-				p.handleRequest(ctx, sess, req)
-			}); err != nil {
+			if !p.submitTask(
+				func() { p.handleRequest(ctx, sess, req) },
+				"submit request task", "session", sess, "req", req,
+			) {
 				requestPool.Put(req)
-				logger.Error("submit request task", "error", err, "session", sess, "req", req)
 			}
 		} else {
 			select {
@@ -631,11 +634,20 @@ func (p *Proxy) logRequest(sess Session, req *nh.Request) func(context.Context, 
 	}
 }
 
-func (p *Proxy) submitTask(task func()) error {
+func (p *Proxy) submitTask(task func(), logMsg string, logArgs ...any) bool {
+	var submit func(func()) error
 	if pool := p.opts.GoPool; pool != nil {
-		return pool.Submit(task)
+		submit = pool.Submit
+	} else {
+		submit = ants.Submit
 	}
-	return ants.Submit(task)
+
+	if err := submit(task); err != nil {
+		logArgs = append(logArgs, "error", err)
+		logger.Error(logMsg, logArgs...)
+		return false
+	}
+	return true
 }
 
 func (p *Proxy) sendReply(sess Session, reply *nh.Reply) {
