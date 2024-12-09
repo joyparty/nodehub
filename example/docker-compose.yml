@@ -27,6 +27,8 @@ services:
       - ETCD_INITIAL_CLUSTER=infra0=http://etcd1:2380,infra1=http://etcd2:2380,infra2=http://etcd3:2380
     ports:
       - 127.0.0.1:2479:2379
+    depends_on:
+      - etcd1
   etcd3:
     image: 'bitnami/etcd:latest'
     environment:
@@ -41,6 +43,8 @@ services:
       - ETCD_INITIAL_CLUSTER=infra0=http://etcd1:2380,infra1=http://etcd2:2380,infra2=http://etcd3:2380
     ports:
       - 127.0.0.1:2579:2379
+    depends_on:
+      - etcd1
   nats1:
     image: 'bitnami/nats:latest'
     environment:
