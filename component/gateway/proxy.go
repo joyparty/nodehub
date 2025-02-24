@@ -244,7 +244,12 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		}
 		return
 	}
-	defer p.onDisconnect(ctx, sess)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		p.onDisconnect(ctx, sess)
+	}()
 
 	p.sessionCount.Add(1)
 	defer p.sessionCount.Add(-1)
