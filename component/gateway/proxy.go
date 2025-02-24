@@ -155,31 +155,6 @@ func (p *Proxy) SessionCount() int {
 }
 
 func (p *Proxy) init(ctx context.Context) {
-	// 有状态路由更新
-	p.opts.EventBus.Subscribe(ctx, func(ev event.NodeAssign, _ time.Time) {
-		p.submitTask(
-			func() {
-				for _, userID := range ev.UserID {
-					if _, ok := p.sessions.Load(userID); ok {
-						p.stateTable.Store(userID, ev.ServiceCode, ev.NodeID)
-					}
-				}
-			},
-			"handle NodeAssign event", "event", ev,
-		)
-	})
-
-	p.opts.EventBus.Subscribe(ctx, func(ev event.NodeUnassign, _ time.Time) {
-		p.submitTask(
-			func() {
-				for _, userID := range ev.UserID {
-					p.stateTable.Remove(userID, ev.ServiceCode)
-				}
-			},
-			"handle NodeUnassign event", "event", ev,
-		)
-	})
-
 	// 禁止同一个用户同时连接多个网关
 	p.opts.EventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
 		if ev.GatewayID != p.nodeID {
