@@ -280,7 +280,7 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		}
 
 		if prevRequestID > 0 && req.GetId() <= prevRequestID {
-			logger.Error("request id has already been used ", "session", sess, "prev", prevRequestID, "current", req.GetId())
+			logger.Error("request id has already been used", "session", sess, "prev", prevRequestID, "current", req.GetId())
 			requestPool.Put(req)
 			return
 		}
@@ -449,8 +449,13 @@ func (p *Proxy) handleRequestStream(ctx context.Context, sess Session, reqC <-ch
 				}()
 			}
 
-			w.C <- req
-			w.Active = time.Now()
+			select {
+			case <-ctx.Done():
+				requestPool.Put(req)
+				return
+			case w.C <- req:
+				w.Active = time.Now()
+			}
 		}
 	}
 }
