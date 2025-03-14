@@ -57,10 +57,10 @@ func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
 
 // Publish 把消息发布到消息队列
 func (bus *Bus) Publish(ctx context.Context, message *nh.Multicast) error {
-	if len(message.Receiver) == 0 {
+	if len(message.GetReceiver()) == 0 {
 		return errors.New("receiver is empty")
-	} else if message.Time == nil {
-		message.Time = timestamppb.Now()
+	} else if message.GetTime() == nil {
+		message.SetTime(timestamppb.Now())
 	}
 
 	payload, err := proto.Marshal(message)
@@ -115,7 +115,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 					logger.Error("unmarshal multicast message", "error", err)
 					continue
 				}
-				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(msg.Time.AsTime()))
+				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(msg.GetTime().AsTime()))
 
 				if msg.GetStream() == "" {
 					if err := ants.Submit(func() {

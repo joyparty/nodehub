@@ -12,7 +12,7 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.17
 	golang.org/x/sys v0.28.0
 	google.golang.org/grpc v1.68.1
-	google.golang.org/protobuf v1.35.2
+	google.golang.org/protobuf v1.36.5
 )
 
 require (

@@ -223,7 +223,7 @@ func newPacketConn(addr string, reuse bool) (net.PacketConn, error) {
 // 客户端在连接之后的5秒内需要发送鉴权消息，鉴权失败或超时都会断开连接
 func initializer(ctx context.Context, sess gateway.Session) (userID string, md metadata.MD, err error) {
 	validToken := func(req *nh.Request) error {
-		if req.Method != "Authorize" {
+		if req.GetMethod() != "Authorize" {
 			return errors.New("invalid method")
 		}
 
@@ -232,7 +232,7 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 			return err
 		}
 
-		if token.Token != "0d8b750e-35e8-4f98-b032-f389d401213e" {
+		if token.GetToken() != "0d8b750e-35e8-4f98-b032-f389d401213e" {
 			return errors.New("invalid token")
 		}
 
@@ -269,11 +269,11 @@ func initializer(ctx context.Context, sess gateway.Session) (userID string, md m
 	}
 
 	if err == nil {
-		reply := gokit.MustReturn(authpb.PackAuthorizeAck(&authpb.AuthorizeAck{
+		reply := gokit.MustReturn(authpb.PackAuthorizeAck(authpb.AuthorizeAck_builder{
 			UserId: userID,
-		}))
+		}.Build()))
 		// 确保Reply的RequestId和Request的Id一致
-		reply.RequestId = atomic.LoadUint32(&requestID)
+		reply.SetRequestId(atomic.LoadUint32(&requestID))
 
 		gokit.Must(sess.Send(reply))
 	}

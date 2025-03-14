@@ -32,9 +32,9 @@ func (rs *roomService) Join(ctx context.Context, req *roompb.JoinRequest) (*empt
 	}
 	rs.members.Store(userID, userName)
 
-	rs.boardcast(&roompb.News{
+	rs.boardcast(roompb.News_builder{
 		Content: fmt.Sprintf("ROOM: #%s join", userID),
-	})
+	}.Build())
 
 	logger.Info("join", "name", userName, "id", userID)
 	return emptyReply, nil
@@ -46,9 +46,9 @@ func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 	if _, ok := rs.members.Load(userID); ok {
 		rs.members.Delete(userID)
 
-		rs.boardcast(&roompb.News{
+		rs.boardcast(roompb.News_builder{
 			Content: fmt.Sprintf("ROOM: #%s leave", userID),
-		})
+		}.Build())
 	}
 
 	logger.Info("leave", "userID", userID)
@@ -58,26 +58,26 @@ func (rs *roomService) Leave(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 func (rs *roomService) Say(ctx context.Context, req *roompb.SayRequest) (*emptypb.Empty, error) {
 	userID := rpc.SessionIDInContext(ctx)
 	if name, ok := rs.members.Load(userID); ok {
-		news := &roompb.News{
+		news := roompb.News_builder{
 			FromId:   userID,
 			FromName: name,
-			Content:  req.Content,
-		}
+			Content:  req.GetContent(),
+		}.Build()
 
-		if req.To == "" {
+		if req.GetTo() == "" {
 			rs.boardcast(news)
 		} else {
-			rs.unicast(req.To, news)
+			rs.unicast(req.GetTo(), news)
 		}
 
-		logger.Info("say", "from", name, "to", req.To, "content", req.Content)
+		logger.Info("say", "from", name, "to", req.GetTo(), "content", req.GetContent())
 	}
 	return emptyReply, nil
 }
 
 func (rs *roomService) boardcast(news *roompb.News) {
 	response, _ := nh.NewReply(int32(roompb.ReplyCode_NEWS), news)
-	response.ServiceCode = int32(clusterpb.Services_ROOM)
+	response.SetServiceCode(int32(clusterpb.Services_ROOM))
 
 	receiver := []string{}
 	rs.members.Range(func(id, name string) bool {
@@ -93,7 +93,7 @@ func (rs *roomService) boardcast(news *roompb.News) {
 
 func (rs *roomService) unicast(toName string, news *roompb.News) {
 	response, _ := nh.NewReply(int32(roompb.ReplyCode_NEWS), news)
-	response.ServiceCode = int32(clusterpb.Services_ROOM)
+	response.SetServiceCode(int32(clusterpb.Services_ROOM))
 
 	rs.members.Range(func(id, name string) bool {
 		if name == toName {

@@ -21,16 +21,16 @@ type gwService struct {
 func (s *gwService) IsSessionExist(ctx context.Context, req *nh.IsSessionExistRequest) (*nh.IsSessionExistResponse, error) {
 	_, exist := s.sessionHub.Load(req.GetSessionId())
 
-	return &nh.IsSessionExistResponse{
+	return nh.IsSessionExistResponse_builder{
 		Exist: exist,
-	}, nil
+	}.Build(), nil
 }
 
 // 会话数量
 func (s *gwService) SessionCount(context.Context, *emptypb.Empty) (*nh.SessionCountResponse, error) {
-	return &nh.SessionCountResponse{
+	return nh.SessionCountResponse_builder{
 		Count: int32(s.sessionHub.Count()),
-	}, nil
+	}.Build(), nil
 }
 
 func (s *gwService) CloseSession(ctx context.Context, req *nh.CloseSessionRequest) (*nh.CloseSessionResponse, error) {
@@ -39,9 +39,9 @@ func (s *gwService) CloseSession(ctx context.Context, req *nh.CloseSessionReques
 			return nil, err
 		}
 
-		return &nh.CloseSessionResponse{
+		return nh.CloseSessionResponse_builder{
 			Success: true,
-		}, nil
+		}.Build(), nil
 	}
 
 	return &nh.CloseSessionResponse{}, nil
@@ -94,9 +94,9 @@ func (s *gwService) SendReply(ctx context.Context, req *nh.SendReplyRequest) (*n
 	if err := sess.Send(req.GetReply()); err != nil {
 		return nil, err
 	}
-	return &nh.SendReplyResponse{
+	return nh.SendReplyResponse_builder{
 		Success: true,
-	}, nil
+	}.Build(), nil
 }
 
 // NewGatewayClient 网关管理接口客户端
