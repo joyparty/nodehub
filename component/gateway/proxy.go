@@ -62,7 +62,7 @@ type Proxy struct {
 	nodeID       string
 	opts         *Options
 	sessions     *sessionHub
-	sessionCount atomic.Int32
+	sessionCount *atomic.Int32
 	stateTable   *stateTable
 	cleanJobs    *gokit.MapOf[string, *time.Timer]
 	done         chan struct{}
@@ -71,12 +71,13 @@ type Proxy struct {
 // NewProxy 构造函数
 func NewProxy(nodeID ulid.ULID, opt ...Option) (*Proxy, error) {
 	p := &Proxy{
-		nodeID:     nodeID.String(),
-		opts:       newOptions(),
-		sessions:   newSessionHub(),
-		stateTable: newStateTable(),
-		cleanJobs:  gokit.NewMapOf[string, *time.Timer](),
-		done:       make(chan struct{}),
+		nodeID:       nodeID.String(),
+		opts:         newOptions(),
+		sessions:     newSessionHub(),
+		sessionCount: &atomic.Int32{},
+		stateTable:   newStateTable(),
+		cleanJobs:    gokit.NewMapOf[string, *time.Timer](),
+		done:         make(chan struct{}),
 	}
 
 	for _, fn := range opt {
@@ -144,8 +145,9 @@ func (p *Proxy) Stop(ctx context.Context) {
 // NewGRPCService 网关管理服务
 func (p *Proxy) NewGRPCService() nh.GatewayServer {
 	return &gwService{
-		sessionHub: p.sessions,
-		stateTable: p.stateTable,
+		sessionCount: p.sessionCount,
+		sessionHub:   p.sessions,
+		stateTable:   p.stateTable,
 	}
 }
 
@@ -691,15 +693,6 @@ func newSessionHub() *sessionHub {
 	}
 
 	return hub
-}
-
-func (h *sessionHub) Count() int {
-	var count int
-	h.sessions.Range(func(_ string, _ Session) bool {
-		count++
-		return true
-	})
-	return count
 }
 
 func (h *sessionHub) Store(sess Session) {
