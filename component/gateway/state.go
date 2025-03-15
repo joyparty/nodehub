@@ -8,21 +8,18 @@ import (
 // 有状态路由表
 type stateTable struct {
 	// sessionID => serviceCode => nodeID
-	routes *gokit.MapOf[string, *gokit.MapOf[int32, string]]
+	routes *gokit.MapOf[string, *gokit.MapOf[int32, ulid.ULID]]
 }
 
 func newStateTable() *stateTable {
 	return &stateTable{
-		routes: gokit.NewMapOf[string, *gokit.MapOf[int32, string]](),
+		routes: gokit.NewMapOf[string, *gokit.MapOf[int32, ulid.ULID]](),
 	}
 }
 
 func (st *stateTable) Find(sessID string, serviceCode int32) (nodeID ulid.ULID, ok bool) {
 	if nodes, ok := st.routes.Load(sessID); ok {
-		if v, ok := nodes.Load(serviceCode); ok {
-			nodeID, _ := ulid.Parse(v)
-			return nodeID, true
-		}
+		return nodes.Load(serviceCode)
 	}
 
 	return
@@ -31,9 +28,9 @@ func (st *stateTable) Find(sessID string, serviceCode int32) (nodeID ulid.ULID, 
 func (st *stateTable) Store(sessID string, serviceCode int32, nodeID ulid.ULID) {
 	nodes, ok := st.routes.Load(sessID)
 	if !ok {
-		nodes, _ = st.routes.LoadOrStore(sessID, gokit.NewMapOf[int32, string]())
+		nodes, _ = st.routes.LoadOrStore(sessID, gokit.NewMapOf[int32, ulid.ULID]())
 	}
-	nodes.Store(serviceCode, nodeID.String())
+	nodes.Store(serviceCode, nodeID)
 }
 
 func (st *stateTable) Remove(sessID string, serviceCode int32) {
@@ -43,11 +40,9 @@ func (st *stateTable) Remove(sessID string, serviceCode int32) {
 }
 
 func (st *stateTable) CleanNode(nodeID ulid.ULID) {
-	nodeid := nodeID.String()
-
-	st.routes.Range(func(sessID string, nodes *gokit.MapOf[int32, string]) bool {
-		nodes.Range(func(serviceCode int32, id string) bool {
-			if nodeid == id {
+	st.routes.Range(func(sessID string, nodes *gokit.MapOf[int32, ulid.ULID]) bool {
+		nodes.Range(func(serviceCode int32, id ulid.ULID) bool {
+			if nodeID.Compare(id) == 0 {
 				nodes.Delete(serviceCode)
 				return false
 			}
@@ -59,13 +54,10 @@ func (st *stateTable) CleanNode(nodeID ulid.ULID) {
 
 // ReplaceNode 替换节点
 func (st *stateTable) ReplaceNode(oldID, newID ulid.ULID) {
-	oldid := oldID.String()
-	newid := newID.String()
-
-	st.routes.Range(func(sessID string, nodes *gokit.MapOf[int32, string]) bool {
-		nodes.Range(func(serviceCode int32, nodeID string) bool {
-			if nodeID == oldid {
-				nodes.Store(serviceCode, newid)
+	st.routes.Range(func(sessID string, nodes *gokit.MapOf[int32, ulid.ULID]) bool {
+		nodes.Range(func(serviceCode int32, nodeID ulid.ULID) bool {
+			if nodeID.Compare(oldID) == 0 {
+				nodes.Store(serviceCode, newID)
 				return false
 			}
 			return true
