@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"time"
-
-	"github.com/oklog/ulid/v2"
 )
 
 var (
@@ -17,9 +15,6 @@ var (
 func init() {
 	Register("user:connected", UserConnected{})
 	Register("user:disconnected", UserDisconnected{})
-
-	Register("node:assign", NodeAssign{})
-	Register("node:unassign", NodeUnassign{})
 }
 
 // Register 注册事件
@@ -77,18 +72,4 @@ type UserDisconnected struct {
 	GatewayID  string `json:"gatewayID"`
 	UserID     string `json:"userID"`
 	RemoteAddr string `json:"remoteAddr"`
-}
-
-// NodeAssign 给用户分配有状态节点
-type NodeAssign struct {
-	ServiceCode int32     `json:"serviceCode"`
-	UserID      []string  `json:"userID"`
-	NodeID      ulid.ULID `json:"nodeID"`
-}
-
-// NodeUnassign 取消用户分配的有状态节点
-type NodeUnassign struct {
-	ServiceCode int32     `json:"serviceCode"`
-	UserID      []string  `json:"userID"`
-	NodeID      ulid.ULID `json:"nodeID"`
 }
