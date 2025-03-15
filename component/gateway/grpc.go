@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/proto/nh"
@@ -14,8 +15,9 @@ import (
 type gwService struct {
 	nh.UnimplementedGatewayServer
 
-	sessionHub *sessionHub
-	stateTable *stateTable
+	sessionCount *atomic.Int32
+	sessionHub   *sessionHub
+	stateTable   *stateTable
 }
 
 func (s *gwService) IsSessionExist(ctx context.Context, req *nh.IsSessionExistRequest) (*nh.IsSessionExistResponse, error) {
@@ -29,7 +31,7 @@ func (s *gwService) IsSessionExist(ctx context.Context, req *nh.IsSessionExistRe
 // 会话数量
 func (s *gwService) SessionCount(context.Context, *emptypb.Empty) (*nh.SessionCountResponse, error) {
 	return nh.SessionCountResponse_builder{
-		Count: int32(s.sessionHub.Count()),
+		Count: s.sessionCount.Load(),
 	}.Build(), nil
 }
 
