@@ -57,6 +57,10 @@ func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
 
 // Publish 把消息发布到消息队列
 func (bus *Bus) Publish(ctx context.Context, message *nh.Multicast) error {
+	if reply := message.GetContent(); reply.GetServiceCode() == 0 || reply.GetCode() == 0 {
+		return errors.New("service code or message code is empty")
+	}
+
 	if len(message.Receiver) == 0 {
 		return errors.New("receiver is empty")
 	} else if message.Time == nil {
