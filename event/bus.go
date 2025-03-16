@@ -178,7 +178,7 @@ func (bus *Bus) observe() rxgo.Observable {
 				} else {
 					events <- rxgo.Of(p)
 
-					metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(p.GetTime()))
+					metrics.IncrMessageQueue(bus.queue.Topic(), p.GetTime())
 				}
 			}
 		}()
