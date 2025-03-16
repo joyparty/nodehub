@@ -144,8 +144,12 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 					}()
 				}
 
-				w.C <- msg
-				w.Active = time.Now()
+				select {
+				case <-ctx.Done():
+					return
+				case w.C <- msg:
+					w.Active = time.Now()
+				}
 			}
 		}
 	}()
