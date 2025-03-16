@@ -119,7 +119,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 					logger.Error("unmarshal multicast message", "error", err)
 					continue
 				}
-				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(msg.Time.AsTime()))
+				metrics.IncrMessageQueue(bus.queue.Topic(), msg.Time.AsTime())
 
 				if msg.GetStream() == "" {
 					if err := bus.sbumitTask(func() {

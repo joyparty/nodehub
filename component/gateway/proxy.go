@@ -575,7 +575,7 @@ func (p *Proxy) logRequest(sess Session, req *nh.Request) func(context.Context, 
 	return func(ctx context.Context, upstream *grpc.ClientConn, desc cluster.GRPCServiceDesc, method string, err error) {
 		// 如果method为空，说明还没有到达请求阶段
 		if method != "" {
-			metrics.IncrGRPCRequests(method, err, time.Since(start))
+			metrics.IncrGRPCRequests(method, err, start)
 		}
 
 		if err == nil && p.opts.RequestLogger == nil {
