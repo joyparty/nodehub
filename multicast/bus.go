@@ -21,13 +21,20 @@ type Queue = mq.Queue
 
 // Bus push message总线
 type Bus struct {
-	queue mq.Queue
+	queue      mq.Queue
+	sbumitTask func(func()) error
 }
 
 // NewBus 构造函数
-func NewBus(queue Queue) *Bus {
+func NewBus(queue Queue, options *Options) *Bus {
+	submitTask := ants.Submit
+	if options.GoPool != nil {
+		submitTask = options.GoPool.Submit
+	}
+
 	return &Bus{
-		queue: queue,
+		queue:      queue,
+		sbumitTask: submitTask,
 	}
 }
 
@@ -38,9 +45,7 @@ func NewNatsBus(conn *nats.Conn, options ...func(*Options)) *Bus {
 		fn(opt)
 	}
 
-	return &Bus{
-		queue: mq.NewNatsMQ(conn, opt.ChannelName),
-	}
+	return NewBus(mq.NewNatsMQ(conn, opt.ChannelName), opt)
 }
 
 // NewRedisBus 构造函数
@@ -50,9 +55,7 @@ func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
 		fn(opt)
 	}
 
-	return &Bus{
-		queue: mq.NewRedisMQ(client, opt.ChannelName),
-	}
+	return NewBus(mq.NewRedisMQ(client, opt.ChannelName), opt)
 }
 
 // Publish 把消息发布到消息队列
@@ -122,7 +125,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(msg.Time.AsTime()))
 
 				if msg.GetStream() == "" {
-					if err := ants.Submit(func() {
+					if err := bus.sbumitTask(func() {
 						handler(msg)
 					}); err != nil {
 						logger.Error("submit handler", "error", err)
@@ -164,6 +167,11 @@ type Options struct {
 	//
 	// 不同的总线实现内有不同的含义，在nats里面是topic，redis里面是channel
 	ChannelName string
+
+	// GoPool goroutine pool
+	//
+	// 默认使用ants default pool
+	GoPool GoPool
 }
 
 func newOptions() *Options {
@@ -176,5 +184,17 @@ func newOptions() *Options {
 func WithChannelName(name string) func(*Options) {
 	return func(o *Options) {
 		o.ChannelName = name
+	}
+}
+
+// GoPool goroutine pool
+type GoPool interface {
+	Submit(task func()) error
+}
+
+// WithGoPool 设置goroutine pool
+func WithGoPool(pool GoPool) func(*Options) {
+	return func(opt *Options) {
+		opt.GoPool = pool
 	}
 }
