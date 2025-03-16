@@ -120,7 +120,7 @@ func Init() *prometheus.Registry {
 }
 
 // IncrGRPCRequests 统计grpc请求
-func IncrGRPCRequests(method string, err error, duration time.Duration) {
+func IncrGRPCRequests(method string, err error, requestAt time.Time) {
 	if !enabled {
 		return
 	}
@@ -132,7 +132,7 @@ func IncrGRPCRequests(method string, err error, duration time.Duration) {
 
 	grpcDurs.With(prometheus.Labels{
 		"method": method,
-	}).Observe(duration.Seconds())
+	}).Observe(time.Since(requestAt).Seconds())
 }
 
 // IncrGatewaySession 增加网关session计数
@@ -165,11 +165,11 @@ func IncrPayloadSize(sessionType string, size int) {
 }
 
 // IncrMessageQueue 队列消息统计
-func IncrMessageQueue(topic string, duration time.Duration) {
+func IncrMessageQueue(topic string, publishAt time.Time) {
 	if !enabled {
 		return
 	}
 
 	queueTotal.WithLabelValues(topic).Inc()
-	queueDurs.WithLabelValues(topic).Observe(duration.Seconds())
+	queueDurs.WithLabelValues(topic).Observe(time.Since(publishAt).Seconds())
 }

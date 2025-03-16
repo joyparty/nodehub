@@ -21,37 +21,37 @@ type Queue = mq.Queue
 
 // Bus push message总线
 type Bus struct {
-	queue mq.Queue
+	queue      mq.Queue
+	sbumitTask func(func()) error
 }
 
 // NewBus 构造函数
-func NewBus(queue Queue) *Bus {
-	return &Bus{
-		queue: queue,
-	}
+func NewBus(queue Queue, options ...func(*Options)) *Bus {
+	opt := newOptions(options...)
+	return newBus(queue, opt)
 }
 
 // NewNatsBus 使用nats构造总线
 func NewNatsBus(conn *nats.Conn, options ...func(*Options)) *Bus {
-	opt := newOptions()
-	for _, fn := range options {
-		fn(opt)
-	}
-
-	return &Bus{
-		queue: mq.NewNatsMQ(conn, opt.ChannelName),
-	}
+	opt := newOptions(options...)
+	return newBus(mq.NewNatsMQ(conn, opt.ChannelName), opt)
 }
 
 // NewRedisBus 构造函数
 func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
-	opt := newOptions()
-	for _, fn := range options {
-		fn(opt)
+	opt := newOptions(options...)
+	return newBus(mq.NewRedisMQ(client, opt.ChannelName), opt)
+}
+
+func newBus(queue Queue, options *Options) *Bus {
+	submitTask := ants.Submit
+	if options.GoPool != nil {
+		submitTask = options.GoPool.Submit
 	}
 
 	return &Bus{
-		queue: mq.NewRedisMQ(client, opt.ChannelName),
+		queue:      queue,
+		sbumitTask: submitTask,
 	}
 }
 
@@ -119,10 +119,10 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 					logger.Error("unmarshal multicast message", "error", err)
 					continue
 				}
-				metrics.IncrMessageQueue(bus.queue.Topic(), time.Since(msg.GetTime().AsTime()))
+				metrics.IncrMessageQueue(bus.queue.Topic(), msg.GetTime().AsTime())
 
 				if msg.GetStream() == "" {
-					if err := ants.Submit(func() {
+					if err := bus.sbumitTask(func() {
 						handler(msg)
 					}); err != nil {
 						logger.Error("submit handler", "error", err)
@@ -144,8 +144,12 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 					}()
 				}
 
-				w.C <- msg
-				w.Active = time.Now()
+				select {
+				case <-ctx.Done():
+					return
+				case w.C <- msg:
+					w.Active = time.Now()
+				}
 			}
 		}
 	}()
@@ -164,17 +168,40 @@ type Options struct {
 	//
 	// 不同的总线实现内有不同的含义，在nats里面是topic，redis里面是channel
 	ChannelName string
+
+	// GoPool goroutine pool
+	//
+	// 默认使用ants default pool
+	GoPool GoPool
 }
 
-func newOptions() *Options {
-	return &Options{
+func newOptions(apply ...func(*Options)) *Options {
+	opt := &Options{
 		ChannelName: "nodehub:multicast",
 	}
+
+	for _, fn := range apply {
+		fn(opt)
+	}
+
+	return opt
 }
 
 // WithChannelName 设置通道名称
 func WithChannelName(name string) func(*Options) {
 	return func(o *Options) {
 		o.ChannelName = name
+	}
+}
+
+// GoPool goroutine pool
+type GoPool interface {
+	Submit(task func()) error
+}
+
+// WithGoPool 设置goroutine pool
+func WithGoPool(pool GoPool) func(*Options) {
+	return func(opt *Options) {
+		opt.GoPool = pool
 	}
 }

@@ -80,7 +80,13 @@ func newGRPCServer() (*rpc.GRPCServer, error) {
 		}.Build())
 	})
 
-	server := rpc.NewGRPCServer(listenAddr, grpc.UnaryInterceptor(rpc.LogUnary(slog.Default())))
+	server := rpc.NewGRPCServer(listenAddr,
+		grpc.ChainUnaryInterceptor(
+			rpc.LogUnary(slog.Default()),
+			rpc.PackReply(roompb.Room_MethodReplyCodes),
+		),
+	)
+
 	err := server.RegisterService(
 		int32(clusterpb.Services_ROOM),
 		roompb.Room_ServiceDesc,
