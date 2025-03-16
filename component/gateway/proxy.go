@@ -603,7 +603,9 @@ func (p *Proxy) logRequest(sess Session, req *nh.Request) func(context.Context, 
 			}
 		}
 
-		if err != nil {
+		if err == nil {
+			p.opts.RequestLogger.Info("handle request", logValues...)
+		} else {
 			if s, ok := status.FromError(err); ok {
 				logValues = append(logValues, "error", s.Message(), "grpcCode", s.Code().String())
 			} else {
@@ -615,8 +617,6 @@ func (p *Proxy) logRequest(sess Session, req *nh.Request) func(context.Context, 
 			} else {
 				p.opts.RequestLogger.Error("handle request", logValues...)
 			}
-		} else {
-			p.opts.RequestLogger.Info("handle request", logValues...)
 		}
 	}
 }
