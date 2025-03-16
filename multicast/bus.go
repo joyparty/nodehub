@@ -26,7 +26,24 @@ type Bus struct {
 }
 
 // NewBus 构造函数
-func NewBus(queue Queue, options *Options) *Bus {
+func NewBus(queue Queue, options ...func(*Options)) *Bus {
+	opt := newOptions(options...)
+	return newBus(queue, opt)
+}
+
+// NewNatsBus 使用nats构造总线
+func NewNatsBus(conn *nats.Conn, options ...func(*Options)) *Bus {
+	opt := newOptions(options...)
+	return newBus(mq.NewNatsMQ(conn, opt.ChannelName), opt)
+}
+
+// NewRedisBus 构造函数
+func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
+	opt := newOptions(options...)
+	return newBus(mq.NewRedisMQ(client, opt.ChannelName), opt)
+}
+
+func newBus(queue Queue, options *Options) *Bus {
 	submitTask := ants.Submit
 	if options.GoPool != nil {
 		submitTask = options.GoPool.Submit
@@ -36,26 +53,6 @@ func NewBus(queue Queue, options *Options) *Bus {
 		queue:      queue,
 		sbumitTask: submitTask,
 	}
-}
-
-// NewNatsBus 使用nats构造总线
-func NewNatsBus(conn *nats.Conn, options ...func(*Options)) *Bus {
-	opt := newOptions()
-	for _, fn := range options {
-		fn(opt)
-	}
-
-	return NewBus(mq.NewNatsMQ(conn, opt.ChannelName), opt)
-}
-
-// NewRedisBus 构造函数
-func NewRedisBus(client *redis.Client, options ...func(*Options)) *Bus {
-	opt := newOptions()
-	for _, fn := range options {
-		fn(opt)
-	}
-
-	return NewBus(mq.NewRedisMQ(client, opt.ChannelName), opt)
 }
 
 // Publish 把消息发布到消息队列
@@ -174,10 +171,16 @@ type Options struct {
 	GoPool GoPool
 }
 
-func newOptions() *Options {
-	return &Options{
+func newOptions(apply ...func(*Options)) *Options {
+	opt := &Options{
 		ChannelName: "nodehub:multicast",
 	}
+
+	for _, fn := range apply {
+		fn(opt)
+	}
+
+	return opt
 }
 
 // WithChannelName 设置通道名称
