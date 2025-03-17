@@ -28,18 +28,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-var (
-	// WriteTimeout 网络连接写超时时间
-	WriteTimeout = 5 * time.Second
-
-	requestPool = gokit.NewPoolOf(func() *nh.Request {
-		return &nh.Request{}
-	})
-
-	replyPool = gokit.NewPoolOf(func() *nh.Reply {
-		return &nh.Reply{}
-	})
-)
+// WriteTimeout 网络连接写超时时间
+var WriteTimeout = 5 * time.Second
 
 // Session 连接会话
 type Session interface {
@@ -250,32 +240,27 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 		default:
 		}
 
-		req := requestPool.Get()
-		nh.ResetRequest(req)
+		req := &nh.Request{}
 
 		if err := sess.Recv(req); err != nil {
 			if !errors.Is(err, io.EOF) {
 				logger.Error("recv request", "error", err, "session", sess)
 			}
-			requestPool.Put(req)
 			return
 		}
 
 		if prevRequestID > 0 && req.GetId() <= prevRequestID {
 			logger.Error("request id has already been used", "session", sess, "prev", prevRequestID, "current", req.GetId())
-			requestPool.Put(req)
 			return
 		}
 		prevRequestID = req.GetId()
 
 		if req.GetStream() == "" {
 			// 没有指定stream的消息，直接并发处理
-			if !p.submitTask(
+			p.submitTask(
 				func() { p.handleRequest(ctx, sess, req) },
 				"submit request task", "session", sess, "req", req,
-			) {
-				requestPool.Put(req)
-			}
+			)
 		} else {
 			select {
 			case <-p.done:
@@ -287,8 +272,6 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 }
 
 func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request) {
-	defer requestPool.Put(req)
-
 	var err error
 
 	defer func() {
@@ -363,10 +346,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 		return
 	}
 
-	output := replyPool.Get()
-	nh.ResetReply(output)
-	defer replyPool.Put(output)
-
+	output := &nh.Reply{}
 	method = path.Join(desc.Path, req.GetMethod())
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		// 这里不要用fmt.Errorf()包装，否则fmt.Errorf()会污染status.Status.Message()，导致日志记录不必要的重复内容
@@ -392,11 +372,6 @@ func (p *Proxy) handleRequestStream(ctx context.Context, sess Session, reqC <-ch
 	workers := map[string]*worker{}
 	defer func() {
 		for _, w := range workers {
-			// drain channel
-			for i, l := 0, len(w.C); i < l; i++ {
-				requestPool.Put(<-w.C)
-			}
-
 			close(w.C)
 		}
 	}()
@@ -434,7 +409,6 @@ func (p *Proxy) handleRequestStream(ctx context.Context, sess Session, reqC <-ch
 
 			select {
 			case <-ctx.Done():
-				requestPool.Put(req)
 				return
 			case w.C <- req:
 				w.Active = time.Now()

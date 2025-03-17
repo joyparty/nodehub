@@ -67,29 +67,6 @@ func NewMulticast(receiver []string, content *Reply) *Multicast {
 	}.Build()
 }
 
-// ResetRequest 重置请求对象
-func ResetRequest(req *Request) {
-	req.SetId(0)
-	req.SetNodeId("")
-	req.SetServiceCode(0)
-	req.SetMethod("")
-
-	if data := req.GetData(); len(data) > 0 {
-		req.SetData(data[:0])
-	}
-}
-
-// ResetReply 重置响应对象
-func ResetReply(resp *Reply) {
-	resp.SetRequestId(0)
-	resp.SetServiceCode(0)
-	resp.SetCode(0)
-
-	if data := resp.GetData(); len(data) > 0 {
-		resp.SetData(data[:0])
-	}
-}
-
 // LogValue implements slog.LogValuer
 func (x *Request) LogValue() slog.Value {
 	attrs := []slog.Attr{
