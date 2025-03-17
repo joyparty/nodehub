@@ -17,9 +17,9 @@ func PackNews(msg *News) (*nh.Reply, error) {
 		return nil, err
 	}
 
-	return &nh.Reply{
+	return nh.Reply_builder{
 		ServiceCode: 1,
 		Code:        1,
 		Data:        data,
-	}, nil
+	}.Build(), nil
 }

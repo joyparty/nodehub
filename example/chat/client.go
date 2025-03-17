@@ -53,7 +53,7 @@ func main() {
 		}
 	})
 
-	if err := cli.CallNoReply(ctx, chatServiceCode, "Join", &roompb.JoinRequest{Name: name}); err != nil {
+	if err := cli.CallNoReply(ctx, chatServiceCode, "Join", roompb.JoinRequest_builder{Name: name}.Build()); err != nil {
 		handleError(err)
 	}
 
@@ -65,7 +65,7 @@ func main() {
 		<-context.Background().Done()
 	}
 
-	if err := cli.CallNoReply(ctx, chatServiceCode, "Say", &roompb.SayRequest{Content: say}); err != nil {
+	if err := cli.CallNoReply(ctx, chatServiceCode, "Say", roompb.SayRequest_builder{Content: say}.Build()); err != nil {
 		handleError(err)
 	}
 	time.Sleep(1 * time.Second)

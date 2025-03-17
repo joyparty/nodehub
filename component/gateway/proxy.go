@@ -179,7 +179,7 @@ func (p *Proxy) init(ctx context.Context) {
 						"time", msg.GetTime().AsTime().Format(time.RFC3339),
 					)
 
-					p.sendReply(sess, msg.Content)
+					p.sendReply(sess, msg.GetContent())
 				},
 				"submit send multicast task", "receiver", sess.ID(),
 			)
@@ -303,12 +303,12 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 				s = status.New(codes.Unknown, "unknown error")
 			}
 
-			reply, _ := nh.NewReply(int32(nh.ReplyCode_RPC_ERROR), &nh.RPCError{
+			reply, _ := nh.NewReply(int32(nh.ReplyCode_RPC_ERROR), nh.RPCError_builder{
 				RequestService: req.GetServiceCode(),
 				RequestMethod:  req.GetMethod(),
 				Status:         s.Proto(),
-			})
-			reply.RequestId = req.GetId()
+			}.Build())
+			reply.SetRequestId(req.GetId())
 			p.sendReply(sess, reply)
 		}
 	}()
@@ -357,7 +357,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 		defer cancel()
 	}
 
-	input, err := newEmptyMessage(req.Data)
+	input, err := newEmptyMessage(req.GetData())
 	if err != nil {
 		err = fmt.Errorf("unmarshal request data, %w", err)
 		return
@@ -367,7 +367,7 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 	nh.ResetReply(output)
 	defer replyPool.Put(output)
 
-	method = path.Join(desc.Path, req.Method)
+	method = path.Join(desc.Path, req.GetMethod())
 	if err = conn.Invoke(ctx, method, input, output); err != nil {
 		// 这里不要用fmt.Errorf()包装，否则fmt.Errorf()会污染status.Status.Message()，导致日志记录不必要的重复内容
 		return
@@ -377,8 +377,9 @@ func (p *Proxy) handleRequest(ctx context.Context, sess Session, req *nh.Request
 		return
 	}
 
-	output.RequestId = req.GetId()
-	output.ServiceCode = req.GetServiceCode()
+	output.SetRequestId(req.GetId())
+	output.SetServiceCode(req.GetServiceCode())
+
 	p.sendReply(sess, output)
 }
 

@@ -29,11 +29,11 @@ func genPackFunctions(file *protogen.File, g *protogen.GeneratedFile) bool {
 		g.P("data, err := ", protoPackage.Ident("Marshal"), "(msg)")
 		g.P("if err != nil { return nil, err}")
 		g.P()
-		g.P("return &", nhPackage.Ident("Reply"), "{")
+		g.P("return ", nhPackage.Ident("Reply_builder"), "{")
 		g.P("ServiceCode:", m.ReplyService.Interface(), ",")
 		g.P("Code:", m.ReplyCode.Interface(), ",")
 		g.P("Data: data,")
-		g.P("}, nil")
+		g.P("}.Build(), nil")
 		g.P("}")
 	})
 

@@ -58,7 +58,9 @@ func main() {
 	// 鉴权请求
 	authReply := &authpb.AuthorizeAck{}
 	err := cli.Call(context.Background(), 0, "Authorize",
-		&authpb.AuthorizeToken{Token: "0d8b750e-35e8-4f98-b032-f389d401213e"},
+		authpb.AuthorizeToken_builder{
+			Token: "0d8b750e-35e8-4f98-b032-f389d401213e",
+		}.Build(),
 		authReply,
 	)
 	if err != nil {
@@ -77,7 +79,7 @@ func main() {
 
 				echoReply := &echopb.Msg{}
 				err := cli.Call(context.Background(), echoServiceCode, "Send",
-					&echopb.Msg{Content: "hello world!"},
+					echopb.Msg_builder{Content: "hello world!"}.Build(),
 					echoReply,
 					client.WithStream("test:echo"),
 				)

@@ -430,7 +430,7 @@ func (cli *Client) newHandler(callback any) func(*nh.Reply) {
 
 	return func(reply *nh.Reply) {
 		msg := reflect.New(firstArg.Elem())
-		gokit.Must(proto.Unmarshal(reply.Data, msg.Interface().(proto.Message)))
+		gokit.Must(proto.Unmarshal(reply.GetData(), msg.Interface().(proto.Message)))
 
 		handler.Call([]reflect.Value{
 			msg,
@@ -447,12 +447,12 @@ func (cli *Client) send(serviceCode int32, method string, input proto.Message, o
 	if err != nil {
 		return nil, fmt.Errorf("marshal request message, %w", err)
 	}
-	req := &nh.Request{
+	req := nh.Request_builder{
 		Id:          cli.seq.Add(1),
 		Data:        data,
 		ServiceCode: serviceCode,
 		Method:      method,
-	}
+	}.Build()
 
 	for _, opt := range options {
 		opt(req)
@@ -510,20 +510,20 @@ type CallOption func(req *nh.Request)
 // WithNode 指定节点
 func WithNode(nodeID string) CallOption {
 	return func(req *nh.Request) {
-		req.NodeId = nodeID
+		req.SetNodeId(nodeID)
 	}
 }
 
 // WithNoReply 不需要回复
 func WithNoReply() CallOption {
 	return func(req *nh.Request) {
-		req.NoReply = true
+		req.SetNoReply(true)
 	}
 }
 
 // WithStream 指定流
 func WithStream(stream string) CallOption {
 	return func(req *nh.Request) {
-		req.Stream = stream
+		req.SetStream(stream)
 	}
 }

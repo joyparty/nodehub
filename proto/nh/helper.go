@@ -52,41 +52,41 @@ func NewReply(code int32, msg proto.Message) (*Reply, error) {
 		return nil, err
 	}
 
-	return &Reply{
+	return Reply_builder{
 		Code: code,
 		Data: data,
-	}, nil
+	}.Build(), nil
 }
 
 // NewMulticast 创建push消息
 func NewMulticast(receiver []string, content *Reply) *Multicast {
-	return &Multicast{
+	return Multicast_builder{
 		Receiver: receiver,
 		Time:     timestamppb.Now(),
 		Content:  content,
-	}
+	}.Build()
 }
 
 // ResetRequest 重置请求对象
 func ResetRequest(req *Request) {
-	req.Id = 0
-	req.NodeId = ""
-	req.ServiceCode = 0
-	req.Method = ""
+	req.SetId(0)
+	req.SetNodeId("")
+	req.SetServiceCode(0)
+	req.SetMethod("")
 
-	if len(req.Data) > 0 {
-		req.Data = req.Data[:0]
+	if data := req.GetData(); len(data) > 0 {
+		req.SetData(data[:0])
 	}
 }
 
 // ResetReply 重置响应对象
 func ResetReply(resp *Reply) {
-	resp.RequestId = 0
-	resp.ServiceCode = 0
-	resp.Code = 0
+	resp.SetRequestId(0)
+	resp.SetServiceCode(0)
+	resp.SetCode(0)
 
-	if len(resp.Data) > 0 {
-		resp.Data = resp.Data[:0]
+	if data := resp.GetData(); len(data) > 0 {
+		resp.SetData(data[:0])
 	}
 }
 
