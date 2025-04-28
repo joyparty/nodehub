@@ -22,7 +22,7 @@ type Queue = mq.Queue
 // Bus push message总线
 type Bus struct {
 	queue      mq.Queue
-	sbumitTask func(func()) error
+	submitTask func(func()) error
 }
 
 // NewBus 构造函数
@@ -51,7 +51,7 @@ func newBus(queue Queue, options *Options) *Bus {
 
 	return &Bus{
 		queue:      queue,
-		sbumitTask: submitTask,
+		submitTask: submitTask,
 	}
 }
 
@@ -122,7 +122,7 @@ func (bus *Bus) Subscribe(ctx context.Context, handler func(*nh.Multicast)) erro
 				metrics.IncrMessageQueue(bus.queue.Topic(), msg.GetTime().AsTime())
 
 				if msg.GetStream() == "" {
-					if err := bus.sbumitTask(func() {
+					if err := bus.submitTask(func() {
 						handler(msg)
 					}); err != nil {
 						logger.Error("submit handler", "error", err)
