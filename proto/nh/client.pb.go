@@ -156,7 +156,7 @@ type Request_builder struct {
 	// 具体对应关系需要自行查看grpc服务的protobuf文件
 	Data []byte
 	// 节点ID
-	// 如果有值，网关会把本次请求直接转发到指定的节点
+	// 如果有值，网关会把本次以及后续请求转发到指定的节点，直到指定了新的node id
 	// 仅仅在有状态服务的allocation配置为client时有效
 	NodeId string
 	// 是否需要网关返回response
