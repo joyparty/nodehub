@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -129,7 +130,7 @@ func WithPublic() Option {
 func WithStateful() Option {
 	return func(desc cluster.GRPCServiceDesc) cluster.GRPCServiceDesc {
 		desc.Stateful = true
-		desc.Allocation = cluster.ServerAllocate
+		desc.Allocation = cmp.Or(desc.Allocation, cluster.ServerAllocate)
 		return desc
 	}
 }
