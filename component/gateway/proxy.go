@@ -226,8 +226,6 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 	logger.Info("session connected", "session", sess, "gateway", p.nodeID)
 	defer logger.Info("session disconnected", "session", sess, "gateway", p.nodeID)
 
-	var prevRequestID uint32
-
 	for {
 		select {
 		case <-p.done:
@@ -243,12 +241,6 @@ func (p *Proxy) handleSession(ctx context.Context, sess Session) {
 			}
 			return
 		}
-
-		if prevRequestID > 0 && req.GetId() <= prevRequestID {
-			logger.Error("request id has already been used", "session", sess, "prev", prevRequestID, "current", req.GetId())
-			return
-		}
-		prevRequestID = req.GetId()
 
 		if req.GetStream() == "" {
 			// 没有指定stream的消息，直接并发处理
