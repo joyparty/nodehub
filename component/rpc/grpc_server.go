@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
+	"strings"
 
+	"github.com/joyparty/gokit"
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/logger"
 	"github.com/samber/lo"
@@ -42,7 +45,7 @@ func NewGRPCServer(listenAddr string, opts ...grpc.ServerOption) *GRPCServer {
 // BindGRPCServer 绑定grpc服务器
 func BindGRPCServer(listener net.Listener, opts ...grpc.ServerOption) *GRPCServer {
 	return &GRPCServer{
-		listenAddr: listener.Addr().String(),
+		listenAddr: addrFromListener(listener),
 		listener:   listener,
 		server:     grpc.NewServer(opts...),
 		services:   make(map[int32]cluster.GRPCServiceDesc),
@@ -80,9 +83,9 @@ func (gs *GRPCServer) Name() string {
 // Start 启动服务
 func (gs *GRPCServer) Start(ctx context.Context) error {
 	if gs.listener == nil {
-		l, err := net.Listen("tcp", gs.listenAddr)
+		l, err := newListener(gs.listenAddr)
 		if err != nil {
-			return fmt.Errorf("listen tcp, %w", err)
+			return err
 		}
 		gs.listener = l
 	}
@@ -157,4 +160,22 @@ func WithWeight(weight int) Option {
 		desc.Weight = weight
 		return desc
 	}
+}
+
+func newListener(addr string) (net.Listener, error) {
+	if strings.HasPrefix(addr, "unix://") {
+		return net.Listen("unix", strings.TrimPrefix(addr, "unix://"))
+	} else if strings.HasPrefix(addr, "unix:") {
+		return net.Listen("unix", strings.TrimPrefix(addr, "unix:"))
+	}
+
+	return net.Listen("tcp", addr)
+}
+
+func addrFromListener(l net.Listener) string {
+	if v, ok := l.(*net.UnixListener); ok {
+		return fmt.Sprintf("unix:%s", gokit.MustReturn(filepath.Abs(v.Addr().String())))
+	}
+
+	return l.Addr().String()
 }
