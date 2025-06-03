@@ -13,6 +13,9 @@ service Gateway {
 	// 会话是否存在
 	rpc IsSessionExist (IsSessionExistRequest) returns (IsSessionExistResponse) {}
 
+	// 遍历会话列表
+	rpc ListSessions (google.protobuf.Empty) returns (stream Session) {}
+
 	// 会话数量
 	rpc SessionCount (google.protobuf.Empty) returns (SessionCountResponse) {}
 
@@ -36,6 +39,18 @@ message SetServiceRouteRequest {
 	int32 service_code = 1;
 	string session_id = 2;
 	string node_id = 3;
+}
+
+message Session {
+	message Metadata {
+		string key = 1;
+		repeated string values = 2;
+	}
+
+	string session_id = 1;
+	string remote_addr = 2;
+	string type = 3;
+	repeated Metadata metadata = 4;
 }
 
 message RemoveServiceRouteRequest {

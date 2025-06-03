@@ -7,6 +7,8 @@ import (
 	"github.com/joyparty/nodehub/cluster"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
+	"github.com/samber/lo"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -26,6 +28,28 @@ func (s *gwService) IsSessionExist(ctx context.Context, req *nh.IsSessionExistRe
 	return nh.IsSessionExistResponse_builder{
 		Exist: exist,
 	}.Build(), nil
+}
+
+func (s *gwService) ListSessions(_ *emptypb.Empty, stream grpc.ServerStreamingServer[nh.Session]) error {
+	var err error
+	s.sessionHub.Range(func(sess Session) bool {
+		s := nh.Session_builder{
+			SessionId:  sess.ID(),
+			RemoteAddr: sess.RemoteAddr(),
+			Type:       sess.Type(),
+			Metadata: lo.MapToSlice(sess.MetadataCopy(), func(key string, values []string) *nh.Session_Metadata {
+				return nh.Session_Metadata_builder{
+					Key:    key,
+					Values: values,
+				}.Build()
+			}),
+		}.Build()
+
+		err = stream.Send(s)
+		return err == nil
+	})
+
+	return err
 }
 
 // 会话数量
