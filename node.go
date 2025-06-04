@@ -73,17 +73,6 @@ func NewNode(name string, registry *cluster.Registry, option ...NodeOption) *Nod
 // 组件的启动顺序与添加顺序一致
 // 组件的停止顺序与添加顺序相反
 func (n *Node) AddComponent(c ...Component) {
-	type grpcServer interface {
-		RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...rpc.Option) error
-	}
-
-	for i := range c {
-		// 自动注入节点管理服务
-		if v, ok := c[i].(grpcServer); ok {
-			_ = v.RegisterService(nh.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
-			break
-		}
-	}
 	n.components = append(n.components, c...)
 }
 
@@ -135,6 +124,18 @@ func (n *Node) Serve(ctx context.Context) error {
 }
 
 func (n *Node) startAll(ctx context.Context) error {
+	type grpcServer interface {
+		RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...rpc.Option) error
+	}
+
+	// 自动注入节点管理服务
+	for _, c := range n.components {
+		if v, ok := c.(grpcServer); ok {
+			_ = v.RegisterService(nh.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
+			break
+		}
+	}
+
 	for _, c := range n.components {
 		if v, ok := c.(interface {
 			BeforeStart(ctx context.Context) error
