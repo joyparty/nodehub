@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/joyparty/gokit"
 	"github.com/oklog/ulid/v2"
 	"google.golang.org/grpc/metadata"
 )
@@ -15,8 +16,7 @@ func GatewayIDInContext(ctx context.Context) ulid.ULID {
 		panic(errors.New("gateway id not found in incoming context"))
 	}
 
-	gwID, _ := ulid.Parse(value[0])
-	return gwID
+	return gokit.MustReturn(ulid.Parse(value[0]))
 }
 
 // SessionIDInContext 从context中获取session id
