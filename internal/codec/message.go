@@ -18,6 +18,8 @@ var (
 	// MaxMessageSize 客户端消息最大长度，默认64KB
 	MaxMessageSize = 64 * 1024
 
+	byteOrder = binary.BigEndian
+
 	bufPool = gokit.NewPoolOf(func() *bytes.Buffer {
 		return bytes.NewBuffer(make([]byte, 0, 1024))
 	})
@@ -43,12 +45,12 @@ func SendBytes(data []byte, sender func([]byte) error) error {
 	defer bufPool.Put(buf)
 	buf.Reset()
 
-	if err := binary.Write(buf, binary.BigEndian, uint32(len(data))); err != nil {
+	if err := binary.Write(buf, byteOrder, uint32(len(data))); err != nil {
 		return fmt.Errorf("write size frame, %w", err)
 	}
 
 	if len(data) > 0 {
-		if err := binary.Write(buf, binary.BigEndian, data); err != nil {
+		if err := binary.Write(buf, byteOrder, data); err != nil {
 			return fmt.Errorf("write data frame, %w", err)
 		}
 	}
@@ -82,7 +84,7 @@ func ReadMessage(r io.Reader, msg *Message) error {
 		return fmt.Errorf("read size frame, %w", err)
 	}
 
-	msg.size = int(binary.BigEndian.Uint32(msg.data[:SizeLen]))
+	msg.size = int(byteOrder.Uint32(msg.data[:SizeLen]))
 	if msg.size == 0 {
 		return nil
 	} else if msg.size > MaxMessageSize {
