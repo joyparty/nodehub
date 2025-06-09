@@ -16,7 +16,6 @@ import (
 	"github.com/joyparty/nodehub/logger"
 	"github.com/joyparty/nodehub/proto/nh"
 	"github.com/oklog/ulid/v2"
-	"github.com/samber/lo"
 	"google.golang.org/grpc"
 )
 
@@ -83,15 +82,6 @@ func (n *Node) GetComponents() []Component {
 
 // Serve 启动所有组件
 func (n *Node) Serve(ctx context.Context) error {
-	// 确保node service一定被注册
-	entry := n.Entry()
-	if entry.GRPC.Endpoint != "" &&
-		!lo.SomeBy(entry.GRPC.Services, func(desc cluster.GRPCServiceDesc) bool {
-			return desc.Code == nh.NodeServiceCode
-		}) {
-		return fmt.Errorf("node grpc service not register")
-	}
-
 	if err := n.startAll(ctx); err != nil {
 		return fmt.Errorf("start all server, %w", err)
 	}
@@ -124,13 +114,11 @@ func (n *Node) Serve(ctx context.Context) error {
 }
 
 func (n *Node) startAll(ctx context.Context) error {
-	type grpcServer interface {
-		RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...rpc.Option) error
-	}
-
 	// 自动注入节点管理服务
 	for _, c := range n.components {
-		if v, ok := c.(grpcServer); ok {
+		if v, ok := c.(interface {
+			RegisterService(code int32, desc grpc.ServiceDesc, impl any, options ...rpc.Option) error
+		}); ok {
 			_ = v.RegisterService(nh.NodeServiceCode, nh.Node_ServiceDesc, &nodeService{node: n})
 			break
 		}
