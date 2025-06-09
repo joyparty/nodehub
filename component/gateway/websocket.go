@@ -202,35 +202,36 @@ func (ws *wsSession) MetadataCopy() metadata.MD {
 }
 
 func (ws *wsSession) Recv(req *nh.Request) error {
-	for {
-		select {
-		case <-ws.done:
-			return io.EOF
-		default:
-		}
-
-		messageType, message, err := ws.conn.ReadMessage()
-		if err != nil {
-			if websocket.IsCloseError(err,
-				websocket.CloseGoingAway,
-				websocket.CloseAbnormalClosure,
-				websocket.CloseNormalClosure,
-			) || errors.Is(err, net.ErrClosed) {
-				return io.EOF
-			}
-			return err
-		}
-		ws.lastRWTime.Store(time.Now())
-		metrics.IncrPayloadSize(ws.Type(), len(message))
-
-		// 只处理二进制消息
-		if messageType == websocket.BinaryMessage {
-			if err := proto.Unmarshal(message, req); err != nil {
-				return fmt.Errorf("unmarshal request, %w", err)
-			}
-			return nil
-		}
+	select {
+	case <-ws.done:
+		return io.EOF
+	default:
 	}
+
+	messageType, message, err := ws.conn.ReadMessage()
+	if err != nil {
+		if websocket.IsCloseError(err,
+			websocket.CloseGoingAway,
+			websocket.CloseAbnormalClosure,
+			websocket.CloseNormalClosure,
+		) || errors.Is(err, net.ErrClosed) {
+			return io.EOF
+		}
+		return err
+	}
+	ws.lastRWTime.Store(time.Now())
+	metrics.IncrPayloadSize(ws.Type(), len(message))
+
+	// 只处理二进制消息
+	if messageType != websocket.BinaryMessage {
+		return fmt.Errorf("unexpected message type: %d", messageType)
+	}
+
+	if err := proto.Unmarshal(message, req); err != nil {
+		return fmt.Errorf("unmarshal request, %w", err)
+	}
+
+	return nil
 }
 
 func (ws *wsSession) Send(reply *nh.Reply) error {
