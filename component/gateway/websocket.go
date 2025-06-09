@@ -218,14 +218,12 @@ func (ws *wsSession) Recv(req *nh.Request) error {
 			return io.EOF
 		}
 		return err
-	}
-	ws.lastRWTime.Store(time.Now())
-	metrics.IncrPayloadSize(ws.Type(), len(message))
-
-	// 只处理二进制消息
-	if messageType != websocket.BinaryMessage {
+	} else if messageType != websocket.BinaryMessage { // 只处理二进制消息
 		return fmt.Errorf("unexpected message type: %d", messageType)
 	}
+
+	ws.lastRWTime.Store(time.Now())
+	metrics.IncrPayloadSize(ws.Type(), len(message))
 
 	if err := proto.Unmarshal(message, req); err != nil {
 		return fmt.Errorf("unmarshal request, %w", err)
