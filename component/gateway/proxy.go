@@ -147,13 +147,17 @@ func (p *Proxy) SessionCount() int {
 }
 
 func (p *Proxy) init(ctx context.Context) {
-	// 禁止同一个用户同时连接多个网关
 	p.opts.EventBus.Subscribe(ctx, func(ev event.UserConnected, _ time.Time) {
 		if ev.GatewayID != p.nodeID {
+			// 禁止同一个用户同时连接多个网关
 			if sess, ok := p.sessions.Load(ev.UserID); ok {
 				logger.Warn("close duplicate session, user connect to other gateway", "session", sess)
 				_ = sess.Close()
 			}
+
+			// 如果用户已经连接到其它网关，则清除状态路由表中该用户的记录
+			// 防止用户在多个网关之间反复连接后导致的状态混乱
+			p.stateTable.CleanSession(ev.UserID)
 		}
 	})
 
