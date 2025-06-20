@@ -42,30 +42,25 @@ func genMethodReplyCodes(file *protogen.File, g *protogen.GeneratedFile) bool {
 }
 
 func parseServices(file *protogen.File) []Service {
-	services := lo.Map(file.Services, func(s *protogen.Service, _ int) Service {
+	return lo.FilterMap(file.Services, func(s *protogen.Service, _ int) (Service, bool) {
 		serviceCode, ok := getServiceCode(s)
 		if !ok {
-			return Service{}
+			return Service{}, false
 		}
 
-		methods := lo.Map(s.Methods, func(m *protogen.Method, _ int) Method {
+		methods := lo.FilterMap(s.Methods, func(m *protogen.Method, _ int) (Method, bool) {
 			replyCode, ok := getReplyCode(m)
 			if ok {
-				return Method{Method: m, ReplyCode: replyCode}
+				return Method{Method: m, ReplyCode: replyCode}, true
 			}
-			return Method{}
+			return Method{}, false
 		})
-		methods = lo.Filter(methods, func(m Method, _ int) bool { return m.ReplyCode.IsValid() })
 
 		return Service{
 			Service: s,
 			Code:    serviceCode,
 			Methods: methods,
-		}
-	})
-
-	return lo.Filter(services, func(s Service, _ int) bool {
-		return s.Code.IsValid()
+		}, true
 	})
 }
 

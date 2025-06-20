@@ -68,38 +68,33 @@ func genReplyMessages(file *protogen.File, g *protogen.GeneratedFile) bool {
 }
 
 func parseMessages(file *protogen.File) []Message {
-	return lo.Filter(
-		lo.Map(file.Messages, func(m *protogen.Message, _ int) Message {
-			options := m.Desc.Options().(*descriptorpb.MessageOptions)
-			if options == nil {
-				return Message{}
-			}
+	return lo.FilterMap(file.Messages, func(m *protogen.Message, _ int) (Message, bool) {
+		options := m.Desc.Options().(*descriptorpb.MessageOptions)
+		if options == nil {
+			return Message{}, false
+		}
 
-			data := gokit.MustReturn(proto.Marshal(options))
-			options.Reset()
-			gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
+		data := gokit.MustReturn(proto.Marshal(options))
+		options.Reset()
+		gokit.Must(proto.UnmarshalOptions{Resolver: extTypes}.Unmarshal(data, options))
 
-			var replyService, replyCode protoreflect.Value
-			options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-				if fd.IsExtension() {
-					switch fd.Name() {
-					case optionReplyService:
-						replyService = v
-					case optionReplyCode:
-						replyCode = v
-					}
+		var replyService, replyCode protoreflect.Value
+		options.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+			if fd.IsExtension() {
+				switch fd.Name() {
+				case optionReplyService:
+					replyService = v
+				case optionReplyCode:
+					replyCode = v
 				}
-				return true
-			})
-
-			return Message{
-				Message:      m,
-				ReplyService: replyService,
-				ReplyCode:    replyCode,
 			}
-		}),
-		func(m Message, _ int) bool {
-			return m.ReplyService.IsValid() && m.ReplyCode.IsValid()
-		},
-	)
+			return true
+		})
+
+		return Message{
+			Message:      m,
+			ReplyService: replyService,
+			ReplyCode:    replyCode,
+		}, replyService.IsValid() && replyCode.IsValid()
+	})
 }
