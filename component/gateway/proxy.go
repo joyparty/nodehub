@@ -209,6 +209,7 @@ func (p *Proxy) init(ctx context.Context) {
 			})
 		}
 
+		// 一定要确保消息处理完毕以后才结束，否则会导致multicast stream特性不正常
 		wg.Wait()
 	})
 
