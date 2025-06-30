@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"path"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -162,7 +163,19 @@ func (p *Proxy) init(ctx context.Context) {
 	})
 
 	// 处理主动下行消息
+	wgPool := gokit.NewPoolOf(func() *sync.WaitGroup {
+		return &sync.WaitGroup{}
+	})
+
 	p.opts.Multicast.Subscribe(ctx, func(msg *nh.Multicast) {
+		wg := wgPool.Get()
+		defer wgPool.Put(wg)
+
+		submit := ants.Submit
+		if p := p.opts.GoPool; p != nil {
+			submit = p.Submit
+		}
+
 		send := func(sess Session, msg *nh.Multicast) {
 			logger.Debug("send multicast",
 				"receiver", sess.ID(),
@@ -171,22 +184,32 @@ func (p *Proxy) init(ctx context.Context) {
 				"time", msg.GetTime().AsTime().Format(time.RFC3339),
 			)
 
-			p.sendReply(sess, msg.GetContent())
+			wg.Add(1)
+			if err := submit(func() {
+				defer wg.Done()
+
+				p.sendReply(sess, msg.GetContent())
+			}); err != nil {
+				wg.Done()
+
+				logger.Error("submit multicast task", "error", err)
+			}
 		}
 
-		if msg.GetToEveryone() && len(msg.GetReceiver()) == 0 {
+		if len(msg.GetReceiver()) > 0 {
+			for _, sessID := range msg.GetReceiver() {
+				if sess, ok := p.sessions.Load(sessID); ok {
+					send(sess, msg)
+				}
+			}
+		} else if msg.GetToEveryone() {
 			p.sessions.Range(func(sess Session) bool {
 				send(sess, msg)
 				return true
 			})
-			return
 		}
 
-		for _, sessID := range msg.GetReceiver() {
-			if sess, ok := p.sessions.Load(sessID); ok {
-				send(sess, msg)
-			}
-		}
+		wg.Wait()
 	})
 
 	p.opts.Registry.SubscribeDelete(ctx, func(entry cluster.NodeEntry) {
