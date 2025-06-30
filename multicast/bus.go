@@ -61,7 +61,7 @@ func (bus *Bus) Publish(ctx context.Context, message *nh.Multicast) error {
 		return errors.New("service code or message code is empty")
 	}
 
-	if len(message.GetReceiver()) == 0 {
+	if len(message.GetReceiver()) == 0 && !message.GetToEveryone() {
 		return errors.New("receiver is empty")
 	} else if message.GetTime() == nil {
 		message.SetTime(timestamppb.Now())
