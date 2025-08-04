@@ -52,7 +52,7 @@ type Session interface {
 type Proxy struct {
 	nodeID       string
 	opts         *Options
-	sessions     *sessionHub
+	sessions     *SessionHub
 	sessionCount *atomic.Int32
 	stateTable   *stateTable
 	cleanJobs    *gokit.MapOf[string, *time.Timer]
@@ -145,6 +145,11 @@ func (p *Proxy) NewGRPCService() nh.GatewayServer {
 // SessionCount 当前会话数量
 func (p *Proxy) SessionCount() int {
 	return int(p.sessionCount.Load())
+}
+
+// SessionHub 会话集合
+func (p *Proxy) SessionHub() *SessionHub {
+	return p.sessions
 }
 
 func (p *Proxy) init(ctx context.Context) {
@@ -670,14 +675,14 @@ func newEmptyMessage(data []byte) (*emptypb.Empty, error) {
 	return msg, err
 }
 
-// sessionHub 会话集合
-type sessionHub struct {
+// SessionHub 会话集合
+type SessionHub struct {
 	sessions *gokit.MapOf[string, Session]
 	closed   *atomic.Bool
 }
 
-func newSessionHub() *sessionHub {
-	hub := &sessionHub{
+func newSessionHub() *SessionHub {
+	hub := &SessionHub{
 		sessions: gokit.NewMapOf[string, Session](),
 		closed:   &atomic.Bool{},
 	}
@@ -685,25 +690,30 @@ func newSessionHub() *sessionHub {
 	return hub
 }
 
-func (h *sessionHub) Store(sess Session) {
+// Store 存储会话
+func (h *SessionHub) Store(sess Session) {
 	h.sessions.Store(sess.ID(), sess)
 }
 
-func (h *sessionHub) Load(id string) (Session, bool) {
+// Load 根据ID加载会话
+func (h *SessionHub) Load(id string) (Session, bool) {
 	return h.sessions.Load(id)
 }
 
-func (h *sessionHub) Delete(sess Session) {
+// Delete 删除会话
+func (h *SessionHub) Delete(sess Session) {
 	h.sessions.CompareAndDelete(sess.ID(), sess)
 }
 
-func (h *sessionHub) Range(f func(s Session) bool) {
+// Range 遍历会话
+func (h *SessionHub) Range(f func(s Session) bool) {
 	h.sessions.Range(func(_ string, value Session) bool {
 		return f(value)
 	})
 }
 
-func (h *sessionHub) Close() {
+// Close 清除所有会话
+func (h *SessionHub) Close() {
 	if h.closed.CompareAndSwap(false, true) {
 		h.sessions.Range(func(id string, sess Session) bool {
 			_ = sess.Close()

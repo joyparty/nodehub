@@ -18,7 +18,7 @@ type gwService struct {
 	nh.UnimplementedGatewayServer
 
 	sessionCount *atomic.Int32
-	sessionHub   *sessionHub
+	sessionHub   *SessionHub
 	stateTable   *stateTable
 }
 
