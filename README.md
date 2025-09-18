@@ -6,7 +6,7 @@
 
 Nodehub是为社交类游戏、棋牌类游戏设计的服务器端框架。
 
-Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用Nodehub开发之前，需要对[gRPC开发方式](https://grpc.io/docs/languages/go/)有所了解。
+Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用Nodehub开发之前，需要对[gRPC开发](https://grpc.io/docs/languages/go/)有所了解。
 
 ## 特性
 
@@ -83,6 +83,8 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 - roundRobin 加权轮询
 - ipHash 根据客户端IP地址哈希
 - idHash 根据账号ID哈希
+- oldest 使用最早启动的节点
+- newest 使用最新启动的节点
 
 除了内置的负载均衡策略外，也支持注册自定义的其它负载均衡策略。
 
@@ -100,7 +102,7 @@ Nodehub的通讯方式建立于[gRPC](https://grpc.io/)基础之上，在使用N
 
 ## gRPC使用约束
 
-面向客户端的服务，只能使用[Unary](https://grpc.io/docs/what-is-grpc/core-concepts/#unary-rpc)和[Server streaming](https://grpc.io/docs/what-is-grpc/core-concepts/#server-streaming-rpc)两种风格的方法。
+面向客户端的服务，只能使用[Unary](https://grpc.io/docs/what-is-grpc/core-concepts/#unary-rpc)风格的方法。
 
 凡是要下行到客户端解析的真正message类型，需要单独定义类型枚举值，这样客户端才能根据`nodehub.Reply.code`的值，使用正确的类型把`nodehub.Reply.data`内的数据解码使用。
 
