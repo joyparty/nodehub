@@ -27,8 +27,8 @@ import (
 // Upgrader websocket upgrader
 var Upgrader = websocket.Upgrader{
 	HandshakeTimeout: 10 * time.Second,
-	ReadBufferSize:   1024,
-	WriteBufferSize:  1024,
+	ReadBufferSize:   4096,
+	WriteBufferSize:  4096,
 	WriteBufferPool:  &sync.Pool{},
 }
 
