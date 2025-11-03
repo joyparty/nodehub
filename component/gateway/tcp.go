@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -93,6 +94,8 @@ type tcpSession struct {
 	md         metadata.MD
 	lastRWTime gokit.ValueOf[time.Time]
 	closeOnce  sync.Once
+
+	r *bufio.Reader
 }
 
 func newTCPSession(conn net.Conn) *tcpSession {
@@ -101,6 +104,8 @@ func newTCPSession(conn net.Conn) *tcpSession {
 		conn:       conn,
 		md:         metadata.New(nil),
 		lastRWTime: gokit.NewValueOf[time.Time](),
+
+		r: bufio.NewReader(conn),
 	}
 	ts.lastRWTime.Store(time.Now())
 
@@ -138,7 +143,7 @@ func (ts *tcpSession) Recv(req *nh.Request) (err error) {
 	defer codec.PutMessage(msg)
 
 	for {
-		if err = codec.ReadMessage(ts.conn, msg); err != nil {
+		if err = codec.ReadMessage(ts.r, msg); err != nil {
 			return fmt.Errorf("read message, %w", err)
 		}
 		ts.lastRWTime.Store(time.Now())
