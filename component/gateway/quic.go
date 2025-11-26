@@ -101,7 +101,7 @@ func (qs *quicServer) Shutdown(_ context.Context) error {
 
 type quicSession struct {
 	id         string
-	conn       quic.Connection
+	conn       *quic.Conn
 	streams    *quicStreams
 	msgC       chan *codec.Message
 	md         metadata.MD
@@ -110,7 +110,7 @@ type quicSession struct {
 	done       chan struct{}
 }
 
-func newQuicSession(conn quic.Connection) *quicSession {
+func newQuicSession(conn *quic.Conn) *quicSession {
 	qs := &quicSession{
 		id:         ulid.Make().String(),
 		conn:       conn,
@@ -262,13 +262,13 @@ func (qs *quicSession) LogValue() slog.Value {
 }
 
 type quicStreams struct {
-	ss []quic.Stream
+	ss []*quic.Stream
 	l  sync.RWMutex
 }
 
 func newQuicStreams() *quicStreams {
 	return &quicStreams{
-		ss: []quic.Stream{},
+		ss: []*quic.Stream{},
 	}
 }
 
@@ -279,23 +279,23 @@ func (qs *quicStreams) Len() int {
 	return len(qs.ss)
 }
 
-func (qs *quicStreams) Append(s quic.Stream) {
+func (qs *quicStreams) Append(s *quic.Stream) {
 	qs.l.Lock()
 	qs.ss = append(qs.ss, s)
 	qs.l.Unlock()
 }
 
-func (qs *quicStreams) Remove(s quic.Stream) {
+func (qs *quicStreams) Remove(s *quic.Stream) {
 	qs.l.Lock()
 	defer qs.l.Unlock()
 
-	qs.ss = slices.DeleteFunc(qs.ss, func(v quic.Stream) bool {
+	qs.ss = slices.DeleteFunc(qs.ss, func(v *quic.Stream) bool {
 		return s.StreamID() == v.StreamID()
 	})
 }
 
 // Pick 根据service code分配，按id hash，确保同一个服务的下行消息都通过同一个stream下发
-func (qs *quicStreams) Pick(serviceCode int32) (quic.Stream, bool) {
+func (qs *quicStreams) Pick(serviceCode int32) (*quic.Stream, bool) {
 	qs.l.RLock()
 	defer qs.l.RUnlock()
 

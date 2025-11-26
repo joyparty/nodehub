@@ -103,8 +103,8 @@ func (tc *tcpConn) Close() {
 }
 
 type quicConn struct {
-	conn    quic.Connection
-	streams []quic.Stream
+	conn    *quic.Conn
+	streams []*quic.Stream
 	done    chan struct{}
 }
 
@@ -114,7 +114,7 @@ func newQUICConn(addr string, tlsConfig *tls.Config, quicConfig *quic.Config) (*
 		return nil, err
 	}
 
-	streams := []quic.Stream{}
+	streams := []*quic.Stream{}
 	for i := 0; i < 3; i++ {
 		stream, err := conn.OpenStream()
 		if err != nil {
@@ -149,7 +149,7 @@ func (qc *quicConn) replyStream() <-chan *nh.Reply {
 	c := make(chan *nh.Reply)
 
 	for _, s := range qc.streams {
-		go func(s quic.Stream) {
+		go func(s *quic.Stream) {
 			msg := codec.GetMessage()
 			defer codec.PutMessage(msg)
 
