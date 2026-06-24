@@ -473,6 +473,7 @@ func (p *Proxy) onConnect(ctx context.Context, sess Session) error {
 		UserID:     sess.ID(),
 		GatewayID:  p.nodeID,
 		RemoteAddr: sess.RemoteAddr(),
+		Metadata:   md,
 	}); err != nil {
 		return fmt.Errorf("publish event, %w", err)
 	}

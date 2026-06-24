@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 )
 
 var (
@@ -62,9 +64,10 @@ func deref(t reflect.Type) reflect.Type {
 
 // UserConnected 用户连接事件
 type UserConnected struct {
-	GatewayID  string `json:"gatewayID"`
-	UserID     string `json:"userID"`
-	RemoteAddr string `json:"remoteAddr"`
+	GatewayID  string      `json:"gatewayID"`
+	UserID     string      `json:"userID"`
+	RemoteAddr string      `json:"remoteAddr"`
+	Metadata   metadata.MD `json:"metadata,omitempty"`
 }
 
 // UserDisconnected 用户断开连接事件
