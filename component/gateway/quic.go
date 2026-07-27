@@ -82,13 +82,13 @@ func (qs *quicServer) Serve(ctx context.Context) (chan Session, error) {
 		defer close(ch)
 
 		for {
-			conn, err := l.Accept(context.Background())
+			conn, err := l.Accept(ctx)
 			if err != nil {
 				logger.Error("accept quic connection", "error", err)
 				return
 			}
 
-			ch <- newQuicSession(conn)
+			ch <- newQuicSession(ctx, conn)
 		}
 	}()
 
@@ -110,7 +110,7 @@ type quicSession struct {
 	done       chan struct{}
 }
 
-func newQuicSession(conn *quic.Conn) *quicSession {
+func newQuicSession(ctx context.Context, conn *quic.Conn) *quicSession {
 	qs := &quicSession{
 		id:         ulid.Make().String(),
 		conn:       conn,
@@ -123,7 +123,7 @@ func newQuicSession(conn *quic.Conn) *quicSession {
 	}
 	qs.lastRWTime.Store(time.Now())
 
-	go qs.handleRequest()
+	go qs.handleRequest(ctx)
 	return qs
 }
 
@@ -169,9 +169,9 @@ func (qs *quicSession) Close() error {
 	return nil
 }
 
-func (qs *quicSession) handleRequest() {
+func (qs *quicSession) handleRequest(ctx context.Context) {
 	for {
-		s, err := qs.conn.AcceptStream(context.Background())
+		s, err := qs.conn.AcceptStream(ctx)
 		if err != nil {
 			if isUnexpectedQUICError(err) {
 				logger.Error("accept quic stream", "error", err, "session", qs)
