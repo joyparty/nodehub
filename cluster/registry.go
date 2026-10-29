@@ -142,7 +142,7 @@ func (r *Registry) runWatcher() error {
 
 	var (
 		lock     sync.Mutex
-		versions = map[string]int64{} // etcd条目版本号
+		versions = map[string]int64{} // 使用 ModRevision，键删除重建后 Version 会重置
 	)
 	updateNodes := func(event mvccpb.Event_EventType, kv *mvccpb.KeyValue) {
 		lock.Lock()
@@ -151,10 +151,10 @@ func (r *Registry) runWatcher() error {
 		// DELETE事件不检查版本号信息
 		if event == mvccpb.PUT {
 			key := string(kv.Key)
-			if ver, ok := versions[key]; ok && ver >= kv.Version {
+			if ver, ok := versions[key]; ok && ver >= kv.ModRevision {
 				return
 			}
-			versions[key] = kv.Version
+			versions[key] = kv.ModRevision
 		}
 
 		var entry NodeEntry
