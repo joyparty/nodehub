@@ -137,24 +137,35 @@ func (r *Registry) initLease(ctx context.Context) error {
 
 // 监听服务条目变更
 func (r *Registry) runWatcher() error {
+	ctx, cancel := context.WithCancel(r.client.Ctx())
 	events := make(chan rxgo.Item)
 	r.observable = rxgo.FromEventSource(events, rxgo.WithBackPressureStrategy(rxgo.Drop))
+	notify := func(item rxgo.Item) {
+		select {
+		case events <- item:
+		case <-ctx.Done():
+		}
+	}
 
 	var (
 		lock     sync.Mutex
-		versions = map[string]int64{} // etcd条目版本号
+		versions = map[string]int64{} // 使用 ModRevision，键删除重建后 Version 会重置
 	)
 	updateNodes := func(event mvccpb.Event_EventType, kv *mvccpb.KeyValue) {
 		lock.Lock()
 		defer lock.Unlock()
+		if kv == nil {
+			logger.Error("cluster event has no key-value", "event", event.String())
+			return
+		}
 
 		// DELETE事件不检查版本号信息
 		if event == mvccpb.PUT {
 			key := string(kv.Key)
-			if ver, ok := versions[key]; ok && ver >= kv.Version {
+			if ver, ok := versions[key]; ok && ver >= kv.ModRevision {
 				return
 			}
-			versions[key] = kv.Version
+			versions[key] = kv.ModRevision
 		}
 
 		var entry NodeEntry
@@ -179,61 +190,106 @@ func (r *Registry) runWatcher() error {
 			r.grpcResolver.Update(entry)
 			r.allNodes.Store(entry.ID, entry)
 
-			events <- rxgo.Of(eventUpdateNode{Entry: entry})
+			notify(rxgo.Of(eventUpdateNode{Entry: entry}))
 		case mvccpb.DELETE:
 			r.grpcResolver.Remove(entry)
 			r.allNodes.Delete(entry.ID)
+			delete(versions, string(kv.Key))
 
-			events <- rxgo.Of(eventDeleteNode{Entry: entry})
+			notify(rxgo.Of(eventDeleteNode{Entry: entry}))
 		}
+	}
+
+	// 初始化和 Watch 异常后复用全量读取，返回快照 revision 以衔接后续变更。
+	updateExists := func() (int64, error) {
+		getCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+		defer stop()
+
+		resp, err := r.client.Get(getCtx, r.keyPrefix, clientv3.WithPrefix())
+		if err != nil {
+			return 0, fmt.Errorf("get exist entries, %w", err)
+		}
+		keys := make(map[string]struct{}, len(resp.Kvs))
+		for _, kv := range resp.Kvs {
+			keys[string(kv.Key)] = struct{}{}
+			updateNodes(mvccpb.PUT, kv)
+		}
+		// 补上 Watch 中断期间的删除，避免继续保留已下线节点。
+		r.allNodes.Range(func(id ulid.ULID, entry NodeEntry) bool {
+			key := path.Join(r.keyPrefix, id.String())
+			if _, ok := keys[key]; !ok {
+				r.grpcResolver.Remove(entry)
+				r.allNodes.Delete(id)
+				delete(versions, key)
+				notify(rxgo.Of(eventDeleteNode{Entry: entry}))
+			}
+			return ctx.Err() == nil
+		})
+		return resp.Header.Revision, ctx.Err()
+	}
+
+	// 先完成快照，再从 revision + 1 监听，无需延迟 3 秒重复读取。
+	revision, err := updateExists()
+	if err != nil {
+		cancel()
+		close(events)
+		return err
 	}
 
 	// 监听变更
 	go func() {
 		defer close(events)
-
-		wCh := r.client.Watch(r.client.Ctx(), r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV())
-		for {
-			select {
-			case <-r.client.Ctx().Done():
-				return
-			case wResp := <-wCh:
-				for _, ev := range wResp.Events {
-					switch ev.Type {
-					case mvccpb.PUT:
-						updateNodes(ev.Type, ev.Kv)
-					case mvccpb.DELETE:
-						updateNodes(ev.Type, ev.PrevKv)
-					default:
-						logger.Error("unknown event type", "type", ev.Type)
+		defer cancel()
+		for ctx.Err() == nil {
+			watchCtx, stop := context.WithCancel(ctx)
+			wCh := r.client.Watch(watchCtx, r.keyPrefix, clientv3.WithPrefix(), clientv3.WithPrevKV(), clientv3.WithRev(revision+1))
+		watchLoop:
+			for {
+				select {
+				case <-ctx.Done():
+					stop()
+					return
+				case wResp, ok := <-wCh:
+					// Err 同时覆盖 Canceled 和 CompactRevision，关闭的通道不能继续读。
+					if !ok || wResp.Err() != nil {
+						if ctx.Err() == nil {
+							logger.Warn("cluster watch ended", "closed", !ok, "error", wResp.Err())
+						}
+						break watchLoop
 					}
+					for _, ev := range wResp.Events {
+						switch ev.Type {
+						case mvccpb.PUT:
+							updateNodes(ev.Type, ev.Kv)
+						case mvccpb.DELETE:
+							updateNodes(ev.Type, ev.PrevKv)
+						default:
+							logger.Error("unknown event type", "type", ev.Type)
+						}
+					}
+				}
+			}
+			stop()
+
+			// 重建前先取消旧订阅；读取失败也延迟重试，并允许退出信号打断。
+			for {
+				timer := time.NewTimer(time.Second)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+				if revision, err = updateExists(); err == nil {
+					break
+				}
+				if ctx.Err() == nil {
+					logger.Warn("resync cluster nodes failed", "error", err)
 				}
 			}
 		}
 	}()
-
-	// 处理已有条目
-	updateExists := func() error {
-		ctx, cancel := context.WithTimeout(r.client.Ctx(), 5*time.Second)
-		defer cancel()
-
-		resp, err := r.client.Get(ctx, r.keyPrefix, clientv3.WithPrefix())
-		if err != nil {
-			return fmt.Errorf("get exist entries, %w", err)
-		}
-		for _, kv := range resp.Kvs {
-			updateNodes(mvccpb.PUT, kv)
-		}
-		return nil
-	}
-
-	// 延迟3秒再全量同步一次
-	go func() {
-		time.Sleep(3 * time.Second)
-		updateExists()
-	}()
-
-	return updateExists()
+	return nil
 }
 
 // GetGRPCDesc 获取grpc服务描述
