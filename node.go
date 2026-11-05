@@ -251,6 +251,7 @@ type GatewayConfig struct {
 	Options     []gateway.Option
 
 	GRPCListen       string
+	GRPCEndpoint     string
 	GRPCListener     net.Listener
 	GRPCServerOption []grpc.ServerOption
 
@@ -274,6 +275,10 @@ func NewGatewayNode(registry *cluster.Registry, config GatewayConfig) *Node {
 	} else {
 		gs = rpc.BindGRPCServer(config.GRPCListener, config.GRPCServerOption...)
 	}
+	if config.GRPCEndpoint != "" {
+		gs.SetEndpoint(config.GRPCEndpoint)
+	}
+
 	gs.RegisterService(nh.GatewayServiceCode, nh.Gateway_ServiceDesc, proxy.NewGRPCService())
 	node.AddComponent(gs)
 

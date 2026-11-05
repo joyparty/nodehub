@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"path/filepath"
 	"strings"
 
@@ -27,29 +28,37 @@ const (
 
 // GRPCServer grpc服务
 type GRPCServer struct {
-	listenAddr string
-	listener   net.Listener
-	server     *grpc.Server
-	services   map[int32]cluster.GRPCServiceDesc
+	listen   string
+	endpoint string
+
+	listener net.Listener
+	server   *grpc.Server
+	services map[int32]cluster.GRPCServiceDesc
 }
 
 // NewGRPCServer 构造函数
 func NewGRPCServer(listenAddr string, opts ...grpc.ServerOption) *GRPCServer {
 	return &GRPCServer{
-		listenAddr: listenAddr,
-		server:     grpc.NewServer(opts...),
-		services:   make(map[int32]cluster.GRPCServiceDesc),
+		listen:   listenAddr,
+		server:   grpc.NewServer(opts...),
+		services: make(map[int32]cluster.GRPCServiceDesc),
 	}
 }
 
 // BindGRPCServer 绑定grpc服务器
 func BindGRPCServer(listener net.Listener, opts ...grpc.ServerOption) *GRPCServer {
 	return &GRPCServer{
-		listenAddr: addrFromListener(listener),
-		listener:   listener,
-		server:     grpc.NewServer(opts...),
-		services:   make(map[int32]cluster.GRPCServiceDesc),
+		listener: listener,
+		server:   grpc.NewServer(opts...),
+		services: make(map[int32]cluster.GRPCServiceDesc),
 	}
+}
+
+// SetEndpoint 设置grpc服务访问地址，用于运行在容器环境中，监听地址和访问地址不一致的情况
+//
+// 必须在服务注册之前设置
+func (gs *GRPCServer) SetEndpoint(endpoint string) {
+	gs.endpoint = endpoint
 }
 
 // RegisterService 注册服务
@@ -81,13 +90,21 @@ func (gs *GRPCServer) Name() string {
 }
 
 // Start 启动服务
-func (gs *GRPCServer) Start(ctx context.Context) error {
+func (gs *GRPCServer) Start(ctx context.Context) (err error) {
 	if gs.listener == nil {
-		l, err := newListener(gs.listenAddr)
+		l, err := newListener(gs.listen)
 		if err != nil {
 			return err
 		}
 		gs.listener = l
+	}
+	gs.listen = addrFromListener(gs.listener)
+
+	// 在没有设置endpoint时，不允许使用 0.0.0.0 这样的ip地址
+	if gs.endpoint == "" && gs.listener.Addr().Network() == "tcp" {
+		if v, err := netip.ParseAddrPort(gs.listen); err == nil && v.Addr().Unmap().IsUnspecified() {
+			return errors.New("listen ip is unspecified")
+		}
 	}
 
 	go func() {
@@ -112,8 +129,13 @@ func (gs *GRPCServer) Stop(ctx context.Context) {
 
 // CompleteNodeEntry 设置条目中的grpc信息
 func (gs *GRPCServer) CompleteNodeEntry(entry *cluster.NodeEntry) {
+	endpoint := gs.listen
+	if gs.endpoint != "" {
+		endpoint = gs.endpoint
+	}
+
 	entry.GRPC = cluster.GRPCEntry{
-		Endpoint: gs.listenAddr,
+		Endpoint: endpoint,
 		Services: lo.Values(gs.services),
 	}
 }
