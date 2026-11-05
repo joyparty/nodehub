@@ -2,6 +2,9 @@ package cluster
 
 import (
 	"errors"
+	"fmt"
+	"net/netip"
+	"net/url"
 
 	"github.com/oklog/ulid/v2"
 )
@@ -65,6 +68,23 @@ func (e NodeEntry) Validate() error {
 		return errors.New("state is empty")
 	} else if err := e.GRPC.Validate(); err != nil {
 		return err
+	}
+
+	if e.Entrance != "" {
+		entrance, err := url.Parse(e.Entrance)
+		if err != nil {
+			return fmt.Errorf("invalid entrance, %w", err)
+		}
+
+		host := entrance.Hostname()
+		if host == "" {
+			return errors.New("entrance require hostname or ip")
+		}
+
+		// 网关入口，不允许使用 0.0.0.0 这种IP地址
+		if addr, err := netip.ParseAddr(host); err == nil && addr.Unmap().IsUnspecified() {
+			return errors.New("entrance is an unspecified address")
+		}
 	}
 
 	return nil
